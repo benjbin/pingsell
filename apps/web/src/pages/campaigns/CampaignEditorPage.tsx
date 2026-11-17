@@ -13,6 +13,7 @@ import { useToast } from "../../components/ui/Toast";
 import { AiGeneratePanel } from "../../components/AiGeneratePanel";
 import { EmailPreview, renderMergeTags } from "../../components/EmailPreview";
 import { EmailBuilder } from "../../components/email-builder/EmailBuilder";
+import { t } from "../../lib/i18n";
 import { PRESETS, applyBrandKit, parseBrandKit, parseDesign, renderEmail, serializeDesign, type Design, type Preset } from "../../components/email-builder/model";
 
 interface FormState {
@@ -41,7 +42,7 @@ function toForm(c: Campaign): FormState {
 
 function toInput(f: FormState, html: string): CampaignInput {
   return {
-    name: f.name.trim() || (f.subject.trim() ? campaignNameFrom(f.subject) : "Campagne sans titre"),
+    name: f.name.trim() || (f.subject.trim() ? campaignNameFrom(f.subject) : t("Campagne sans titre", "Untitled campaign")),
     subject: f.subject.trim(),
     preheader: f.preheader.trim() || undefined,
     from_name: f.from_name.trim() || undefined,
@@ -55,7 +56,7 @@ function toInput(f: FormState, html: string): CampaignInput {
 /** Derive a readable internal name from a subject, dropping merge tags. */
 function campaignNameFrom(subject: string): string {
   const clean = subject.replace(/\{\{[^}]*\}\}[,:]?\s*/g, "").trim();
-  return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : "Nouvelle campagne";
+  return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : t("Nouvelle campagne", "New campaign");
 }
 
 export function CampaignEditorPage() {
@@ -67,7 +68,7 @@ export function CampaignEditorPage() {
   const campaign = useAsync(() => (id ? api.campaigns.get(id) : Promise.resolve(null)), [id]);
   const segments = useAsync(() => api.segments.list(), []);
 
-  const brand = account?.name ?? "Votre marque";
+  const brand = account?.name ?? t("Votre marque", "Your brand");
   const [form, setForm] = useState<FormState>(() => ({
     name: "",
     subject: "",
@@ -75,7 +76,7 @@ export function CampaignEditorPage() {
     from_name: account?.name ?? "",
     from_email: "",
     html: "",
-    design: serializeDesign(PRESETS[0].build(account?.name ?? "Votre marque")),
+    design: serializeDesign(PRESETS[0].build(account?.name ?? t("Votre marque", "Your brand"))),
     segment_id: "",
   }));
   const [mode, setMode] = useState<"visual" | "html">("visual");
@@ -179,7 +180,7 @@ export function CampaignEditorPage() {
   /** Persist the draft; returns the campaign id (creating it if needed). */
   async function persist(silent = false): Promise<string | null> {
     if (!form.subject.trim()) {
-      toast.error("L'objet de l'email est obligatoire");
+      toast.error(t("L'objet de l'email est obligatoire", "Email subject is required"));
       return null;
     }
     setSaving(true);
@@ -194,7 +195,7 @@ export function CampaignEditorPage() {
         return id;
       }
       setSavedSnapshot(JSON.stringify(form));
-      if (!silent) toast.success("Brouillon enregistré");
+      if (!silent) toast.success(t("Brouillon enregistré", "Draft saved"));
       return saved.id ?? id ?? null;
     } catch (err) {
       toast.error(err);
@@ -210,7 +211,7 @@ export function CampaignEditorPage() {
     setTesting(true);
     try {
       await api.campaigns.sendTest(cid, testTo.trim());
-      toast.success("Email de test envoyé", testTo.trim());
+      toast.success(t("Email de test envoyé", "Test email sent"), testTo.trim());
       setTestOpen(false);
     } catch (err) {
       toast.error(err);
@@ -236,7 +237,7 @@ export function CampaignEditorPage() {
     setSending(true);
     try {
       await api.campaigns.send(cid);
-      toast.success("Envoi lancé", "Vos emails partent en ce moment.");
+      toast.success(t("Envoi lancé", "Sending started"), t("Vos emails partent en ce moment.", "Your emails are on their way."));
       navigate(`/campagnes/${cid}/rapport`);
     } catch (err) {
       toast.error(err);
@@ -249,7 +250,7 @@ export function CampaignEditorPage() {
   async function schedule() {
     const date = new Date(scheduleAt);
     if (Number.isNaN(date.getTime()) || date.getTime() < Date.now()) {
-      toast.error("Choisissez une date dans le futur");
+      toast.error(t("Choisissez une date dans le futur", "Pick a date in the future"));
       return;
     }
     const cid = await persist(true);
@@ -257,7 +258,7 @@ export function CampaignEditorPage() {
     setScheduling(true);
     try {
       await api.campaigns.schedule(cid, date.toISOString());
-      toast.success("Campagne programmée", formatDateTime(date.toISOString()));
+      toast.success(t("Campagne programmée", "Campaign scheduled"), formatDateTime(date.toISOString()));
       setScheduleOpen(false);
       await campaign.reload();
     } catch (err) {
@@ -271,7 +272,7 @@ export function CampaignEditorPage() {
     if (!id) return;
     try {
       await api.campaigns.unschedule(id);
-      toast.success("Programmation annulée", "La campagne est de nouveau un brouillon.");
+      toast.success(t("Programmation annulée", "Schedule canceled"), t("La campagne est de nouveau un brouillon.", "The campaign is back to draft."));
       await campaign.reload();
     } catch (err) {
       toast.error(err);
@@ -295,38 +296,38 @@ export function CampaignEditorPage() {
 
   const settingsCard = (
     <Card>
-      <CardHeader title="Paramètres" />
+      <CardHeader title={t("Paramètres", "Settings")} />
       <fieldset disabled={!editable} className={`grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 `}>
-        <Field label="Nom interne" htmlFor="cp-name" className="sm:col-span-2">
-          <Input id="cp-name" value={form.name} onChange={(e) => set("name")(e.target.value)} placeholder="ex : Soldes d'hiver 2026" />
+        <Field label={t("Nom interne", "Internal name")} htmlFor="cp-name" className="sm:col-span-2">
+          <Input id="cp-name" value={form.name} onChange={(e) => set("name")(e.target.value)} placeholder={t("ex : Soldes d'hiver 2026", "e.g. Winter Sale 2026")} />
         </Field>
-        <Field label="Objet *" htmlFor="cp-subject" className="sm:col-span-2" hint="Astuce : personnalisez avec {{first_name}}.">
-          <Input id="cp-subject" value={form.subject} onChange={(e) => set("subject")(e.target.value)} placeholder="{{first_name}}, vos -20 % vous attendent" />
+        <Field label={t("Objet *", "Subject *")} htmlFor="cp-subject" className="sm:col-span-2" hint={t("Astuce : personnalisez avec {{first_name}}.", "Tip: personalize with {{first_name}}.")}>
+          <Input id="cp-subject" value={form.subject} onChange={(e) => set("subject")(e.target.value)} placeholder={t("{{first_name}}, vos -20 % vous attendent", "{{first_name}}, your 20% off is waiting")} />
         </Field>
-        <Field label="Pré-en-tête" htmlFor="cp-preheader" className="sm:col-span-2">
-          <Input id="cp-preheader" value={form.preheader} onChange={(e) => set("preheader")(e.target.value)} placeholder="Texte affiché après l'objet dans la boîte de réception" />
+        <Field label={t("Pré-en-tête", "Preheader")} htmlFor="cp-preheader" className="sm:col-span-2">
+          <Input id="cp-preheader" value={form.preheader} onChange={(e) => set("preheader")(e.target.value)} placeholder={t("Texte affiché après l'objet dans la boîte de réception", "Text shown after the subject line in the inbox")} />
         </Field>
-        <Field label="Nom de l'expéditeur" htmlFor="cp-from-name">
+        <Field label={t("Nom de l'expéditeur", "Sender name")} htmlFor="cp-from-name">
           <Input id="cp-from-name" value={form.from_name} onChange={(e) => set("from_name")(e.target.value)} />
         </Field>
-        <Field label="Email de l'expéditeur" htmlFor="cp-from-email">
-          <Input id="cp-from-email" type="email" value={form.from_email} onChange={(e) => set("from_email")(e.target.value)} placeholder="bonjour@maboutique.fr" />
+        <Field label={t("Email de l'expéditeur", "Sender email")} htmlFor="cp-from-email">
+          <Input id="cp-from-email" type="email" value={form.from_email} onChange={(e) => set("from_email")(e.target.value)} placeholder={t("bonjour@maboutique.fr", "hello@mystore.com")} />
         </Field>
         <Field
-          label="Destinataires"
+          label={t("Destinataires", "Recipients")}
           htmlFor="cp-segment"
           className="sm:col-span-2"
           hint={
             <span className="inline-flex items-center gap-1">
               <Users className="size-3.5" />
               {selectedSegment
-                ? `${formatNumber(selectedSegment.count)} contacts dans ce segment (seuls les abonnés recevront l'email)`
-                : "Tous les contacts abonnés"}
+                ? t(`${formatNumber(selectedSegment.count)} contacts dans ce segment (seuls les abonnés recevront l'email)`, `${formatNumber(selectedSegment.count)} ${selectedSegment.count === 1 ? "contact" : "contacts"} in this segment (only subscribers will receive the email)`)
+                : t("Tous les contacts abonnés", "All subscribed contacts")}
             </span>
           }
         >
           <Select id="cp-segment" value={form.segment_id} onChange={(e) => set("segment_id")(e.target.value)}>
-            <option value="">Tous les abonnés</option>
+            <option value="">{t("Tous les abonnés", "All subscribers")}</option>
             {(segments.data ?? []).map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -344,12 +345,12 @@ export function CampaignEditorPage() {
       <PageHeader
         back={
           <Link to="/campagnes" className="mb-2 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
-            <ArrowLeft className="size-4" /> Campagnes
+            <ArrowLeft className="size-4" /> {t("Campagnes", "Campaigns")}
           </Link>
         }
         title={
           <span className="flex flex-wrap items-center gap-3">
-            {form.name || (id ? "Campagne" : "Nouvelle campagne")}
+            {form.name || (id ? t("Campagne", "Campaign") : t("Nouvelle campagne", "New campaign"))}
             <Badge tone={status.tone} dot>
               {status.label}
             </Badge>
@@ -359,25 +360,25 @@ export function CampaignEditorPage() {
           editable ? (
             <>
               <Button variant="secondary" icon={Save} onClick={() => void persist()} loading={saving} disabled={!!id && !dirty}>
-                {id && !dirty ? "Enregistré" : "Enregistrer"}
+                {id && !dirty ? t("Enregistré", "Saved") : t("Enregistrer", "Save")}
               </Button>
               <Button variant="secondary" icon={FlaskConical} onClick={() => setTestOpen(true)}>
-                Tester
+                {t("Tester", "Test")}
               </Button>
               <Button variant="secondary" icon={CalendarClock} onClick={() => setScheduleOpen(true)}>
-                Programmer
+                {t("Programmer", "Schedule")}
               </Button>
               <Button icon={Send} onClick={openSendConfirm}>
-                Envoyer
+                {t("Envoyer", "Send")}
               </Button>
             </>
           ) : c?.status === "scheduled" ? (
             <Button variant="secondary" icon={XCircle} onClick={unschedule}>
-              Annuler la programmation
+              {t("Annuler la programmation", "Cancel schedule")}
             </Button>
           ) : (
             <Link to={`/campagnes/${id}/rapport`}>
-              <Button icon={BarChart3}>Voir le rapport</Button>
+              <Button icon={BarChart3}>{t("Voir le rapport", "View report")}</Button>
             </Link>
           )
         }
@@ -386,8 +387,8 @@ export function CampaignEditorPage() {
       {!editable && c && (
         <div className="mb-6 rounded-xl bg-sky-50 px-4 py-3 text-sm text-sky-800 ring-1 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-200 dark:ring-sky-900">
           {c.status === "scheduled"
-            ? `Cette campagne est programmée pour le ${formatDateTime(c.scheduled_at)}. Annulez la programmation pour la modifier.`
-            : "Cette campagne a déjà été envoyée : elle n'est plus modifiable."}
+            ? t(`Cette campagne est programmée pour le ${formatDateTime(c.scheduled_at)}. Annulez la programmation pour la modifier.`, `This campaign is scheduled for ${formatDateTime(c.scheduled_at)}. Cancel the schedule to edit it.`)
+            : t("Cette campagne a déjà été envoyée : elle n'est plus modifiable.", "This campaign has already been sent and can no longer be edited.")}
         </div>
       )}
 
@@ -396,13 +397,13 @@ export function CampaignEditorPage() {
           value={visual ? "visual" : "html"}
           onChange={(v) => switchMode(v)}
           options={[
-            { value: "visual", label: "Éditeur visuel", icon: LayoutGrid },
-            { value: "html", label: "Code HTML", icon: Code2 },
+            { value: "visual", label: t("Éditeur visuel", "Visual editor"), icon: LayoutGrid },
+            { value: "html", label: t("Code HTML", "HTML code"), icon: Code2 },
           ]}
         />
         {visual && (
           <Button variant="secondary" size="sm" icon={Eye} onClick={() => setPreviewOpen(true)}>
-            Aperçu boîte de réception
+            {t("Aperçu boîte de réception", "Inbox preview")}
           </Button>
         )}
       </div>
@@ -412,11 +413,11 @@ export function CampaignEditorPage() {
           {settingsCard}
           <Card className="overflow-hidden">
             <CardHeader
-              title="Contenu"
-              description={`${design.blocks.length} blocs · éditeur visuel`}
+              title={t("Contenu", "Content")}
+              description={t(`${design.blocks.length} blocs · éditeur visuel`, `${design.blocks.length} ${design.blocks.length === 1 ? "block" : "blocks"} · visual editor`)}
               action={
                 <Button size="sm" icon={PenLine} onClick={() => setEditorOpen(true)}>
-                  {editable ? "Ouvrir l'éditeur" : "Voir le design"}
+                  {editable ? t("Ouvrir l'éditeur", "Open editor") : t("Voir le design", "View design")}
                 </Button>
               }
             />
@@ -425,17 +426,17 @@ export function CampaignEditorPage() {
               onClick={() => setEditorOpen(true)}
               className="group relative block h-[420px] w-full overflow-hidden"
               style={{ background: design.theme.background }}
-              aria-label="Ouvrir l'éditeur"
+              aria-label={t("Ouvrir l'éditeur", "Open editor")}
             >
               <iframe
-                title="Miniature de l'email"
+                title={t("Miniature de l'email", "Email thumbnail")}
                 srcDoc={renderMergeTags(html)}
                 tabIndex={-1}
                 className="pointer-events-none absolute top-0 left-1/2 h-[1000px] w-[680px] origin-top -translate-x-1/2 scale-[0.6] border-0"
               />
               <span className="absolute inset-0 flex items-center justify-center bg-slate-900/0 transition group-hover:bg-slate-900/40">
                 <span className="flex translate-y-2 items-center gap-2 rounded-full bg-white px-5 py-2.5 font-display text-sm font-semibold text-slate-900 opacity-0 shadow-xl transition group-hover:translate-y-0 group-hover:opacity-100">
-                  <PenLine className="size-4" /> Modifier le design
+                  <PenLine className="size-4" /> {t("Modifier le design", "Edit design")}
                 </span>
               </span>
             </button>
@@ -452,7 +453,7 @@ export function CampaignEditorPage() {
               fromName={form.from_name}
               onSubjectChange={set("subject")}
               onPreheaderChange={set("preheader")}
-              title={form.name || (id ? "Campagne" : "Nouvelle campagne")}
+              title={form.name || (id ? t("Campagne", "Campaign") : t("Nouvelle campagne", "New campaign"))}
               saving={saving}
               dirty={!id || dirty}
               onClose={() => setEditorOpen(false)}
@@ -469,8 +470,8 @@ export function CampaignEditorPage() {
           value={mobileTab}
           onChange={setMobileTab}
           options={[
-            { value: "edit", label: "Édition", icon: Code2 },
-            { value: "preview", label: "Aperçu", icon: Eye },
+            { value: "edit", label: t("Édition", "Edit"), icon: Code2 },
+            { value: "preview", label: t("Aperçu", "Preview"), icon: Eye },
           ]}
         />
       </div>
@@ -497,8 +498,8 @@ export function CampaignEditorPage() {
 
           <Card>
             <CardHeader
-              title="Contenu HTML"
-              description="Balises disponibles : {{first_name}}, {{last_name}}, {{email}}, {{unsubscribe_url}}"
+              title={t("Contenu HTML", "HTML content")}
+              description={t("Balises disponibles : {{first_name}}, {{last_name}}, {{email}}, {{unsubscribe_url}}", "Available tags: {{first_name}}, {{last_name}}, {{email}}, {{unsubscribe_url}}")}
             />
             <div className="p-4">
               <Textarea
@@ -508,7 +509,7 @@ export function CampaignEditorPage() {
                 spellCheck={false}
                 rows={18}
                 className="font-mono text-xs leading-relaxed"
-                aria-label="Code HTML de l'email"
+                aria-label={t("Code HTML de l'email", "Email HTML code")}
               />
             </div>
           </Card>
@@ -527,20 +528,20 @@ export function CampaignEditorPage() {
         open={testOpen}
         onClose={() => setTestOpen(false)}
         size="sm"
-        title="Envoyer un email de test"
-        description="Les balises seront remplacées par des valeurs d'exemple."
+        title={t("Envoyer un email de test", "Send a test email")}
+        description={t("Les balises seront remplacées par des valeurs d'exemple.", "Merge tags will be replaced with sample values.")}
         footer={
           <>
             <Button variant="secondary" onClick={() => setTestOpen(false)}>
-              Annuler
+              {t("Annuler", "Cancel")}
             </Button>
             <Button icon={FlaskConical} onClick={sendTest} loading={testing || saving} disabled={!testTo.trim()}>
-              Envoyer le test
+              {t("Envoyer le test", "Send test")}
             </Button>
           </>
         }
       >
-        <Field label="Adresse de réception" htmlFor="test-to">
+        <Field label={t("Adresse de réception", "Recipient address")} htmlFor="test-to">
           <Input id="test-to" type="email" value={testTo} onChange={(e) => setTestTo(e.target.value)} />
         </Field>
       </Modal>
@@ -549,25 +550,25 @@ export function CampaignEditorPage() {
         open={scheduleOpen}
         onClose={() => setScheduleOpen(false)}
         size="sm"
-        title="Programmer l'envoi"
-        description="La campagne partira automatiquement à la date choisie (heure locale)."
+        title={t("Programmer l'envoi", "Schedule send")}
+        description={t("La campagne partira automatiquement à la date choisie (heure locale).", "The campaign will go out automatically at the chosen date and time (local time).")}
         footer={
           <>
             <Button variant="secondary" onClick={() => setScheduleOpen(false)}>
-              Annuler
+              {t("Annuler", "Cancel")}
             </Button>
             <Button icon={CalendarClock} onClick={schedule} loading={scheduling || saving}>
-              Programmer
+              {t("Programmer", "Schedule")}
             </Button>
           </>
         }
       >
-        <Field label="Date et heure d'envoi" htmlFor="schedule-at">
+        <Field label={t("Date et heure d'envoi", "Send date and time")} htmlFor="schedule-at">
           <Input id="schedule-at" type="datetime-local" value={scheduleAt} min={toDateTimeLocal(new Date())} onChange={(e) => setScheduleAt(e.target.value)} />
         </Field>
       </Modal>
 
-      <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} size="lg" title="Aperçu">
+      <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} size="lg" title={t("Aperçu", "Preview")}>
         <EmailPreview html={html} subject={form.subject} preheader={form.preheader} fromName={form.from_name} height={640} />
       </Modal>
 
@@ -578,12 +579,14 @@ export function CampaignEditorPage() {
           applyPreset(PRESETS[0]);
           setToVisualOpen(false);
         }}
-        title="Passer à l'éditeur visuel ?"
-        confirmLabel="Repartir d'une page blanche"
+        title={t("Passer à l'éditeur visuel ?", "Switch to the visual editor?")}
+        confirmLabel={t("Repartir d'une page blanche", "Start from a blank page")}
       >
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Ce contenu a été écrit en HTML : il ne peut pas être converti en blocs. Vous repartirez d'un modèle visuel, et le HTML actuel sera remplacé à
-          l'enregistrement.
+          {t(
+            "Ce contenu a été écrit en HTML : il ne peut pas être converti en blocs. Vous repartirez d'un modèle visuel, et le HTML actuel sera remplacé à l'enregistrement.",
+            "This content was written in HTML and can't be converted into blocks. You'll start from a visual template, and the current HTML will be replaced when you save.",
+          )}
         </p>
       </ConfirmModal>
 
@@ -592,8 +595,8 @@ export function CampaignEditorPage() {
         onClose={() => setSendOpen(false)}
         onConfirm={sendNow}
         loading={sending || saving}
-        title="Envoyer la campagne maintenant ?"
-        confirmLabel={recipients != null ? `Envoyer à ${formatNumber(recipients)} contacts` : "Envoyer"}
+        title={t("Envoyer la campagne maintenant ?", "Send the campaign now?")}
+        confirmLabel={recipients != null ? t(`Envoyer à ${formatNumber(recipients)} contacts`, `Send to ${formatNumber(recipients)} ${recipients === 1 ? "contact" : "contacts"}`) : t("Envoyer", "Send")}
       >
         <div className="space-y-3">
           <div className="flex items-center gap-4 rounded-xl bg-brand-50 p-4 dark:bg-brand-900/30">
@@ -607,14 +610,14 @@ export function CampaignEditorPage() {
                 <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{formatNumber(recipients)}</p>
               )}
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                destinataires abonnés · {selectedSegment ? `segment « ${selectedSegment.name} »` : "tous les abonnés"}
+                {t("destinataires abonnés", recipients === 1 ? "subscribed recipient" : "subscribed recipients")} · {selectedSegment ? t(`segment « ${selectedSegment.name} »`, `segment “${selectedSegment.name}”`) : t("tous les abonnés", "all subscribers")}
               </p>
             </div>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Objet : <span className="font-medium text-slate-700 dark:text-slate-200">{form.subject || "—"}</span>
+            {t("Objet :", "Subject:")} <span className="font-medium text-slate-700 dark:text-slate-200">{form.subject || "—"}</span>
           </p>
-          <p className="text-xs text-slate-400">Cette action est irréversible.</p>
+          <p className="text-xs text-slate-400">{t("Cette action est irréversible.", "This action can't be undone.")}</p>
         </div>
       </ConfirmModal>
     </>

@@ -7,6 +7,7 @@ import type { Deps } from './deps.js';
 import type { IntegrationContext } from './integrations/context.js';
 import { registerShopify } from './integrations/shopify/index.js';
 import { HttpError, formatZodError } from './lib/http.js';
+import { als, langFromHeader, t, withLang } from './i18n.js';
 import { makeMarkApiKeyUsed, makeRequireAuth } from './services/auth.js';
 import { fireTrigger } from './services/automations.js';
 import { recordEvent, upsertContact } from './services/contacts.js';
@@ -70,6 +71,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     rewriteUrl: (req) => shopifyUrls.rewrite(req.url ?? '/'),
   });
   app.addHook('onRoute', (route) => shopifyUrls.track(route.url));
+  // Every request runs in its own language context (web / mobile send `Accept-Language: fr|en`).
+  app.addHook('onRequest', (request, _reply, done) => {
+    als.run({ lang: langFromHeader(request.headers['accept-language']) }, done);
+  });
+  // Body parsing resumes from socket events, outside the context above: enter it again before validation.
+  app.addHook('preValidation', (request, _reply, done) => {
+    als.run({ lang: langFromHeader(request.headers['accept-language']) }, done);
+  });
 
   app.decorateRequest('accountId', '');
   app.decorateRequest('userId', '');
@@ -84,7 +93,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     try {
       done(null, JSON.parse(raw));
     } catch {
-      const err = new HttpError(400, 'Corps JSON invalide');
+      const lang = langFromHeader(request.headers['accept-language']);
+      const err = new HttpError(400, withLang(lang, () => t('Corps JSON invalide', 'Invalid JSON body')));
       done(err, undefined);
     }
   });
@@ -110,19 +120,27 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     maxAge: 86400,
   });
 
-  app.setErrorHandler((error: FastifyError | HttpError | ZodError | Error, request, reply) => {
-    if (error instanceof HttpError) return reply.code(error.statusCode).send({ error: error.message });
-    if (error instanceof ZodError) return reply.code(400).send({ error: formatZodError(error) });
-    const status = 'statusCode' in error && typeof error.statusCode === 'number' ? error.statusCode : 500;
-    if (status >= 500) {
-      request.log.error(error);
-      return reply.code(500).send({ error: 'Erreur interne du serveur' });
-    }
-    return reply.code(status).send({ error: error.message || 'Requête invalide' });
-  });
+  app.setErrorHandler((error: FastifyError | HttpError | ZodError | Error, request, reply) =>
+    // Errors can surface outside the request's async context (body parsing): re-enter it.
+    withLang(langFromHeader(request.headers['accept-language']), () => {
+      if (error instanceof HttpError) return reply.code(error.statusCode).send({ error: error.message });
+      if (error instanceof ZodError) return reply.code(400).send({ error: formatZodError(error) });
+      const status = 'statusCode' in error && typeof error.statusCode === 'number' ? error.statusCode : 500;
+      if (status >= 500) {
+        request.log.error(error);
+        return reply.code(500).send({ error: t('Erreur interne du serveur', 'Internal server error') });
+      }
+      return reply.code(status).send({ error: error.message || t('Requête invalide', 'Invalid request') });
+    }),
+  );
 
   app.setNotFoundHandler((request, reply) => {
-    reply.code(404).send({ error: `Route introuvable : ${request.method} ${request.url.split('?')[0]}` });
+    reply.code(404).send({
+      error: t(
+        `Route introuvable : ${request.method} ${request.url.split('?')[0]}`,
+        `Route not found: ${request.method} ${request.url.split('?')[0]}`,
+      ),
+    });
   });
 
   const requireAuth = makeRequireAuth(db);

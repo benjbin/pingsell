@@ -2,20 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useInView, useReducedMotion } from "motion/react";
 import { BarChart3, Check, Contact, Globe, KeyRound, Layers, LayoutDashboard, Megaphone, Plug, Repeat, ShoppingBag, Smartphone, Store, Tags, Upload, Users, Workflow } from "lucide-react";
 import { API_URL } from "../content";
+import { t } from "../i18n";
 
 const EASE = [0.2, 0.8, 0.2, 1] as const;
 
 /** Tools that can feed Pingsell through the API (anything able to make an HTTP call). */
 const SOURCES = [
   [Contact, "CRM"],
-  [Smartphone, "App mobile"],
-  [Globe, "Site web"],
+  [Smartphone, t("App mobile", "Mobile app")],
+  [Globe, t("Site web", "Website")],
   [LayoutDashboard, "Back-office"],
-  [Store, "Logiciel de caisse"],
-  [Plug, "Vos outils maison"],
+  [Store, t("Logiciel de caisse", "POS software")],
+  [Plug, t("Vos outils maison", "Your in-house tools")],
 ] as const;
-const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-const FLOW_SOURCES = ["Votre CRM", "Votre app", "Votre site", "Votre caisse", "Votre logiciel"];
+const cap = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
+const FLOW_SOURCES = t(
+  ["Votre CRM", "Votre app", "Votre site", "Votre caisse", "Votre logiciel"],
+  ["Your CRM", "Your app", "Your website", "Your POS", "Your software"],
+);
 
 const SNIPPETS: Record<string, string> = {
   cURL: `curl -X POST ${API_URL}/contacts \\
@@ -27,7 +31,7 @@ const SNIPPETS: Record<string, string> = {
     "tags": ["client-vip"],
     "attributes": { "ville": "Lyon" }
   }'`,
-  "Node.js": `// À l'inscription d'un client dans votre logiciel
+  "Node.js": `// ${t("À l'inscription d'un client dans votre logiciel", "When a customer signs up in your software")}
 await fetch("${API_URL}/contacts", {
   method: "POST",
   headers: {
@@ -40,7 +44,7 @@ await fetch("${API_URL}/contacts", {
     tags: ["client-vip"],
   }),
 });`,
-  PHP: `// À l'inscription d'un client dans votre logiciel
+  PHP: `// ${t("À l'inscription d'un client dans votre logiciel", "When a customer signs up in your software")}
 $ch = curl_init("${API_URL}/contacts");
 curl_setopt_array($ch, [
   CURLOPT_POST => true,
@@ -87,12 +91,33 @@ export function Line({ text }: { text: string }) {
 }
 
 const FEATURES = [
-  { icon: Users, title: "Contacts", text: "Créez ou mettez à jour un contact à chaque inscription, avec prénom, téléphone et vos propres attributs." },
-  { icon: Tags, title: "Tags", text: "Ajoutez ou retirez des tags depuis votre logiciel pour classer vos clients." },
-  { icon: Workflow, title: "Automatisations", text: "Un contact créé ou un tag ajouté déclenche vos scénarios : bienvenue, relance, fidélité." },
-  { icon: Upload, title: "Import en masse", text: "Envoyez jusqu'à 50 000 contacts par appel, en JSON ou en CSV." },
-  { icon: Megaphone, title: "Campagnes", text: "Créez, testez, programmez et envoyez vos campagnes par API." },
-  { icon: BarChart3, title: "Statistiques", text: "Récupérez ouvertures, clics et chiffre d'affaires pour vos propres tableaux de bord." },
+  {
+    icon: Users,
+    title: t("Contacts", "Contacts"),
+    text: t(
+      "Créez ou mettez à jour un contact à chaque inscription, avec prénom, téléphone et vos propres attributs.",
+      "Create or update a contact on every sign-up, with first name, phone and your own attributes.",
+    ),
+  },
+  { icon: Tags, title: t("Tags", "Tags"), text: t("Ajoutez ou retirez des tags depuis votre logiciel pour classer vos clients.", "Add or remove tags from your software to organize your customers.") },
+  {
+    icon: Workflow,
+    title: t("Automatisations", "Automations"),
+    text: t(
+      "Un contact créé ou un tag ajouté déclenche vos scénarios : bienvenue, relance, fidélité.",
+      "A new contact or an added tag triggers your flows: welcome, follow-up, loyalty.",
+    ),
+  },
+  { icon: Upload, title: t("Import en masse", "Bulk import"), text: t("Envoyez jusqu'à 50 000 contacts par appel, en JSON ou en CSV.", "Send up to 50,000 contacts per call, as JSON or CSV.") },
+  { icon: Megaphone, title: t("Campagnes", "Campaigns"), text: t("Créez, testez, programmez et envoyez vos campagnes par API.", "Create, test, schedule and send your campaigns via the API.") },
+  {
+    icon: BarChart3,
+    title: t("Statistiques", "Analytics"),
+    text: t(
+      "Récupérez ouvertures, clics et chiffre d'affaires pour vos propres tableaux de bord.",
+      "Pull opens, clicks and revenue into your own dashboards.",
+    ),
+  },
 ];
 
 /** "Branchez Pingsell sur votre logiciel": REST API + API keys, with an animated live example. */
@@ -118,31 +143,51 @@ export function ApiSection() {
 
       <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-[1fr_1.1fr]">
         <div className="reveal min-w-0">
-          <p className="eyebrow !text-brand-300">API & intégrations</p>
+          <p className="eyebrow !text-brand-300">{t("API & intégrations", "API & integrations")}</p>
           <h2 className="display mt-4 text-[38px] leading-[0.92] sm:text-[52px]">
-            Branchez Pingsell <em className="text-brand-400">sur tous vos outils.</em>
+            {t(
+              <>Branchez Pingsell <em className="text-brand-400">sur tous vos outils.</em></>,
+              <>Plug Pingsell <em className="text-brand-400">into all your tools.</em></>,
+            )}
           </h2>
           <p className="mt-5 max-w-md text-[17px] leading-relaxed text-white/70">
-            Intégrez Pingsell directement dans votre logiciel, ou gardez-le à côté et laissez vos outils le piloter. Tout ce qui sait appeler une API peut ajouter des contacts et déclencher vos automatisations.
+            {t(
+              "Intégrez Pingsell directement dans votre logiciel, ou gardez-le à côté et laissez vos outils le piloter. Tout ce qui sait appeler une API peut ajouter des contacts et déclencher vos automatisations.",
+              "Build Pingsell right into your software, or keep it alongside and let your tools drive it. Anything that can call an API can add contacts and trigger your automations.",
+            )}
           </p>
 
           <div className="mt-7 grid gap-3 sm:grid-cols-2">
             {[
-              [Plug, "Intégré à votre logiciel", "Vos clients et vos campagnes gérés depuis votre propre outil, Pingsell travaille en coulisses."],
-              [Layers, "À côté de vos outils", "Gardez Pingsell comme espace email, alimenté en continu par votre CRM, votre app, votre site."],
-            ].map(([Icon, t, d]) => {
+              [
+                Plug,
+                t("Intégré à votre logiciel", "Built into your software"),
+                t(
+                  "Vos clients et vos campagnes gérés depuis votre propre outil, Pingsell travaille en coulisses.",
+                  "Manage customers and campaigns from your own tool while Pingsell works behind the scenes.",
+                ),
+              ],
+              [
+                Layers,
+                t("À côté de vos outils", "Alongside your tools"),
+                t(
+                  "Gardez Pingsell comme espace email, alimenté en continu par votre CRM, votre app, votre site.",
+                  "Keep Pingsell as your email hub, fed continuously by your CRM, your app and your website.",
+                ),
+              ],
+            ].map(([Icon, title, d]) => {
               const I = Icon as typeof Plug;
               return (
-                <div key={t as string} className="rounded-2xl bg-white/[0.05] p-4 ring-1 ring-white/10">
+                <div key={title as string} className="rounded-2xl bg-white/[0.05] p-4 ring-1 ring-white/10">
                   <I className="size-4 text-brand-400" strokeWidth={1.75} />
-                  <p className="mt-2.5 font-display text-[15px] font-bold">{t as string}</p>
+                  <p className="mt-2.5 font-display text-[15px] font-bold">{title as string}</p>
                   <p className="mt-1 text-[13px] leading-relaxed text-white/60">{d as string}</p>
                 </div>
               );
             })}
           </div>
 
-          <p className="mt-6 text-[13px] text-white/50">Ils peuvent déclencher vos emails :</p>
+          <p className="mt-6 text-[13px] text-white/50">{t("Ils peuvent déclencher vos emails :", "They can trigger your emails:")}</p>
           <ul className="mt-2.5 flex flex-wrap gap-2">
             {SOURCES.map(([Icon, label]) => {
               const I = Icon as typeof Plug;
@@ -158,14 +203,14 @@ export function ApiSection() {
 
           <ul className="mt-8 space-y-2.5 text-[15px] text-white/80">
             {[
-              [KeyRound, "Clés API sécurisées, créées et révoquées en un clic depuis vos réglages"],
-              [Repeat, "Désinscriptions respectées : un contact désinscrit le reste, partout"],
-              [ShoppingBag, "Boutique en ligne ? La connexion native se fait sans une ligne de code"],
-            ].map(([Icon, t]) => {
+              [KeyRound, t("Clés API sécurisées, créées et révoquées en un clic depuis vos réglages", "Secure API keys, created and revoked in one click from your settings")],
+              [Repeat, t("Désinscriptions respectées : un contact désinscrit le reste, partout", "Unsubscribes respected: once a contact unsubscribes, they stay unsubscribed everywhere")],
+              [ShoppingBag, t("Boutique en ligne ? La connexion native se fait sans une ligne de code", "Online store? The native connection takes zero code")],
+            ].map(([Icon, label]) => {
               const I = Icon as typeof KeyRound;
               return (
-                <li key={t as string} className="flex items-start gap-2.5">
-                  <I className="mt-0.5 size-4 shrink-0 text-brand-400" strokeWidth={1.75} /> {t as string}
+                <li key={label as string} className="flex items-start gap-2.5">
+                  <I className="mt-0.5 size-4 shrink-0 text-brand-400" strokeWidth={1.75} /> {label as string}
                 </li>
               );
             })}
@@ -186,7 +231,7 @@ export function ApiSection() {
                 <span className="size-2.5 rounded-full bg-white/15" />
                 <span className="size-2.5 rounded-full bg-white/15" />
               </span>
-              <div role="group" aria-label="Langage" className="flex rounded-full bg-white/[0.06] p-0.5">
+              <div role="group" aria-label={t("Langage", "Language")} className="flex rounded-full bg-white/[0.06] p-0.5">
                 {Object.keys(SNIPPETS).map((k) => {
                   const on = tab === k;
                   return (
@@ -248,10 +293,11 @@ export function ApiSection() {
             >
               <p className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
                 <span className="rounded-md bg-emerald-400/15 px-1.5 py-0.5 font-semibold text-emerald-300">201 Created</span>
-                <span className="text-white/60">Contact créé (ou mis à jour s'il existe déjà)</span>
+                <span className="text-white/60">{t("Contact créé (ou mis à jour s'il existe déjà)", "Contact created (or updated if it already exists)")}</span>
               </p>
               <p className="mt-2 flex items-center gap-2 text-[12px] text-white/80">
-                <Check className="size-3.5 text-brand-400" /> Automatisation « Bienvenue » déclenchée pour camille@exemple.fr
+                <Check className="size-3.5 text-brand-400" />{" "}
+                {t("Automatisation « Bienvenue » déclenchée pour camille@exemple.fr", "“Welcome” automation triggered for camille@exemple.fr")}
               </p>
             </motion.div>
           </motion.div>
@@ -280,10 +326,10 @@ function Flow({ reduce }: { reduce: boolean }) {
     return () => window.clearInterval(id);
   }, [reduce]);
   const steps = [
-    ["Source", FLOW_SOURCES[src]],
-    ["API", "API Pingsell"],
-    ["Scénario", "Automatisation"],
-    ["Email", "Email envoyé"],
+    [t("Source", "Source"), FLOW_SOURCES[src]],
+    ["API", t("API Pingsell", "Pingsell API")],
+    [t("Scénario", "Flow"), t("Automatisation", "Automation")],
+    ["Email", t("Email envoyé", "Email sent")],
   ];
   return (
     <div className="mt-8 flex items-center">
@@ -304,7 +350,7 @@ function Flow({ reduce }: { reduce: boolean }) {
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.25 }}
                 >
-                  <span className="sm:hidden">{cap(long.replace("Votre ", ""))}</span>
+                  <span className="sm:hidden">{cap(long.replace(/^(Votre|Your) /, ""))}</span>
                   <span className="hidden sm:inline">{long}</span>
                 </motion.span>
               </AnimatePresence>

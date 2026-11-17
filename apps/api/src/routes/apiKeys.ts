@@ -2,12 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { all, run } from '../db.js';
 import type { Deps } from '../deps.js';
-import { forbidden, notFound, parse } from '../lib/http.js';
+import { forbidden, notFound, parse, zmsg } from '../lib/http.js';
+import { t } from '../i18n.js';
 import { get } from '../db.js';
 import { createApiKey } from '../services/auth.js';
 
 const createSchema = z.object({
-  label: z.string().trim().min(1, 'Le libellé est requis').max(80).default('Clé API'),
+  label: z.string().trim().min(1, zmsg('Le libellé est requis', 'Label is required')).max(80).default(() => t('Clé API', 'API key')),
 });
 
 interface ApiKeyRow {
@@ -28,7 +29,7 @@ export async function apiKeyRoutes(app: FastifyInstance, { db }: Deps) {
     // Route pattern, not the raw URL: `/api/v1/%61pi-keys` must not slip through.
     if (!request.routeOptions.url?.includes('/api-keys') || !request.userId) return;
     const role = get<{ role: string }>(db, 'SELECT role FROM users WHERE id = ?', request.userId)?.role;
-    if (role === 'editor') throw forbidden('Les clés API sont réservées au propriétaire et aux administrateurs');
+    if (role === 'editor') throw forbidden(t('Les clés API sont réservées au propriétaire et aux administrateurs', 'API keys are limited to the owner and admins'));
   });
   app.get('/api-keys', async (request) => {
     const rows = all<ApiKeyRow>(
@@ -57,7 +58,7 @@ export async function apiKeyRoutes(app: FastifyInstance, { db }: Deps) {
 
   app.delete<{ Params: { id: string } }>('/api-keys/:id', async (request, reply) => {
     const changes = run(db, 'DELETE FROM api_keys WHERE id = ? AND account_id = ?', request.params.id, request.accountId);
-    if (!changes) throw notFound('Clé API introuvable');
+    if (!changes) throw notFound(t('Clé API introuvable', 'API key not found'));
     return reply.code(204).send();
   });
 }

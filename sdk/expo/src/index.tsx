@@ -14,8 +14,10 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Pingsell, type InboxItem, type InboxState, type PingsellNotification, type PromptSettings } from "./client";
+import { getLocale, intlLocale, t, type PingsellLocale } from "./i18n";
 
 export { Pingsell, ANDROID_CHANNEL_ID } from "./client";
+export type { PingsellLocale } from "./i18n";
 export type { Identity, InboxItem, InboxState, PingsellConfig, PingsellNotification, PromptSettings, RegisterOptions, RegisterResult } from "./client";
 
 /** Live in-app notification centre: items, unread count and actions. */
@@ -54,60 +56,66 @@ const DEFAULT_THEME: Required<Theme> = {
   unreadBackground: "#eef3ff",
 };
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, locale: PingsellLocale): string {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "À l'instant";
-  if (s < 3600) return `Il y a ${Math.floor(s / 60)} min`;
-  if (s < 86_400) return `Il y a ${Math.floor(s / 3600)} h`;
-  if (s < 7 * 86_400) return `Il y a ${Math.floor(s / 86_400)} j`;
-  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  if (s < 60) return t("À l'instant", "Just now", locale);
+  if (s < 3600) return t(`Il y a ${Math.floor(s / 60)} min`, `${Math.floor(s / 60)} min ago`, locale);
+  if (s < 86_400) return t(`Il y a ${Math.floor(s / 3600)} h`, `${Math.floor(s / 3600)}h ago`, locale);
+  if (s < 7 * 86_400) return t(`Il y a ${Math.floor(s / 86_400)} j`, `${Math.floor(s / 86_400)}d ago`, locale);
+  return new Date(iso).toLocaleDateString(intlLocale(locale), { day: "numeric", month: "short" });
 }
 
 /** Notification centre screen: pull to refresh, unread dots, "mark all as read". */
 export function PingsellInbox({
   title = "Notifications",
-  emptyText = "Aucune notification pour le moment.",
+  emptyText,
   theme,
   style,
   onOpen,
+  locale = getLocale(),
 }: {
   title?: string | null;
+  /** Empty-state text (default: translated "No notifications yet."). */
   emptyText?: string;
+  /** Language of the built-in texts (default: Pingsell.init `locale`, otherwise the device language). */
+  locale?: PingsellLocale;
   theme?: Theme;
   style?: StyleProp<ViewStyle>;
   /** Overrides the default action (Pingsell.init onOpen, or opening the link). */
   onOpen?: (item: InboxItem) => void;
 }) {
-  const t = { ...DEFAULT_THEME, ...theme };
+  const th = { ...DEFAULT_THEME, ...theme };
   const inbox = usePingsellInbox();
 
   return (
-    <View style={[{ flex: 1, backgroundColor: t.background }, style]}>
+    <View style={[{ flex: 1, backgroundColor: th.background }, style]}>
       {title !== null && (
         <View style={styles.header}>
-          <Text style={[styles.title, { color: t.text }]}>{title}</Text>
+          <Text style={[styles.title, { color: th.text }]}>{title}</Text>
           {inbox.unread > 0 && (
             <Pressable accessibilityRole="button" onPress={() => void inbox.markRead()} hitSlop={8}>
-              <Text style={{ color: t.accent, fontWeight: "600" }}>Tout marquer comme lu</Text>
+              <Text style={{ color: th.accent, fontWeight: "600" }}>{t("Tout marquer comme lu", "Mark all as read", locale)}</Text>
             </Pressable>
           )}
         </View>
       )}
       {!inbox.ready ? (
-        <Text style={[styles.empty, { color: t.muted }]}>Activez les notifications pour retrouver vos messages ici.</Text>
+        <Text style={[styles.empty, { color: th.muted }]}>
+          {t("Activez les notifications pour retrouver vos messages ici.", "Turn on notifications to see your messages here.", locale)}
+        </Text>
       ) : inbox.loading && !inbox.items.length ? (
-        <ActivityIndicator style={{ marginTop: 32 }} color={t.accent} />
+        <ActivityIndicator style={{ marginTop: 32 }} color={th.accent} />
       ) : (
         <FlatList
           data={inbox.items}
           keyExtractor={(i) => i.id}
-          refreshControl={<RefreshControl refreshing={inbox.loading} onRefresh={() => void inbox.refresh()} tintColor={t.accent} />}
-          ListEmptyComponent={<Text style={[styles.empty, { color: t.muted }]}>{inbox.error ?? emptyText}</Text>}
+          refreshControl={<RefreshControl refreshing={inbox.loading} onRefresh={() => void inbox.refresh()} tintColor={th.accent} />}
+          ListEmptyComponent={<Text style={[styles.empty, { color: th.muted }]}>{inbox.error ?? emptyText ?? t("Aucune notification pour le moment.", "No notifications yet.", locale)}</Text>}
           contentContainerStyle={{ padding: 12, gap: 8 }}
           renderItem={({ item }) => (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`${item.read ? "" : "Non lue. "}${item.title}. ${item.body}`}
+              accessibilityLabel={`${item.read ? "" : t("Non lue. ", "Unread. ", locale)}${item.title}. ${item.body}`}
               onPress={() => {
                 if (onOpen) {
                   void inbox.markRead([item.id]);
@@ -116,16 +124,16 @@ export function PingsellInbox({
               }}
               style={({ pressed }) => [
                 styles.item,
-                { backgroundColor: item.read ? "#f8fafc" : t.unreadBackground, opacity: pressed ? 0.7 : 1 },
+                { backgroundColor: item.read ? "#f8fafc" : th.unreadBackground, opacity: pressed ? 0.7 : 1 },
               ]}
             >
               <View style={{ flex: 1 }}>
-                <Text style={[styles.itemTitle, { color: t.text, fontWeight: item.read ? "500" : "700" }]}>{item.title}</Text>
-                <Text style={[styles.itemBody, { color: t.muted }]}>{item.body}</Text>
+                <Text style={[styles.itemTitle, { color: th.text, fontWeight: item.read ? "500" : "700" }]}>{item.title}</Text>
+                <Text style={[styles.itemBody, { color: th.muted }]}>{item.body}</Text>
                 {item.image_url ? <Image source={{ uri: item.image_url }} style={styles.image} resizeMode="cover" /> : null}
-                <Text style={[styles.time, { color: t.muted }]}>{timeAgo(item.created_at)}</Text>
+                <Text style={[styles.time, { color: th.muted }]}>{timeAgo(item.created_at, locale)}</Text>
               </View>
-              {!item.read && <View style={[styles.dot, { backgroundColor: t.accent }]} />}
+              {!item.read && <View style={[styles.dot, { backgroundColor: th.accent }]} />}
             </Pressable>
           )}
         />
@@ -135,13 +143,26 @@ export function PingsellInbox({
 }
 
 /** Small red counter to put on your bell icon: <PingsellBadge><BellIcon /></PingsellBadge>. */
-export function PingsellBadge({ children, color = "#ef4444" }: { children: ReactNode; color?: string }) {
+export function PingsellBadge({
+  children,
+  color = "#ef4444",
+  locale = getLocale(),
+}: {
+  children: ReactNode;
+  color?: string;
+  /** Language of the accessibility label (default: Pingsell.init `locale`, otherwise the device language). */
+  locale?: PingsellLocale;
+}) {
   const { unread } = useSyncExternalStore(Pingsell.subscribe, Pingsell.getState, Pingsell.getState);
   return (
     <View>
       {children}
       {unread > 0 && (
-        <View style={[styles.badge, { backgroundColor: color }]} accessibilityLabel={`${unread} notification(s) non lue(s)`}>
+        <View style={[styles.badge, { backgroundColor: color }]} accessibilityLabel={t(
+            `${unread} notification(s) non lue(s)`,
+            `${unread} unread notification${unread === 1 ? "" : "s"}`,
+            locale,
+          )}>
           <Text style={styles.badgeText}>{unread > 99 ? "99+" : unread}</Text>
         </View>
       )}
@@ -154,7 +175,7 @@ export function PingsellBadge({ children, color = "#ef4444" }: { children: React
  * (Pingsell.init({ foreground: "banner" })). Render it once, at the root.
  */
 export function PingsellInAppBanner({ duration = 5000, theme, top = 54 }: { duration?: number; theme?: Theme; top?: number }) {
-  const t = { ...DEFAULT_THEME, ...theme };
+  const th = { ...DEFAULT_THEME, ...theme };
   const [current, setCurrent] = useState<PingsellNotification | null>(null);
   const y = useRef(new Animated.Value(-200)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -185,14 +206,14 @@ export function PingsellInAppBanner({ duration = 5000, theme, top = 54 }: { dura
           y.setValue(-200);
           setCurrent(null);
         }}
-        style={[styles.banner, { backgroundColor: t.background }]}
+        style={[styles.banner, { backgroundColor: th.background }]}
       >
-        <View style={[styles.bannerIcon, { backgroundColor: t.accent }]} />
+        <View style={[styles.bannerIcon, { backgroundColor: th.accent }]} />
         <View style={{ flex: 1 }}>
-          <Text style={[styles.itemTitle, { color: t.text }]} numberOfLines={1}>
+          <Text style={[styles.itemTitle, { color: th.text }]} numberOfLines={1}>
             {current.title}
           </Text>
-          <Text style={[styles.itemBody, { color: t.muted }]} numberOfLines={2}>
+          <Text style={[styles.itemBody, { color: th.muted }]} numberOfLines={2}>
             {current.body}
           </Text>
         </View>
@@ -206,7 +227,7 @@ export function PingsellInAppBanner({ duration = 5000, theme, top = 54 }: { dura
  * Its text comes from Pingsell (no app update needed to change it). Render it once, at the root.
  */
 export function PingsellPermissionPrompt({ theme }: { theme?: Theme }) {
-  const t = { ...DEFAULT_THEME, ...theme };
+  const th = { ...DEFAULT_THEME, ...theme };
   const [prompt, setPrompt] = useState<PromptSettings | null>(null);
   useEffect(() => Pingsell.onPrompt(setPrompt), []);
 
@@ -214,21 +235,21 @@ export function PingsellPermissionPrompt({ theme }: { theme?: Theme }) {
     <Modal visible={!!prompt} transparent animationType="slide" onRequestClose={() => Pingsell.answerPrompt(false)}>
       <View style={styles.promptBackdrop}>
         {prompt && (
-          <View style={[styles.promptCard, { backgroundColor: t.background }]} accessibilityViewIsModal>
+          <View style={[styles.promptCard, { backgroundColor: th.background }]} accessibilityViewIsModal>
             {prompt.image_url ? (
               <Image source={{ uri: prompt.image_url }} style={styles.promptImage} resizeMode="cover" />
             ) : (
-              <View style={[styles.promptIcon, { backgroundColor: t.unreadBackground }]}>
+              <View style={[styles.promptIcon, { backgroundColor: th.unreadBackground }]}>
                 <Text style={{ fontSize: 30 }}>🔔</Text>
               </View>
             )}
-            <Text style={[styles.promptTitle, { color: t.text }]}>{prompt.title}</Text>
-            <Text style={[styles.promptBody, { color: t.muted }]}>{prompt.body}</Text>
-            <Pressable accessibilityRole="button" onPress={() => Pingsell.answerPrompt(true)} style={[styles.promptPrimary, { backgroundColor: t.accent }]}>
+            <Text style={[styles.promptTitle, { color: th.text }]}>{prompt.title}</Text>
+            <Text style={[styles.promptBody, { color: th.muted }]}>{prompt.body}</Text>
+            <Pressable accessibilityRole="button" onPress={() => Pingsell.answerPrompt(true)} style={[styles.promptPrimary, { backgroundColor: th.accent }]}>
               <Text style={styles.promptPrimaryText}>{prompt.accept_label}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => Pingsell.answerPrompt(false)} style={styles.promptSecondary} hitSlop={8}>
-              <Text style={{ color: t.muted, fontWeight: "600", fontSize: 15 }}>{prompt.decline_label}</Text>
+              <Text style={{ color: th.muted, fontWeight: "600", fontSize: 15 }}>{prompt.decline_label}</Text>
             </Pressable>
           </View>
         )}

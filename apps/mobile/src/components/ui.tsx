@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import type { Tone } from '@/lib/format';
+import { t } from '@/lib/i18n';
 import { radius, spacing, useColors, type Palette } from '@/lib/theme';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
@@ -181,11 +182,11 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
   return (
     <View style={[styles.center, { backgroundColor: c.background }]}>
       <Ionicons name="cloud-offline-outline" size={40} color={c.textSubtle} />
-      <Text style={[styles.stateTitle, { color: c.text }]}>Oups, chargement impossible</Text>
+      <Text style={[styles.stateTitle, { color: c.text }]}>{t('Oups, chargement impossible', "Oops, couldn't load this")}</Text>
       <Text style={[styles.stateText, { color: c.textMuted }]}>{message}</Text>
       {onRetry ? (
         <View style={{ marginTop: spacing.lg }}>
-          <Button label="Réessayer" icon="refresh" variant="secondary" onPress={onRetry} />
+          <Button label={t('Réessayer', 'Try again')} icon="refresh" variant="secondary" onPress={onRetry} />
         </View>
       ) : null}
     </View>

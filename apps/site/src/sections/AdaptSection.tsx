@@ -18,49 +18,63 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { t } from "../i18n";
+
 const EASE = [0.2, 0.8, 0.2, 1] as const;
 
 /** Everything that can feed Pingsell today (store connector, CSV import, REST API, mobile SDK). */
 const SOURCES: Array<{ icon: LucideIcon; label: string; how: string }> = [
-  { icon: ShoppingBag, label: "Votre boutique en ligne", how: "Sans code" },
-  { icon: Globe, label: "Votre site", how: "API" },
-  { icon: Contact, label: "Votre CRM", how: "API" },
-  { icon: Smartphone, label: "Votre app iOS & Android", how: "SDK" },
-  { icon: Store, label: "Votre caisse", how: "API" },
-  { icon: LayoutDashboard, label: "Votre back-office", how: "API" },
-  { icon: FileSpreadsheet, label: "Un fichier Excel / CSV", how: "Import" },
-  { icon: Wrench, label: "Vos outils maison", how: "API" },
+  { icon: ShoppingBag, label: t("Votre boutique en ligne", "Your online store"), how: t("Sans code", "No code") },
+  { icon: Globe, label: t("Votre site", "Your website"), how: "API" },
+  { icon: Contact, label: t("Votre CRM", "Your CRM"), how: "API" },
+  { icon: Smartphone, label: t("Votre app iOS & Android", "Your iOS & Android app"), how: "SDK" },
+  { icon: Store, label: t("Votre caisse", "Your POS"), how: "API" },
+  { icon: LayoutDashboard, label: t("Votre back-office", "Your back office"), how: "API" },
+  { icon: FileSpreadsheet, label: t("Un fichier Excel / CSV", "An Excel / CSV file"), how: "Import" },
+  { icon: Wrench, label: t("Vos outils maison", "Your in-house tools"), how: "API" },
 ];
 
 const PATHS = [
   {
     icon: MousePointerClick,
-    badge: "1 clic",
-    title: "Sans une ligne de code",
-    text: "Connectez votre boutique : clients, commandes et paniers arrivent tout seuls. Ou importez votre fichier de contacts.",
-    points: ["Boutique connectée sans code", "Import Excel / CSV", "Scénarios prêts à l'emploi"],
+    badge: t("1 clic", "1 click"),
+    title: t("Sans une ligne de code", "Without a line of code"),
+    text: t(
+      "Connectez votre boutique : clients, commandes et paniers arrivent tout seuls. Ou importez votre fichier de contacts.",
+      "Connect your store: customers, orders and carts flow in on their own. Or import your contact file.",
+    ),
+    points: [t("Boutique connectée sans code", "Store connected with no code"), t("Import Excel / CSV", "Excel / CSV import"), t("Scénarios prêts à l'emploi", "Ready-to-use flows")],
   },
   {
     icon: Code2,
     badge: "≈ 5 minutes",
-    title: "Avec quelques lignes",
-    text: "Une clé API et un appel web : votre site, votre CRM ou votre caisse alimentent Pingsell, dans n'importe quel langage.",
-    points: ["PHP, Node, Python, Java…", "Exemples prêts à copier", "Déclenche vos automatisations"],
+    title: t("Avec quelques lignes", "With a few lines"),
+    text: t(
+      "Une clé API et un appel web : votre site, votre CRM ou votre caisse alimentent Pingsell, dans n'importe quel langage.",
+      "One API key and one web request: your website, CRM or POS feeds Pingsell, in any language.",
+    ),
+    points: ["PHP, Node, Python, Java…", t("Exemples prêts à copier", "Copy-paste examples"), t("Déclenche vos automatisations", "Triggers your automations")],
   },
   {
     icon: Smartphone,
-    badge: "SDK prêt",
-    title: "Dans votre app mobile",
-    text: "Notifications sur l'écran verrouillé, centre de notifications et écran de permission, déjà construits pour vous.",
-    points: ["React Native & Expo", "Apps natives via l'API", "Votre marque, vos couleurs"],
+    badge: t("SDK prêt", "SDK ready"),
+    title: t("Dans votre app mobile", "In your mobile app"),
+    text: t(
+      "Notifications sur l'écran verrouillé, centre de notifications et écran de permission, déjà construits pour vous.",
+      "Lock screen notifications, notification center and permission screen, already built for you.",
+    ),
+    points: ["React Native & Expo", t("Apps natives via l'API", "Native apps via the API"), t("Votre marque, vos couleurs", "Your brand, your colors")],
   },
-] as const;
+];
 
 const STEPS = [
-  ["Créez votre compte", "Gratuit, sans carte bancaire."],
-  ["Branchez votre source", "Votre boutique, un fichier ou quelques lignes de code."],
-  ["Activez un scénario", "Bienvenue, panier abandonné, commande expédiée : ça tourne."],
-] as const;
+  [t("Créez votre compte", "Create your account"), t("Gratuit, sans carte bancaire.", "Free, no credit card required.")],
+  [t("Branchez votre source", "Connect your source"), t("Votre boutique, un fichier ou quelques lignes de code.", "Your store, a file or a few lines of code.")],
+  [
+    t("Activez un scénario", "Turn on a flow"),
+    t("Bienvenue, panier abandonné, commande expédiée : ça tourne.", "Welcome, abandoned cart, order shipped: it just runs."),
+  ],
+];
 
 /** Positions of the sources around the hub, on a circle (percent of the square). */
 const point = (i: number, n: number, r = 40) => {
@@ -147,25 +161,34 @@ export function AdaptSection() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="grid items-center gap-14 lg:grid-cols-[1fr_1.05fr]">
           <div className="reveal min-w-0">
-            <p className="eyebrow">Intégration</p>
+            <p className="eyebrow">{t("Intégration", "Integration")}</p>
             <h2 className="display mt-4 text-[38px] leading-[0.92] sm:text-[56px]">
-              Pingsell s'adapte à vous. <em className="text-brand-500">Pas l'inverse.</em>
+              {t(
+                <>
+                  Pingsell s'adapte à vous. <em className="text-brand-500">Pas l'inverse.</em>
+                </>,
+                <>
+                  Pingsell adapts to you. <em className="text-brand-500">Not the other way around.</em>
+                </>,
+              )}
             </h2>
             <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-slate-600">
-              Boutique en ligne, site sur mesure, CRM, logiciel de caisse, app mobile ou simple fichier Excel : vous gardez vos outils et votre façon de travailler. Pingsell se
-              branche dessus, en un clic ou en quelques lignes.
+              {t(
+                "Boutique en ligne, site sur mesure, CRM, logiciel de caisse, app mobile ou simple fichier Excel : vous gardez vos outils et votre façon de travailler. Pingsell se branche dessus, en un clic ou en quelques lignes.",
+                "Online store, custom website, CRM, POS software, mobile app or a simple Excel file: keep your tools and the way you work. Pingsell plugs right in, in one click or a few lines of code.",
+              )}
             </p>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
               {[
-                [Plug, "Dans votre logiciel", "Vos équipes restent dans leur outil, Pingsell envoie en coulisses."],
-                [Layers, "Ou à côté", "Un espace email et push complet, alimenté par tous vos outils."],
-              ].map(([Icon, t, d]) => {
+                [Plug, t("Dans votre logiciel", "Inside your software"), t("Vos équipes restent dans leur outil, Pingsell envoie en coulisses.", "Your teams stay in their tool while Pingsell sends behind the scenes.")],
+                [Layers, t("Ou à côté", "Or alongside it"), t("Un espace email et push complet, alimenté par tous vos outils.", "A complete email and push workspace, fed by all your tools.")],
+              ].map(([Icon, title, d]) => {
                 const I = Icon as LucideIcon;
                 return (
-                  <div key={t as string} className="rounded-2xl bg-white p-4 ring-1 ring-slate-900/[0.07]">
+                  <div key={title as string} className="rounded-2xl bg-white p-4 ring-1 ring-slate-900/[0.07]">
                     <I className="size-4 text-brand-500" strokeWidth={1.75} />
-                    <p className="mt-2.5 font-display text-[15px] font-bold">{t as string}</p>
+                    <p className="mt-2.5 font-display text-[15px] font-bold">{title as string}</p>
                     <p className="mt-1 text-[13px] leading-relaxed text-slate-500">{d as string}</p>
                   </div>
                 );
@@ -173,11 +196,11 @@ export function AdaptSection() {
             </div>
 
             <ol className="mt-8 space-y-3">
-              {STEPS.map(([t, d], i) => (
-                <li key={t} className="flex items-start gap-3">
+              {STEPS.map(([title, d], i) => (
+                <li key={title} className="flex items-start gap-3">
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-900 font-display text-xs font-bold text-white">{i + 1}</span>
                   <p className="pt-0.5 text-[15px] text-slate-600">
-                    <span className="font-semibold text-slate-900">{t}.</span> {d}
+                    <span className="font-semibold text-slate-900">{title}.</span> {d}
                   </p>
                 </li>
               ))}
@@ -212,9 +235,14 @@ export function AdaptSection() {
         </div>
 
         <div className="reveal mt-8 flex flex-col items-center justify-center gap-3 text-center sm:flex-row sm:gap-6">
-          <p className="text-[15px] text-slate-600">Pas de développeur ? La connexion sans code et l'import suffisent pour démarrer.</p>
+          <p className="text-[15px] text-slate-600">
+            {t(
+              "Pas de développeur ? La connexion sans code et l'import suffisent pour démarrer.",
+              "No developer? The no-code connection and import are all you need to get started.",
+            )}
+          </p>
           <a href="#integration" className="group inline-flex items-center gap-1.5 font-display text-sm font-bold text-brand-500">
-            Voir l'API et les exemples de code <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+            {t("Voir l'API et les exemples de code", "See the API and code examples")} <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
           </a>
         </div>
       </div>

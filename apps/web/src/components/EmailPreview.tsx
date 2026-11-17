@@ -3,11 +3,12 @@ import { Monitor, Smartphone } from "lucide-react";
 import { cx } from "../lib/format";
 import { Segmented } from "./ui/primitives";
 import { countdownParts, type CountdownUnit } from "./email-builder/model";
+import { t } from "../lib/i18n";
 
 const SAMPLE = {
-  first_name: "Camille",
-  last_name: "Martin",
-  email: "camille.martin@exemple.fr",
+  first_name: t("Camille", "Emma"),
+  last_name: t("Martin", "Smith"),
+  email: t("camille.martin@exemple.fr", "emma.smith@example.com"),
   unsubscribe_url: "#",
 };
 
@@ -54,7 +55,7 @@ export function EmailPreview({
           <div className="min-w-0 flex-1">
             {subject !== undefined && (
               <>
-                <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{renderMergeTags(subject) || "(Sans objet)"}</p>
+                <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{renderMergeTags(subject) || t("(Sans objet)", "(No subject)")}</p>
                 <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                   {fromName ? <span className="font-medium text-slate-600 dark:text-slate-300">{fromName}</span> : null}
                   {fromName && preheader ? " · " : ""}
@@ -68,7 +69,7 @@ export function EmailPreview({
               value={device}
               onChange={setDevice}
               options={[
-                { value: "desktop", label: "Ordinateur", icon: Monitor },
+                { value: "desktop", label: t("Ordinateur", "Desktop"), icon: Monitor },
                 { value: "mobile", label: "Mobile", icon: Smartphone },
               ]}
             />
@@ -83,10 +84,10 @@ export function EmailPreview({
           )}
         >
           {html ? (
-            <iframe title="Aperçu de l'email" srcDoc={doc} sandbox="allow-popups allow-popups-to-escape-sandbox" className="block w-full bg-white" style={{ height }} />
+            <iframe title={t("Aperçu de l'email", "Email preview")} srcDoc={doc} sandbox="allow-popups allow-popups-to-escape-sandbox" className="block w-full bg-white" style={{ height }} />
           ) : (
             <div className="flex items-center justify-center text-sm text-slate-400" style={{ height: Math.min(height, 320) }}>
-              Le contenu de l'email apparaîtra ici.
+              {t("Le contenu de l'email apparaîtra ici.", "Your email content will appear here.")}
             </div>
           )}
         </div>

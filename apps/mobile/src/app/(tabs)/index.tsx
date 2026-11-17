@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BarChart } from '@/components/BarChart';
 import { Card, ErrorState, KpiCard, LoadingState, Screen, SectionTitle } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { t } from '@/lib/i18n';
 import { formatCurrency, formatNumber, formatPercent, formatShortDay } from '@/lib/format';
 import { radius, spacing, useColors } from '@/lib/theme';
 import { useApiQuery } from '@/lib/useApi';
@@ -36,7 +37,7 @@ export default function HomeScreen() {
   return (
     <Screen refreshing={refreshing} onRefresh={refresh}>
       <View style={{ gap: 4 }}>
-        <Text style={[styles.hello, { color: c.textMuted }]}>Bonjour,</Text>
+        <Text style={[styles.hello, { color: c.textMuted }]}>{t('Bonjour,', 'Hello,')}</Text>
         <Text style={[styles.account, { color: c.text }]}>{name}</Text>
       </View>
 
@@ -51,7 +52,7 @@ export default function HomeScreen() {
               accessibilityState={{ selected: active }}
               style={[styles.segment, active && { backgroundColor: c.surface }]}
             >
-              <Text style={[styles.segmentText, { color: active ? c.text : c.textMuted }]}>{p} jours</Text>
+              <Text style={[styles.segmentText, { color: active ? c.text : c.textMuted }]}>{t(`${p} jours`, `${p} days`)}</Text>
             </Pressable>
           );
         })}
@@ -60,41 +61,47 @@ export default function HomeScreen() {
       <View style={styles.grid}>
         <KpiCard
           icon="people-outline"
-          label="Contacts abonnés"
+          label={t('Contacts abonnés', 'Subscribed contacts')}
           value={formatNumber(o.contacts_subscribed)}
-          hint={`${formatNumber(o.contacts_total)} au total · +${formatNumber(o.contacts_new)}`}
+          hint={t(
+            `${formatNumber(o.contacts_total)} au total · +${formatNumber(o.contacts_new)}`,
+            `${formatNumber(o.contacts_total)} total · +${formatNumber(o.contacts_new)}`,
+          )}
         />
         <KpiCard
           icon="send-outline"
-          label="Emails envoyés"
+          label={t('Emails envoyés', 'Emails sent')}
           value={formatNumber(o.emails_sent)}
-          hint={`${formatNumber(o.campaigns_sent)} campagne${o.campaigns_sent > 1 ? 's' : ''}`}
+          hint={t(
+            `${formatNumber(o.campaigns_sent)} campagne${o.campaigns_sent > 1 ? 's' : ''}`,
+            `${formatNumber(o.campaigns_sent)} campaign${o.campaigns_sent === 1 ? '' : 's'}`,
+          )}
         />
-        <KpiCard icon="mail-open-outline" label="Taux d'ouverture" value={formatPercent(o.open_rate)} />
-        <KpiCard icon="hand-left-outline" label="Taux de clic" value={formatPercent(o.click_rate)} />
-        <KpiCard icon="bag-handle-outline" label="Revenu Shopify" value={formatCurrency(o.revenue_shopify)} />
-        <KpiCard icon="exit-outline" label="Désabonnements" value={formatPercent(o.unsubscribe_rate, 2)} />
+        <KpiCard icon="mail-open-outline" label={t("Taux d'ouverture", 'Open rate')} value={formatPercent(o.open_rate)} />
+        <KpiCard icon="hand-left-outline" label={t('Taux de clic', 'Click rate')} value={formatPercent(o.click_rate)} />
+        <KpiCard icon="bag-handle-outline" label={t('Revenu Shopify', 'Shopify revenue')} value={formatCurrency(o.revenue_shopify)} />
+        <KpiCard icon="exit-outline" label={t('Désabonnements', 'Unsubscribes')} value={formatPercent(o.unsubscribe_rate, 2)} />
       </View>
 
-      <SectionTitle>Activité d’envoi</SectionTitle>
+      <SectionTitle>{t('Activité d’envoi', 'Sending activity')}</SectionTitle>
       <Card>
         {series.length ? (
           <BarChart
             data={series.map((p) => ({ label: formatShortDay(p.date), primary: p.sent, secondary: p.opened }))}
-            primaryLabel="Envoyés"
-            secondaryLabel="Ouverts"
+            primaryLabel={t('Envoyés', 'Sent')}
+            secondaryLabel={t('Ouverts', 'Opened')}
           />
         ) : (
-          <Text style={{ color: c.textMuted }}>Aucun envoi sur la période.</Text>
+          <Text style={{ color: c.textMuted }}>{t('Aucun envoi sur la période.', 'No sends in this period.')}</Text>
         )}
         {days > 30 ? (
-          <Text style={[styles.note, { color: c.textSubtle }]}>Graphique limité aux 30 derniers jours.</Text>
+          <Text style={[styles.note, { color: c.textSubtle }]}>{t('Graphique limité aux 30 derniers jours.', 'Chart limited to the last 30 days.')}</Text>
         ) : null}
       </Card>
 
-      <SectionTitle>Utilisation ce mois-ci</SectionTitle>
+      <SectionTitle>{t('Utilisation ce mois-ci', 'Usage this month')}</SectionTitle>
       <Card style={styles.usage}>
-        <UsageItem label="Emails envoyés" value={formatNumber(data.me.usage.emails_sent_month)} />
+        <UsageItem label={t('Emails envoyés', 'Emails sent')} value={formatNumber(data.me.usage.emails_sent_month)} />
         <View style={[styles.divider, { backgroundColor: c.border }]} />
         <UsageItem label="Contacts" value={formatNumber(data.me.usage.contacts)} />
       </Card>

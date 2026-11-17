@@ -9,6 +9,7 @@ import {
 import { ChevronLeft, ChevronRight, Loader2, type LucideIcon } from "lucide-react";
 import { cx } from "../../lib/format";
 import type { Tone } from "../../lib/constants";
+import { t } from "../../lib/i18n";
 
 // --- Button ---------------------------------------------------------------
 
@@ -131,7 +132,7 @@ export function TagChip({ tag, onRemove }: { tag: string; onRemove?: () => void 
     <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
       #{tag}
       {onRemove && (
-        <button type="button" onClick={onRemove} className="ml-0.5 rounded hover:text-brand-900 dark:hover:text-white" aria-label={`Retirer ${tag}`}>
+        <button type="button" onClick={onRemove} className="ml-0.5 rounded hover:text-brand-900 dark:hover:text-white" aria-label={t(`Retirer ${tag}`, `Remove ${tag}`)}>
           ×
         </button>
       )}
@@ -149,8 +150,8 @@ const controlBase =
 /** Default width/height unless the caller sets its own (avoids conflicting utilities). */
 function sizing(className: string | undefined, height: string | null): string {
   const tokens = (className ?? "").split(/\s+/);
-  const hasWidth = tokens.some((t) => /^(w-|min-w-|max-w-)/.test(t) && !t.startsWith("max-w-"));
-  const hasHeight = tokens.some((t) => /^h-/.test(t));
+  const hasWidth = tokens.some((tok) => /^(w-|min-w-|max-w-)/.test(tok) && !tok.startsWith("max-w-"));
+  const hasHeight = tokens.some((tok) => /^h-/.test(tok));
   return cx(!hasWidth && "w-full", height && !hasHeight && height);
 }
 
@@ -243,7 +244,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
       <p className="text-sm text-red-700 dark:text-red-300">{message}</p>
       {onRetry && (
         <Button variant="secondary" size="sm" onClick={onRetry}>
-          Réessayer
+          {t("Réessayer", "Try again")}
         </Button>
       )}
     </div>
@@ -331,14 +332,14 @@ export function Pagination({
         <span className="font-medium text-slate-700 tabular-nums dark:text-slate-200">
           {from}–{to}
         </span>{" "}
-        sur <span className="font-medium text-slate-700 tabular-nums dark:text-slate-200">{total}</span>
+        {t("sur", "of")} <span className="font-medium text-slate-700 tabular-nums dark:text-slate-200">{total}</span>
       </p>
       <div className="flex items-center gap-1">
-        <Button variant="secondary" size="sm" icon={ChevronLeft} disabled={page <= 1} onClick={() => onChange(page - 1)} aria-label="Page précédente" />
+        <Button variant="secondary" size="sm" icon={ChevronLeft} disabled={page <= 1} onClick={() => onChange(page - 1)} aria-label={t("Page précédente", "Previous page")} />
         <span className="px-2 text-slate-500 tabular-nums dark:text-slate-400">
           {page} / {pages}
         </span>
-        <Button variant="secondary" size="sm" icon={ChevronRight} disabled={page >= pages} onClick={() => onChange(page + 1)} aria-label="Page suivante" />
+        <Button variant="secondary" size="sm" icon={ChevronRight} disabled={page >= pages} onClick={() => onChange(page + 1)} aria-label={t("Page suivante", "Next page")} />
       </div>
     </div>
   );

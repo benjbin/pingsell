@@ -3,24 +3,26 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { all, get, newId, now, run, transaction } from '../db.js';
 import type { Deps } from '../deps.js';
-import { badRequest, conflict, forbidden, notFound, parse } from '../lib/http.js';
+import { badRequest, conflict, forbidden, notFound, parse, zmsg } from '../lib/http.js';
+import { currentLang, t } from '../i18n.js';
 import { createSession, hashPassword, publicUser, verifyPassword, type Role, type UserRow } from '../services/auth.js';
 import { normalizeEmail } from '../services/contacts.js';
 
 const INVITE_DAYS = 7;
 
-const ROLE_LABELS: Record<Role, string> = { owner: 'Propriétaire', admin: 'Administrateur', editor: 'Éditeur' };
+const roleLabels = (): Record<Role, string> =>
+  t({ owner: 'Propriétaire', admin: 'Administrateur', editor: 'Éditeur' }, { owner: 'Owner', admin: 'Admin', editor: 'Editor' });
 
 const inviteSchema = z.object({
-  email: z.email('Adresse email invalide').max(254),
+  email: z.email(zmsg('Adresse email invalide', 'Invalid email address')).max(254),
   role: z.enum(['admin', 'editor']),
 });
 
 const roleSchema = z.object({ role: z.enum(['admin', 'editor']) });
 
 const acceptSchema = z.object({
-  name: z.string().trim().min(1, 'Votre nom est requis').max(120),
-  password: z.string().min(8, 'Le mot de passe doit contenir au moins 8 caractères').max(200),
+  name: z.string().trim().min(1, zmsg('Votre nom est requis', 'Your name is required')).max(120),
+  password: z.string().min(8, zmsg('Le mot de passe doit contenir au moins 8 caractères', 'Password must be at least 8 characters')).max(200),
 });
 
 interface InvitationRow {
@@ -53,7 +55,7 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
   /** Owners and admins manage the team. API keys act as the account owner. */
   function requireManager(request: FastifyRequest): UserRow | undefined {
     const user = me(request);
-    if (user && user.role === 'editor') throw forbidden('Seuls le propriétaire et les administrateurs peuvent gérer l’équipe');
+    if (user && user.role === 'editor') throw forbidden(t('Seuls le propriétaire et les administrateurs peuvent gérer l’équipe', 'Only the owner and admins can manage the team'));
     return user;
   }
 
@@ -74,17 +76,30 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
   async function sendInvite(inv: InvitationRow, origin: string, inviterName: string) {
     const account = get<{ name: string }>(db, 'SELECT name FROM accounts WHERE id = ?', inv.account_id)!;
     const link = `${origin}/invitation/${inv.token}`;
-    const subject = `${inviterName} vous invite à rejoindre ${account.name} sur Pingsell`;
-    const html = `<!DOCTYPE html><html lang="fr"><body style="margin:0;background:#EEF2F8;font-family:Helvetica,Arial,sans-serif;">
+    const roleLabel = roleLabels()[inv.role];
+    const subject = t(
+      `${inviterName} vous invite à rejoindre ${account.name} sur Pingsell`,
+      `${inviterName} invited you to join ${account.name} on Pingsell`,
+    );
+    const html = `<!DOCTYPE html><html lang="${currentLang()}"><body style="margin:0;background:#EEF2F8;font-family:Helvetica,Arial,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 12px;">
 <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:20px;"><tr><td style="padding:40px;">
 <p style="margin:0 0 24px;font-size:20px;font-weight:800;letter-spacing:-0.02em;color:#0B214A;">pingsell</p>
-<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;color:#0B214A;">Rejoignez ${escapeHtml(account.name)}</h1>
-<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#3d4d6a;">${escapeHtml(inviterName)} vous invite à gérer les campagnes email de <strong>${escapeHtml(account.name)}</strong> en tant que <strong>${ROLE_LABELS[inv.role].toLowerCase()}</strong>.</p>
-<a href="${link}" style="display:inline-block;padding:14px 28px;background:#145CFF;color:#FFFFFF;border-radius:999px;font-size:15px;font-weight:bold;text-decoration:none;">Accepter l’invitation</a>
-<p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#7a879e;">Ce lien est valable ${INVITE_DAYS} jours. Si vous n’attendiez pas cette invitation, ignorez simplement cet email.</p>
+<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;color:#0B214A;">${t('Rejoignez', 'Join')} ${escapeHtml(account.name)}</h1>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#3d4d6a;">${t(
+   `${escapeHtml(inviterName)} vous invite à gérer les campagnes email de <strong>${escapeHtml(account.name)}</strong> en tant que <strong>${roleLabel.toLowerCase()}</strong>.`,
+   `${escapeHtml(inviterName)} invited you to manage email campaigns for <strong>${escapeHtml(account.name)}</strong> as <strong>${roleLabel.toLowerCase()}</strong>.`,
+ )}</p>
+<a href="${link}" style="display:inline-block;padding:14px 28px;background:#145CFF;color:#FFFFFF;border-radius:999px;font-size:15px;font-weight:bold;text-decoration:none;">${t('Accepter l’invitation', 'Accept invitation')}</a>
+<p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#7a879e;">${t(
+   `Ce lien est valable ${INVITE_DAYS} jours. Si vous n’attendiez pas cette invitation, ignorez simplement cet email.`,
+   `This link is valid for ${INVITE_DAYS} days. If you weren’t expecting this invitation, you can safely ignore this email.`,
+ )}</p>
 </td></tr></table></td></tr></table></body></html>`;
-    const text = `${inviterName} vous invite à rejoindre ${account.name} sur Pingsell (${ROLE_LABELS[inv.role]}).\n\nAccepter l'invitation : ${link}\n\nLien valable ${INVITE_DAYS} jours.`;
+    const text = t(
+      `${inviterName} vous invite à rejoindre ${account.name} sur Pingsell (${roleLabel}).\n\nAccepter l'invitation : ${link}\n\nLien valable ${INVITE_DAYS} jours.`,
+      `${inviterName} invited you to join ${account.name} on Pingsell (${roleLabel}).\n\nAccept the invitation: ${link}\n\nLink valid for ${INVITE_DAYS} days.`,
+    );
     try {
       await provider.send({ messageId: `invite_${inv.id}_${Date.now()}`, to: inv.email, fromName: 'Pingsell', fromEmail: config.defaultFromEmail, subject, html, text });
       return true;
@@ -116,8 +131,8 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
     const body = parse(inviteSchema, request.body);
     const email = normalizeEmail(body.email);
     const existing = get<UserRow>(db, 'SELECT * FROM users WHERE email = ?', email);
-    if (existing?.account_id === request.accountId) throw conflict('Cette personne fait déjà partie de l’équipe');
-    if (existing) throw conflict('Cette adresse est déjà utilisée par un autre compte Pingsell');
+    if (existing?.account_id === request.accountId) throw conflict(t('Cette personne fait déjà partie de l’équipe', 'This person is already on the team'));
+    if (existing) throw conflict(t('Cette adresse est déjà utilisée par un autre compte Pingsell', 'This address is already used by another Pingsell account'));
 
     const created = now();
     const expires = new Date(Date.now() + INVITE_DAYS * 86400000).toISOString();
@@ -152,7 +167,7 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
   app.delete('/team/invitations/:id', async (request, reply) => {
     requireManager(request);
     const { id } = request.params as { id: string };
-    if (!run(db, 'DELETE FROM invitations WHERE id = ? AND account_id = ?', id, request.accountId)) throw notFound('Invitation introuvable');
+    if (!run(db, 'DELETE FROM invitations WHERE id = ? AND account_id = ?', id, request.accountId)) throw notFound(t('Invitation introuvable', 'Invitation not found'));
     return reply.code(204).send();
   });
 
@@ -161,9 +176,9 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
     const { id } = request.params as { id: string };
     const body = parse(roleSchema, request.body);
     const target = get<UserRow>(db, 'SELECT * FROM users WHERE id = ? AND account_id = ?', id, request.accountId);
-    if (!target) throw notFound('Membre introuvable');
-    if (target.role === 'owner') throw badRequest('Le rôle du propriétaire ne peut pas être modifié');
-    if (actor && actor.id === target.id) throw badRequest('Vous ne pouvez pas modifier votre propre rôle');
+    if (!target) throw notFound(t('Membre introuvable', 'Member not found'));
+    if (target.role === 'owner') throw badRequest(t('Le rôle du propriétaire ne peut pas être modifié', 'The owner’s role can’t be changed'));
+    if (actor && actor.id === target.id) throw badRequest(t('Vous ne pouvez pas modifier votre propre rôle', 'You can’t change your own role'));
     run(db, 'UPDATE users SET role = ? WHERE id = ?', body.role, id);
     return { member: publicUser(get<UserRow>(db, 'SELECT * FROM users WHERE id = ?', id)!) };
   });
@@ -172,8 +187,8 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
     const { id } = request.params as { id: string };
     const actor = me(request);
     const target = get<UserRow>(db, 'SELECT * FROM users WHERE id = ? AND account_id = ?', id, request.accountId);
-    if (!target) throw notFound('Membre introuvable');
-    if (target.role === 'owner') throw badRequest('Le propriétaire ne peut pas être retiré du compte');
+    if (!target) throw notFound(t('Membre introuvable', 'Member not found'));
+    if (target.role === 'owner') throw badRequest(t('Le propriétaire ne peut pas être retiré du compte', 'The owner can’t be removed from the account'));
     // Anyone may leave; removing someone else needs a manager.
     if (!actor || actor.id !== target.id) requireManager(request);
     run(db, 'DELETE FROM users WHERE id = ?', id); // sessions follow (ON DELETE CASCADE)
@@ -183,7 +198,7 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
   /** Shop / company name shown in emails and in the app. */
   app.patch('/account', async (request) => {
     requireManager(request);
-    const body = parse(z.object({ name: z.string().trim().min(1, 'Le nom est requis').max(120) }), request.body);
+    const body = parse(z.object({ name: z.string().trim().min(1, zmsg('Le nom est requis', 'Name is required')).max(120) }), request.body);
     run(db, 'UPDATE accounts SET name = ? WHERE id = ?', body.name, request.accountId);
     const row = get<{ id: string; name: string; email: string; created_at: string }>(db, 'SELECT id, name, email, created_at FROM accounts WHERE id = ?', request.accountId)!;
     return { account: row };
@@ -193,11 +208,11 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
 /** Owner only: permanently delete the account and everything in it (contacts, campaigns, team…). */
 export async function accountDeletionRoutes(app: FastifyInstance, { db }: Deps) {
   app.post('/account/delete', async (request, reply) => {
-    if (!request.userId) throw forbidden('La suppression du compte se fait depuis une session, pas avec une clé API');
+    if (!request.userId) throw forbidden(t('La suppression du compte se fait depuis une session, pas avec une clé API', 'Account deletion requires a signed-in session, not an API key'));
     const user = get<UserRow>(db, 'SELECT * FROM users WHERE id = ? AND account_id = ?', request.userId, request.accountId);
-    if (user?.role !== 'owner') throw forbidden('Seul le propriétaire peut supprimer le compte');
-    const body = parse(z.object({ password: z.string().min(1, 'Saisissez votre mot de passe') }), request.body);
-    if (!verifyPassword(body.password, user.password_hash)) throw badRequest('Mot de passe incorrect');
+    if (user?.role !== 'owner') throw forbidden(t('Seul le propriétaire peut supprimer le compte', 'Only the owner can delete the account'));
+    const body = parse(z.object({ password: z.string().min(1, zmsg('Saisissez votre mot de passe', 'Enter your password')) }), request.body);
+    if (!verifyPassword(body.password, user.password_hash)) throw badRequest(t('Mot de passe incorrect', 'Incorrect password'));
     // Every table references accounts with ON DELETE CASCADE.
     run(db, 'DELETE FROM accounts WHERE id = ?', request.accountId);
     return reply.code(204).send();
@@ -208,8 +223,8 @@ export async function accountDeletionRoutes(app: FastifyInstance, { db }: Deps) 
 export async function invitationRoutes(app: FastifyInstance, { db }: Deps) {
   function load(token: string): InvitationRow {
     const inv = get<InvitationRow>(db, 'SELECT * FROM invitations WHERE token = ?', token);
-    if (!inv) throw notFound('Cette invitation n’existe pas ou a été annulée');
-    if (isExpired(inv)) throw badRequest('Cette invitation a expiré. Demandez à recevoir un nouveau lien.');
+    if (!inv) throw notFound(t('Cette invitation n’existe pas ou a été annulée', 'This invitation doesn’t exist or has been canceled'));
+    if (isExpired(inv)) throw badRequest(t('Cette invitation a expiré. Demandez à recevoir un nouveau lien.', 'This invitation has expired. Ask for a new link.'));
     return inv;
   }
 
@@ -229,7 +244,7 @@ export async function invitationRoutes(app: FastifyInstance, { db }: Deps) {
   app.post('/invitations/:token/accept', async (request, reply) => {
     const inv = load((request.params as { token: string }).token);
     const body = parse(acceptSchema, request.body);
-    if (get(db, 'SELECT id FROM users WHERE email = ?', inv.email)) throw conflict('Un compte Pingsell existe déjà avec cette adresse email');
+    if (get(db, 'SELECT id FROM users WHERE email = ?', inv.email)) throw conflict(t('Un compte Pingsell existe déjà avec cette adresse email', 'A Pingsell account already exists with this email address'));
     const user: UserRow = {
       id: newId(),
       account_id: inv.account_id,

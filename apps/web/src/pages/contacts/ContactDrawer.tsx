@@ -20,6 +20,7 @@ import { Avatar, Badge, Button, ErrorState, Select, Skeleton } from "../../compo
 import { ConfirmModal, Drawer } from "../../components/ui/Overlay";
 import { TagInput } from "../../components/ui/TagInput";
 import { useToast } from "../../components/ui/Toast";
+import { t } from "../../lib/i18n";
 
 const EVENT_ICONS: Record<EventType, { icon: LucideIcon; color: string }> = {
   open: { icon: MailOpen, color: "bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300" },
@@ -54,8 +55,8 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
 
   async function updateTags(next: string[]) {
     if (!c) return;
-    const add = next.filter((t) => !c.tags.includes(t));
-    const remove = c.tags.filter((t) => !next.includes(t));
+    const add = next.filter((tag) => !c.tags.includes(tag));
+    const remove = c.tags.filter((tag) => !next.includes(tag));
     detail.setData({ ...c, tags: next });
     try {
       await api.contacts.tags(c.id, { add, remove });
@@ -73,7 +74,7 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
       await api.contacts.update(c.id, { status });
       detail.setData({ ...c, status });
       onChanged();
-      toast.success("Statut mis à jour");
+      toast.success(t("Statut mis à jour", "Status updated"));
     } catch (err) {
       toast.error(err);
     }
@@ -84,7 +85,7 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
     setDeleting(true);
     try {
       await api.contacts.remove(c.id);
-      toast.success("Contact supprimé");
+      toast.success(t("Contact supprimé", "Contact deleted"));
       setConfirmDelete(false);
       onChanged();
       onClose();
@@ -96,7 +97,7 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
   }
 
   return (
-    <Drawer open={!!contactId} onClose={onClose} title="Fiche contact">
+    <Drawer open={!!contactId} onClose={onClose} title={t("Fiche contact", "Contact details")}>
       {detail.error ? (
         <div className="p-5">
           <ErrorState message={detail.error} onRetry={detail.reload} />
@@ -131,12 +132,12 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
 
           <dl className="grid grid-cols-2 gap-3">
             {[
-              { label: "Total dépensé", value: formatCurrency(c.total_spent, true) },
-              { label: "Commandes", value: String(c.orders_count ?? 0) },
-              { label: "Dernière commande", value: formatDate(c.last_order_at) },
-              { label: "Inscrit le", value: formatDate(c.created_at) },
-              { label: "Téléphone", value: c.phone || "—" },
-              { label: "ID externe", value: c.external_id || "—" },
+              { label: t("Total dépensé", "Total spent"), value: formatCurrency(c.total_spent, true) },
+              { label: t("Commandes", "Orders"), value: String(c.orders_count ?? 0) },
+              { label: t("Dernière commande", "Last order"), value: formatDate(c.last_order_at) },
+              { label: t("Inscrit le", "Joined"), value: formatDate(c.created_at) },
+              { label: t("Téléphone", "Phone"), value: c.phone || "—" },
+              { label: t("ID externe", "External ID"), value: c.external_id || "—" },
             ].map((s) => (
               <div key={s.label} className="rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60">
                 <dt className="text-xs text-slate-500 dark:text-slate-400">{s.label}</dt>
@@ -147,11 +148,11 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
 
           <section>
             <h4 className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Tags</h4>
-            <TagInput id="drawer-tags" value={c.tags} onChange={updateTags} suggestions={(tagSuggestions.data ?? []).map((t) => t.tag)} />
+            <TagInput id="drawer-tags" value={c.tags} onChange={updateTags} suggestions={(tagSuggestions.data ?? []).map((s) => s.tag)} />
           </section>
 
           <section>
-            <h4 className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Statut d'abonnement</h4>
+            <h4 className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t("Statut d'abonnement", "Subscription status")}</h4>
             <Select value={c.status} onChange={(e) => void updateStatus(e.target.value as ContactStatus)}>
               {(Object.keys(CONTACT_STATUS) as ContactStatus[]).map((s) => (
                 <option key={s} value={s}>
@@ -163,7 +164,7 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
 
           {Object.keys(c.attributes ?? {}).length > 0 && (
             <section>
-              <h4 className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Attributs</h4>
+              <h4 className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t("Attributs", "Attributes")}</h4>
               <dl className="divide-y divide-slate-100 rounded-xl ring-1 ring-slate-200 dark:divide-slate-800 dark:ring-slate-800">
                 {Object.entries(c.attributes).map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-4 px-3 py-2 text-sm">
@@ -176,9 +177,9 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
           )}
 
           <section>
-            <h4 className="mb-3 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Activité</h4>
+            <h4 className="mb-3 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t("Activité", "Activity")}</h4>
             {c.events.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">Aucune activité enregistrée.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t("Aucune activité enregistrée.", "No activity recorded yet.")}</p>
             ) : (
               <ol className="relative space-y-4 before:absolute before:top-2 before:bottom-2 before:left-4 before:w-px before:bg-slate-200 dark:before:bg-slate-800">
                 {c.events.map((e) => {
@@ -205,7 +206,7 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
 
           {c.messages.length > 0 && (
             <section>
-              <h4 className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Emails reçus</h4>
+              <h4 className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t("Emails reçus", "Emails received")}</h4>
               <ul className="divide-y divide-slate-100 rounded-xl ring-1 ring-slate-200 dark:divide-slate-800 dark:ring-slate-800">
                 {c.messages.map((m) => (
                   <li key={m.id} className="flex items-center gap-3 px-3 py-2.5">
@@ -214,13 +215,13 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
                       <p className="text-xs text-slate-400">{formatDateTime(m.sent_at ?? m.created_at)}</p>
                     </div>
                     {m.clicked_at ? (
-                      <Badge tone="green">Cliqué</Badge>
+                      <Badge tone="green">{t("Cliqué", "Clicked")}</Badge>
                     ) : m.opened_at ? (
-                      <Badge tone="blue">Ouvert</Badge>
+                      <Badge tone="blue">{t("Ouvert", "Opened")}</Badge>
                     ) : m.status === "failed" || m.status === "bounced" ? (
-                      <Badge tone="red">Échec</Badge>
+                      <Badge tone="red">{t("Échec", "Failed")}</Badge>
                     ) : (
-                      <Badge tone="slate">Envoyé</Badge>
+                      <Badge tone="slate">{t("Envoyé", "Sent")}</Badge>
                     )}
                   </li>
                 ))}
@@ -230,7 +231,7 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
 
           <div className="border-t border-slate-100 pt-5 dark:border-slate-800">
             <Button variant="ghost" icon={Trash2} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40" onClick={() => setConfirmDelete(true)}>
-              Supprimer ce contact
+              {t("Supprimer ce contact", "Delete this contact")}
             </Button>
           </div>
         </div>
@@ -242,9 +243,9 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
         onConfirm={remove}
         loading={deleting}
         danger
-        title="Supprimer ce contact ?"
-        description="Le contact et son historique seront définitivement supprimés."
-        confirmLabel="Supprimer"
+        title={t("Supprimer ce contact ?", "Delete this contact?")}
+        description={t("Le contact et son historique seront définitivement supprimés.", "This contact and their history will be permanently deleted.")}
+        confirmLabel={t("Supprimer", "Delete")}
       />
     </Drawer>
   );

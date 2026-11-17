@@ -18,6 +18,7 @@ import { cx, formatCurrency, formatNumber } from "../lib/format";
 import { CONTACT_SOURCE, TRIGGERS } from "../lib/constants";
 import type { Analytics, AnalyticsDay, AnalyticsKpis, AutomationTrigger, ContactSource } from "../lib/types";
 import { Button, Card, ErrorState, Input, PageHeader, Segmented, Skeleton } from "../components/ui/primitives";
+import { t, LOCALE } from "../lib/i18n";
 
 /* -------------------------------------------------------------------------- */
 /* Palette (validated: categorical 3 slots, light on white, dark on navy)     */
@@ -42,14 +43,22 @@ function usePalette() {
 /* Formatting                                                                 */
 /* -------------------------------------------------------------------------- */
 
-const dayFmt = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
-const longDayFmt = new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+const dayFmt = new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short" });
+const longDayFmt = new Intl.DateTimeFormat(LOCALE, { weekday: "short", day: "numeric", month: "short" });
 const local = (d: string) => new Date(`${d}T12:00:00`);
 const fmtDay = (d: string) => dayFmt.format(local(d));
 const fmtLongDay = (d: string) => longDayFmt.format(local(d));
-const fmtPct = (n: number) => `${n.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`;
+const fmtPct = (n: number) => {
+  const v = n.toLocaleString(LOCALE, { maximumFractionDigits: 1 });
+  return t(`${v} %`, `${v}%`);
+};
+/** Hour of day: "14 h" in French, "2 PM" in English. */
+const fmtHour = (h: number) => t(`${h} h`, `${h % 12 || 12} ${h % 24 < 12 ? "AM" : "PM"}`);
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const WEEKDAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+const WEEKDAYS = t(
+  ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"],
+  ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+);
 
 /* -------------------------------------------------------------------------- */
 /* Page                                                                       */
@@ -68,7 +77,13 @@ export function StatsPage() {
 
   return (
     <>
-      <PageHeader title="Statistiques" description="Ce que rapportent vos emails et vos notifications : ventes, engagement, audience et meilleurs moments d'envoi." />
+      <PageHeader
+        title={t("Statistiques", "Analytics")}
+        description={t(
+          "Ce que rapportent vos emails et vos notifications : ventes, engagement, audience et meilleurs moments d'envoi.",
+          "What your emails and push notifications bring in: sales, engagement, audience and best send times.",
+        )}
+      />
 
       <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -76,30 +91,30 @@ export function StatsPage() {
             value={preset}
             onChange={setPreset}
             options={[
-              { value: "7", label: "7 jours" },
-              { value: "30", label: "30 jours" },
-              { value: "90", label: "90 jours" },
-              { value: "365", label: "12 mois" },
-              { value: "custom", label: "Dates", icon: CalendarRange },
+              { value: "7", label: t("7 jours", "7 days") },
+              { value: "30", label: t("30 jours", "30 days") },
+              { value: "90", label: t("90 jours", "90 days") },
+              { value: "365", label: t("12 mois", "12 months") },
+              { value: "custom", label: t("Dates", "Dates"), icon: CalendarRange },
             ]}
             className="max-w-full overflow-x-auto"
           />
           {preset === "custom" && (
             <div className="flex items-center gap-2">
-              <Input type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} aria-label="Du" className="h-9 w-auto" />
-              <span className="text-sm text-slate-400">au</span>
-              <Input type="date" value={to} min={from} max={today} onChange={(e) => e.target.value && setTo(e.target.value)} aria-label="Au" className="h-9 w-auto" />
+              <Input type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} aria-label={t("Du", "From")} className="h-9 w-auto" />
+              <span className="text-sm text-slate-400">{t("au", "to")}</span>
+              <Input type="date" value={to} min={from} max={today} onChange={(e) => e.target.value && setTo(e.target.value)} aria-label={t("Au", "To")} className="h-9 w-auto" />
             </div>
           )}
         </div>
         <div className="flex items-center gap-3">
           {data && (
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Comparé au {fmtDay(data.range.previous.from)} – {fmtDay(data.range.previous.to)}
+              {t("Comparé au", "Compared with")} {fmtDay(data.range.previous.from)} – {fmtDay(data.range.previous.to)}
             </p>
           )}
           <Button variant="secondary" size="sm" icon={Download} disabled={!data} onClick={() => data && exportCsv(data)}>
-            Exporter
+            {t("Exporter", "Export")}
           </Button>
         </div>
       </div>
@@ -167,23 +182,24 @@ function Delta({ cur, prev, kind, lowerIsBetter, noBase }: { cur: number; prev: 
   if (noBase) {
     // Nothing was sent in the previous period: a rate comparison would be meaningless.
     return (
-      <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-500 dark:bg-white/10 dark:text-slate-300" title="Pas d'envoi sur la période précédente">
-        Nouveau
+      <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-500 dark:bg-white/10 dark:text-slate-300" title={t("Pas d'envoi sur la période précédente", "No sends in the previous period")}>
+        {t("Nouveau", "New")}
       </span>
     );
   }
   if (kind === "rate") {
     const d = Math.round((cur - prev) * 10) / 10;
     dir = d > 0 ? 1 : d < 0 ? -1 : 0;
-    label = `${d > 0 ? "+" : ""}${d.toLocaleString("fr-FR")} pt${Math.abs(d) >= 2 ? "s" : ""}`;
+    const pts = `${d > 0 ? "+" : ""}${d.toLocaleString(LOCALE)}`;
+    label = t(`${pts} pt${Math.abs(d) >= 2 ? "s" : ""}`, `${pts} pt${Math.abs(d) === 1 ? "" : "s"}`);
     if (prev === 0 && cur === 0) label = "—";
   } else if (prev === 0) {
     dir = cur > 0 ? 1 : 0;
-    label = cur > 0 ? "Nouveau" : "—";
+    label = cur > 0 ? t("Nouveau", "New") : "—";
   } else {
     const d = Math.round(((cur - prev) / prev) * 100);
     dir = d > 0 ? 1 : d < 0 ? -1 : 0;
-    label = `${d > 0 ? "+" : ""}${d} %`;
+    label = t(`${d > 0 ? "+" : ""}${d} %`, `${d > 0 ? "+" : ""}${d}%`);
   }
   const good = dir === 0 ? null : (dir > 0) !== !!lowerIsBetter;
   const Icon = dir > 0 ? ArrowUpRight : dir < 0 ? ArrowDownRight : Minus;
@@ -193,7 +209,7 @@ function Delta({ cur, prev, kind, lowerIsBetter, noBase }: { cur: number; prev: 
         "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-bold",
         good === null ? "bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-300" : good ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" : "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300",
       )}
-      title={good === null ? "Stable" : good ? "En progrès" : "En recul"}
+      title={good === null ? t("Stable", "Steady") : good ? t("En progrès", "Up") : t("En recul", "Down")}
     >
       <Icon className="size-3" /> {label}
     </span>
@@ -205,48 +221,107 @@ const fmtKind = (v: number, kind: Kind) => (kind === "money" ? formatCurrency(v)
 function KpiGrid({ k, p, days }: { k: AnalyticsKpis; p: AnalyticsKpis; days: number }) {
   const share = k.revenue_total > 0 ? Math.round((k.revenue_attributed / k.revenue_total) * 100) : 0;
   const tiles: Array<{ label: string; key: keyof AnalyticsKpis; kind: Kind; hint: string; lowerIsBetter?: boolean; base?: keyof AnalyticsKpis }> = [
-    { label: "Commandes générées", key: "orders_attributed", kind: "count", hint: `Commandes attribuées à vos messages (${days} jours)` },
-    { label: "Taux d'ouverture", key: "open_rate", kind: "rate", base: "emails_delivered", hint: `${formatNumber(k.emails_opened)} ouvertures sur ${formatNumber(k.emails_delivered)} emails délivrés` },
-    { label: "Taux de clic", key: "click_rate", kind: "rate", base: "emails_delivered", hint: `${formatNumber(k.emails_clicked)} clics · ${fmtPct(k.click_to_open_rate)} des ouvreurs` },
-    { label: "Chiffre d'affaires", key: "revenue_total", kind: "money", hint: `${formatNumber(k.orders_total)} commande${k.orders_total > 1 ? "s" : ""} au total` },
-    { label: "Emails envoyés", key: "emails_sent", kind: "count", hint: `Taux de rejet ${fmtPct(k.bounce_rate)}` },
-    { label: "Ouverture push", key: "push_open_rate", kind: "rate", base: "push_sent", hint: `${formatNumber(k.push_opened)} ouvertures sur ${formatNumber(k.push_sent)} notifications` },
-    { label: "Nouveaux contacts", key: "new_contacts", kind: "count", hint: `Croissance nette ${k.net_growth >= 0 ? "+" : ""}${formatNumber(k.net_growth)}` },
-    { label: "Désabonnements", key: "unsubscribe_rate", kind: "rate", base: "emails_delivered", lowerIsBetter: true, hint: `${formatNumber(k.unsubscribes)} désabonné${k.unsubscribes > 1 ? "s" : ""}` },
+    {
+      label: t("Commandes générées", "Orders generated"),
+      key: "orders_attributed",
+      kind: "count",
+      hint: t(`Commandes attribuées à vos messages (${days} jours)`, `Orders attributed to your messages (${days} day${days === 1 ? "" : "s"})`),
+    },
+    {
+      label: t("Taux d'ouverture", "Open rate"),
+      key: "open_rate",
+      kind: "rate",
+      base: "emails_delivered",
+      hint: t(
+        `${formatNumber(k.emails_opened)} ouvertures sur ${formatNumber(k.emails_delivered)} emails délivrés`,
+        `${formatNumber(k.emails_opened)} open${k.emails_opened === 1 ? "" : "s"} out of ${formatNumber(k.emails_delivered)} emails delivered`,
+      ),
+    },
+    {
+      label: t("Taux de clic", "Click rate"),
+      key: "click_rate",
+      kind: "rate",
+      base: "emails_delivered",
+      hint: t(
+        `${formatNumber(k.emails_clicked)} clics · ${fmtPct(k.click_to_open_rate)} des ouvreurs`,
+        `${formatNumber(k.emails_clicked)} click${k.emails_clicked === 1 ? "" : "s"} · ${fmtPct(k.click_to_open_rate)} of openers`,
+      ),
+    },
+    {
+      label: t("Chiffre d'affaires", "Revenue"),
+      key: "revenue_total",
+      kind: "money",
+      hint: t(
+        `${formatNumber(k.orders_total)} commande${k.orders_total > 1 ? "s" : ""} au total`,
+        `${formatNumber(k.orders_total)} order${k.orders_total === 1 ? "" : "s"} in total`,
+      ),
+    },
+    { label: t("Emails envoyés", "Emails sent"), key: "emails_sent", kind: "count", hint: t(`Taux de rejet ${fmtPct(k.bounce_rate)}`, `Bounce rate ${fmtPct(k.bounce_rate)}`) },
+    {
+      label: t("Ouverture push", "Push open rate"),
+      key: "push_open_rate",
+      kind: "rate",
+      base: "push_sent",
+      hint: t(
+        `${formatNumber(k.push_opened)} ouvertures sur ${formatNumber(k.push_sent)} notifications`,
+        `${formatNumber(k.push_opened)} open${k.push_opened === 1 ? "" : "s"} out of ${formatNumber(k.push_sent)} notification${k.push_sent === 1 ? "" : "s"}`,
+      ),
+    },
+    {
+      label: t("Nouveaux contacts", "New contacts"),
+      key: "new_contacts",
+      kind: "count",
+      hint: t(`Croissance nette ${k.net_growth >= 0 ? "+" : ""}${formatNumber(k.net_growth)}`, `Net growth ${k.net_growth >= 0 ? "+" : ""}${formatNumber(k.net_growth)}`),
+    },
+    {
+      label: t("Désabonnements", "Unsubscribes"),
+      key: "unsubscribe_rate",
+      kind: "rate",
+      base: "emails_delivered",
+      lowerIsBetter: true,
+      hint: t(
+        `${formatNumber(k.unsubscribes)} désabonné${k.unsubscribes > 1 ? "s" : ""}`,
+        `${formatNumber(k.unsubscribes)} unsubscribe${k.unsubscribes === 1 ? "" : "s"}`,
+      ),
+    },
   ];
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
       <div className="relative overflow-hidden rounded-[20px] bg-slate-900 p-6 text-white col-span-2 xl:row-span-2 dark:bg-slate-950 dark:ring-1 dark:ring-white/10">
-        <p className="font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/60 uppercase">Revenu généré par Pingsell</p>
+        <p className="font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/60 uppercase">{t("Revenu généré par Pingsell", "Revenue generated by Pingsell")}</p>
         <p className="mt-4 font-display text-[56px] leading-none font-extrabold tracking-[-0.03em] sm:text-[72px]">{formatCurrency(k.revenue_attributed)}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-white/70">
           <Delta cur={k.revenue_attributed} prev={p.revenue_attributed} kind="money" />
-          <span>vs période précédente</span>
+          <span>{t("vs période précédente", "vs previous period")}</span>
         </div>
         <div className="mt-8 grid grid-cols-2 gap-4 border-t border-white/10 pt-5 text-sm">
           <div>
-            <p className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">Part du chiffre d'affaires</p>
-            <p className="mt-1 font-display text-2xl font-bold">{share}&nbsp;%</p>
-            <p className="text-xs text-white/50">sur {formatCurrency(k.revenue_total)} au total</p>
+            <p className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">{t("Part du chiffre d'affaires", "Share of revenue")}</p>
+            <p className="mt-1 font-display text-2xl font-bold">{share}{t(" %", "%")}</p>
+            <p className="text-xs text-white/50">{t(`sur ${formatCurrency(k.revenue_total)} au total`, `of ${formatCurrency(k.revenue_total)} total`)}</p>
           </div>
           <div>
-            <p className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">Par email envoyé</p>
+            <p className="text-[11px] font-semibold tracking-wide text-white/50 uppercase">{t("Par email envoyé", "Per email sent")}</p>
             <p className="mt-1 font-display text-2xl font-bold">{formatCurrency(k.emails_sent ? k.revenue_attributed / k.emails_sent : 0, true)}</p>
-            <p className="text-xs text-white/50">revenu moyen</p>
+            <p className="text-xs text-white/50">{t("revenu moyen", "average revenue")}</p>
           </div>
         </div>
         <p className="mt-5 flex items-start gap-1.5 text-[11px] leading-relaxed text-white/45">
-          <Info className="mt-px size-3.5 shrink-0" /> Commandes passées dans les {days}&nbsp;jours après un email ouvert ou cliqué, ou une notification ouverte (dernier contact).
+          <Info className="mt-px size-3.5 shrink-0" />{" "}
+          {t(
+            `Commandes passées dans les ${days} jours après un email ouvert ou cliqué, ou une notification ouverte (dernier contact).`,
+            `Orders placed within ${days} day${days === 1 ? "" : "s"} of an opened or clicked email, or an opened notification (last touch).`,
+          )}
         </p>
       </div>
-      {tiles.map((t) => (
-        <div key={t.key} className="flex min-w-0 flex-col rounded-[20px] bg-slate-100/80 p-4 sm:p-5 dark:bg-white/5">
-          <p className="font-display text-[10.5px] font-semibold tracking-[0.16em] text-slate-500 uppercase dark:text-slate-400">{t.label}</p>
+      {tiles.map((tile) => (
+        <div key={tile.key} className="flex min-w-0 flex-col rounded-[20px] bg-slate-100/80 p-4 sm:p-5 dark:bg-white/5">
+          <p className="font-display text-[10.5px] font-semibold tracking-[0.16em] text-slate-500 uppercase dark:text-slate-400">{tile.label}</p>
           <div className="mt-3 flex flex-wrap items-baseline gap-2">
-            <p className="font-display text-[24px] leading-none font-extrabold tracking-[-0.02em] text-slate-900 sm:text-[30px] dark:text-white">{fmtKind(k[t.key], t.kind)}</p>
-            <Delta cur={k[t.key]} prev={p[t.key]} kind={t.kind} lowerIsBetter={t.lowerIsBetter} noBase={!!t.base && p[t.base] === 0 && k[t.base] > 0} />
+            <p className="font-display text-[24px] leading-none font-extrabold tracking-[-0.02em] text-slate-900 sm:text-[30px] dark:text-white">{fmtKind(k[tile.key], tile.kind)}</p>
+            <Delta cur={k[tile.key]} prev={p[tile.key]} kind={tile.kind} lowerIsBetter={tile.lowerIsBetter} noBase={!!tile.base && p[tile.base] === 0 && k[tile.base] > 0} />
           </div>
-          <p className="mt-auto pt-3 text-xs text-slate-500 dark:text-slate-400">{t.hint}</p>
+          <p className="mt-auto pt-3 text-xs text-slate-500 dark:text-slate-400">{tile.hint}</p>
         </div>
       ))}
     </div>
@@ -259,13 +334,13 @@ function KpiGrid({ k, p, days }: { k: AnalyticsKpis; p: AnalyticsKpis; days: num
 
 type MetricKey = "revenue_attributed" | "orders" | "emails_sent" | "opens" | "clicks" | "push_opens" | "new_contacts";
 const METRICS: Array<{ value: MetricKey; label: string; money?: boolean }> = [
-  { value: "revenue_attributed", label: "Revenu", money: true },
-  { value: "orders", label: "Commandes" },
-  { value: "emails_sent", label: "Envois" },
-  { value: "opens", label: "Ouvertures" },
-  { value: "clicks", label: "Clics" },
-  { value: "push_opens", label: "Push ouverts" },
-  { value: "new_contacts", label: "Contacts" },
+  { value: "revenue_attributed", label: t("Revenu", "Revenue"), money: true },
+  { value: "orders", label: t("Commandes", "Orders") },
+  { value: "emails_sent", label: t("Envois", "Sends") },
+  { value: "opens", label: t("Ouvertures", "Opens") },
+  { value: "clicks", label: t("Clics", "Clicks") },
+  { value: "push_opens", label: t("Push ouverts", "Push opens") },
+  { value: "new_contacts", label: t("Contacts", "Contacts") },
 ];
 
 function ChartTooltip({ active, payload, rows }: { active?: boolean; payload?: Array<{ payload: Record<string, number | string> }>; rows: (p: Record<string, number | string>) => Array<{ color: string; label: string; value: string; dashed?: boolean }> }) {
@@ -298,23 +373,24 @@ function Evolution({ data }: { data: Analytics }) {
 
   return (
     <Panel
-      title="Évolution"
+      title={t("Évolution", "Trends")}
       subtitle={
         <>
-          {m.label} sur la période : <span className="font-semibold text-slate-900 dark:text-white">{fmt(total)}</span>
-          {compare && <> · période précédente {fmt(prevTotal)}</>}
-          {weekly && " · par semaine"}
+          {t(`${m.label} sur la période : `, `${m.label} for the period: `)}
+          <span className="font-semibold text-slate-900 dark:text-white">{fmt(total)}</span>
+          {compare && <> · {t("période précédente", "previous period")} {fmt(prevTotal)}</>}
+          {weekly && t(" · par semaine", " · by week")}
         </>
       }
       action={<Segmented value={metric} onChange={setMetric} options={METRICS.map(({ value, label }) => ({ value, label }))} className="max-w-full overflow-x-auto" />}
     >
       <div className="mb-3 flex flex-wrap items-center gap-4 text-xs text-slate-600 dark:text-slate-300">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block size-2.5 rounded-sm" style={{ background: c.s1 }} /> Cette période
+          <span className="inline-block size-2.5 rounded-sm" style={{ background: c.s1 }} /> {t("Cette période", "This period")}
         </span>
         <label className="flex cursor-pointer items-center gap-1.5">
           <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} className="size-3.5 accent-slate-900" />
-          <span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: c.prev }} /> Période précédente
+          <span className="inline-block w-4 border-t-2 border-dashed" style={{ borderColor: c.prev }} /> {t("Période précédente", "Previous period")}
         </label>
       </div>
       <div className="h-[300px] w-full">
@@ -328,8 +404,8 @@ function Evolution({ data }: { data: Analytics }) {
               content={
                 <ChartTooltip
                   rows={(p) => [
-                    { color: c.s1, label: weekly ? `Semaine du ${fmtDay(String(p.date))}` : fmtLongDay(String(p.date)), value: fmt(Number(p.cur)) },
-                    ...(compare && p.prevDate ? [{ color: c.prev, dashed: true, label: weekly ? `Semaine du ${fmtDay(String(p.prevDate))}` : fmtLongDay(String(p.prevDate)), value: fmt(Number(p.prev)) }] : []),
+                    { color: c.s1, label: weekly ? t(`Semaine du ${fmtDay(String(p.date))}`, `Week of ${fmtDay(String(p.date))}`) : fmtLongDay(String(p.date)), value: fmt(Number(p.cur)) },
+                    ...(compare && p.prevDate ? [{ color: c.prev, dashed: true, label: weekly ? t(`Semaine du ${fmtDay(String(p.prevDate))}`, `Week of ${fmtDay(String(p.prevDate))}`) : fmtLongDay(String(p.prevDate)), value: fmt(Number(p.prev)) }] : []),
                   ]}
                 />
               }
@@ -360,22 +436,25 @@ function bucketWeeks(rows: Array<{ date: string; cur: number; prev: number; prev
 function Funnel({ k }: { k: AnalyticsKpis }) {
   const c = usePalette();
   const steps = [
-    { label: "Envoyés", value: k.emails_sent },
-    { label: "Délivrés", value: k.emails_delivered },
-    { label: "Ouverts", value: k.emails_opened },
-    { label: "Cliqués", value: k.emails_clicked },
-    { label: "Commandes", value: k.orders_attributed },
+    { label: t("Envoyés", "Sent"), value: k.emails_sent },
+    { label: t("Délivrés", "Delivered"), value: k.emails_delivered },
+    { label: t("Ouverts", "Opened"), value: k.emails_opened },
+    { label: t("Cliqués", "Clicked"), value: k.emails_clicked },
+    { label: t("Commandes", "Orders"), value: k.orders_attributed },
   ];
   const max = Math.max(1, steps[0].value);
   return (
-    <Panel title="Entonnoir email" subtitle="Du message envoyé à la commande : où vous perdez vos clients.">
+    <Panel
+      title={t("Entonnoir email", "Email funnel")}
+      subtitle={t("Du message envoyé à la commande : où vous perdez vos clients.", "From message sent to order: where you lose customers.")}
+    >
       <ol className="space-y-3.5">
         {steps.map((s, i) => {
           const prev = i ? steps[i - 1].value : 0;
           return (
             <li key={s.label} className="grid grid-cols-[88px_minmax(0,1fr)_auto] items-center gap-3 text-sm">
               <span className="text-slate-600 dark:text-slate-300">{s.label}</span>
-              <span className="h-7 rounded-md bg-slate-100 dark:bg-white/5" title={`${s.label} : ${formatNumber(s.value)}`}>
+              <span className="h-7 rounded-md bg-slate-100 dark:bg-white/5" title={t(`${s.label} : ${formatNumber(s.value)}`, `${s.label}: ${formatNumber(s.value)}`)}>
                 <span className="block h-full rounded-md" style={{ width: `${Math.max(s.value ? 1.5 : 0, (s.value / max) * 100)}%`, background: c.s1, opacity: 1 - i * 0.12 }} />
               </span>
               <span className="w-28 text-right tabular-nums">
@@ -386,7 +465,7 @@ function Funnel({ k }: { k: AnalyticsKpis }) {
           );
         })}
       </ol>
-      <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">Le pourcentage indique la part de l'étape précédente.</p>
+      <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">{t("Le pourcentage indique la part de l'étape précédente.", "The percentage shows the share of the previous step.")}</p>
     </Panel>
   );
 }
@@ -395,23 +474,26 @@ function RevenueSplit({ data }: { data: Analytics }) {
   const c = usePalette();
   const r = data.revenue_split;
   const parts = [
-    { label: "Campagnes email", value: r.campaigns, color: c.s1 },
-    { label: "Automatisations", value: r.automations, color: c.s2 },
-    { label: "Notifications push", value: r.push, color: c.s3 },
-    { label: "Ventes sans contact récent", value: r.unattributed, color: c.other },
+    { label: t("Campagnes email", "Email campaigns"), value: r.campaigns, color: c.s1 },
+    { label: t("Automatisations", "Automations"), value: r.automations, color: c.s2 },
+    { label: t("Notifications push", "Push notifications"), value: r.push, color: c.s3 },
+    { label: t("Ventes sans contact récent", "Sales with no recent touch"), value: r.unattributed, color: c.other },
   ];
   const total = parts.reduce((s, p) => s + p.value, 0);
   return (
-    <Panel title="D'où vient le chiffre d'affaires" subtitle={`${formatCurrency(data.kpis.revenue_total)} de commandes sur la période`}>
+    <Panel
+      title={t("D'où vient le chiffre d'affaires", "Where revenue comes from")}
+      subtitle={t(`${formatCurrency(data.kpis.revenue_total)} de commandes sur la période`, `${formatCurrency(data.kpis.revenue_total)} in orders for the period`)}
+    >
       {total === 0 ? (
-        <EmptyChart text="Aucune commande sur la période. Branchez Shopify ou envoyez vos commandes par l'API pour mesurer vos ventes." />
+        <EmptyChart text={t("Aucune commande sur la période. Branchez Shopify ou envoyez vos commandes par l'API pour mesurer vos ventes.", "No orders in this period. Connect Shopify or send your orders through the API to track sales.")} />
       ) : (
         <>
-          <div className="flex h-8 w-full gap-[2px] overflow-hidden rounded-md" role="img" aria-label="Répartition du chiffre d'affaires">
+          <div className="flex h-8 w-full gap-[2px] overflow-hidden rounded-md" role="img" aria-label={t("Répartition du chiffre d'affaires", "Revenue breakdown")}>
             {parts
               .filter((p) => p.value > 0)
               .map((p) => (
-                <span key={p.label} style={{ width: `${(p.value / total) * 100}%`, background: p.color }} className="h-full first:rounded-l-md last:rounded-r-md" title={`${p.label} : ${formatCurrency(p.value)}`} />
+                <span key={p.label} style={{ width: `${(p.value / total) * 100}%`, background: p.color }} className="h-full first:rounded-l-md last:rounded-r-md" title={t(`${p.label} : ${formatCurrency(p.value)}`, `${p.label}: ${formatCurrency(p.value)}`)} />
               ))}
           </div>
           <ul className="mt-5 divide-y divide-slate-900/5 dark:divide-white/5">
@@ -420,7 +502,7 @@ function RevenueSplit({ data }: { data: Analytics }) {
                 <span className="size-2.5 shrink-0 rounded-full" style={{ background: p.color }} />
                 <span className="min-w-0 flex-1 text-slate-600 dark:text-slate-300">{p.label}</span>
                 <span className="font-semibold text-slate-900 tabular-nums dark:text-white">{formatCurrency(p.value)}</span>
-                <span className="w-12 text-right text-xs text-slate-500 tabular-nums dark:text-slate-400">{Math.round((p.value / total) * 100)}&nbsp;%</span>
+                <span className="w-12 text-right text-xs text-slate-500 tabular-nums dark:text-slate-400">{Math.round((p.value / total) * 100)}{t(" %", "%")}</span>
               </li>
             ))}
           </ul>
@@ -453,18 +535,18 @@ function Heatmap({ grid }: { grid: number[][] }) {
 
   return (
     <Panel
-      title="Meilleurs moments d'ouverture"
-      subtitle="Ouvertures d'emails par jour et par heure, à votre heure locale."
+      title={t("Meilleurs moments d'ouverture", "Best open times")}
+      subtitle={t("Ouvertures d'emails par jour et par heure, à votre heure locale.", "Email opens by day and hour, in your local time.")}
       action={
         best.n > 0 ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-200">
-            <Sparkles className="size-3.5" /> {WEEKDAYS[best.d]} vers {best.h}&nbsp;h
+            <Sparkles className="size-3.5" /> {t(`${WEEKDAYS[best.d]} vers ${fmtHour(best.h)}`, `${WEEKDAYS[best.d]} around ${fmtHour(best.h)}`)}
           </span>
         ) : undefined
       }
     >
       {total === 0 ? (
-        <EmptyChart text="Pas encore d'ouvertures sur la période." />
+        <EmptyChart text={t("Pas encore d'ouvertures sur la période.", "No opens in this period yet.")} />
       ) : (
         <>
           <div className="overflow-x-auto">
@@ -473,7 +555,7 @@ function Heatmap({ grid }: { grid: number[][] }) {
                 <span />
                 {Array.from({ length: 24 }, (_, i) => (
                   <span key={i} className="text-center">
-                    {i % 3 === 0 ? `${i}h` : ""}
+                    {i % 3 === 0 ? t(`${i}h`, `${i % 12 || 12}${i < 12 ? "a" : "p"}`) : ""}
                   </span>
                 ))}
               </div>
@@ -487,7 +569,7 @@ function Heatmap({ grid }: { grid: number[][] }) {
                       onMouseLeave={() => setHover(null)}
                       className={cx("h-6 rounded-[4px] transition-shadow", hover?.d === d && hover?.h === hr && "ring-2 ring-slate-900 dark:ring-white")}
                       style={{ background: color(n) }}
-                      aria-label={`${WEEKDAYS[d]} ${hr} h : ${n} ouverture${n > 1 ? "s" : ""}`}
+                      aria-label={t(`${WEEKDAYS[d]} ${hr} h : ${n} ouverture${n > 1 ? "s" : ""}`, `${WEEKDAYS[d]} ${fmtHour(hr)}: ${n} open${n === 1 ? "" : "s"}`)}
                     />
                   ))}
                 </div>
@@ -499,20 +581,23 @@ function Heatmap({ grid }: { grid: number[][] }) {
               {hover ? (
                 <>
                   <span className="font-semibold text-slate-900 dark:text-white">
-                    {WEEKDAYS[hover.d]} {hover.h}&nbsp;h – {hover.h + 1}&nbsp;h
+                    {WEEKDAYS[hover.d]} {fmtHour(hover.h)} – {fmtHour(hover.h + 1)}
                   </span>
-                  &nbsp;: {formatNumber(h)} ouverture{h > 1 ? "s" : ""} ({Math.round((h / total) * 100)}&nbsp;%)
+                  {t(
+                    ` : ${formatNumber(h)} ouverture${h > 1 ? "s" : ""} (${Math.round((h / total) * 100)} %)`,
+                    `: ${formatNumber(h)} open${h === 1 ? "" : "s"} (${Math.round((h / total) * 100)}%)`,
+                  )}
                 </>
               ) : (
-                <>Programmez vos campagnes juste avant le créneau le plus foncé.</>
+                <>{t("Programmez vos campagnes juste avant le créneau le plus foncé.", "Schedule your campaigns just before the darkest slot.")}</>
               )}
             </p>
             <span className="flex items-center gap-1">
-              Moins
+              {t("Moins", "Less")}
               {c.ramp.map((col) => (
                 <span key={col} className="size-3 rounded-[3px]" style={{ background: col }} />
               ))}
-              Plus
+              {t("Plus", "More")}
             </span>
           </div>
         </>
@@ -531,13 +616,19 @@ function Audience({ data }: { data: Analytics }) {
   const k = data.kpis;
   const maxSource = Math.max(1, ...data.sources.map((s) => s.contacts));
   return (
-    <Panel title="Audience" subtitle={`Croissance nette : ${k.net_growth >= 0 ? "+" : ""}${formatNumber(k.net_growth)} contact${Math.abs(k.net_growth) > 1 ? "s" : ""}`}>
+    <Panel
+      title={t("Audience", "Audience")}
+      subtitle={t(
+        `Croissance nette : ${k.net_growth >= 0 ? "+" : ""}${formatNumber(k.net_growth)} contact${Math.abs(k.net_growth) > 1 ? "s" : ""}`,
+        `Net growth: ${k.net_growth >= 0 ? "+" : ""}${formatNumber(k.net_growth)} contact${Math.abs(k.net_growth) === 1 ? "" : "s"}`,
+      )}
+    >
       <div className="mb-2 flex flex-wrap gap-4 text-xs text-slate-600 dark:text-slate-300">
         <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-sm" style={{ background: c.s1 }} /> Nouveaux ({formatNumber(k.new_contacts)})
+          <span className="size-2.5 rounded-sm" style={{ background: c.s1 }} /> {t("Nouveaux", "New")} ({formatNumber(k.new_contacts)})
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-sm" style={{ background: c.s2 }} /> Désabonnés ({formatNumber(k.unsubscribes)})
+          <span className="size-2.5 rounded-sm" style={{ background: c.s2 }} /> {t("Désabonnés", "Unsubscribed")} ({formatNumber(k.unsubscribes)})
         </span>
       </div>
       <div className="h-[170px] w-full">
@@ -552,8 +643,8 @@ function Audience({ data }: { data: Analytics }) {
               content={
                 <ChartTooltip
                   rows={(p) => [
-                    { color: c.s1, label: `${fmtLongDay(String(p.date))} · nouveaux`, value: formatNumber(Number(p.gain)) },
-                    { color: c.s2, label: "Désabonnés", value: formatNumber(-Number(p.loss)) },
+                    { color: c.s1, label: t(`${fmtLongDay(String(p.date))} · nouveaux`, `${fmtLongDay(String(p.date))} · new`), value: formatNumber(Number(p.gain)) },
+                    { color: c.s2, label: t("Désabonnés", "Unsubscribed"), value: formatNumber(-Number(p.loss)) },
                   ]}
                 />
               }
@@ -563,9 +654,9 @@ function Audience({ data }: { data: Analytics }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <h4 className="mt-6 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Nouveaux contacts par source</h4>
+      <h4 className="mt-6 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t("Nouveaux contacts par source", "New contacts by source")}</h4>
       {data.sources.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-500">Aucun nouveau contact sur la période.</p>
+        <p className="mt-2 text-sm text-slate-500">{t("Aucun nouveau contact sur la période.", "No new contacts in this period.")}</p>
       ) : (
         <ul className="mt-3 space-y-2">
           {data.sources.map((s) => (
@@ -603,7 +694,7 @@ function SortTable<T extends { id?: string }>({ rows, cols, initial, empty }: { 
   const sorted = [...rows].sort((a, b) => {
     const va = col.value(a);
     const vb = col.value(b);
-    const d = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb), "fr");
+    const d = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb), LOCALE);
     return sort.desc ? -d : d;
   });
   if (!rows.length) return <EmptyChart text={empty} />;
@@ -658,7 +749,7 @@ const nameCell = (title: string, sub: string, to?: string) => (
 function Tables({ data }: { data: Analytics }) {
   const [tab, setTab] = useState<Tab>("campaigns");
   const pctCol = <T,>(key: string, label: string, get: (r: T) => number): Col<T> => ({ key, label, num: true, value: get, render: (r) => fmtPct(get(r)) });
-  const moneyCol = <T,>(get: (r: T) => number): Col<T> => ({ key: "revenue", label: "Revenu", num: true, value: get, render: (r) => <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(get(r))}</span> });
+  const moneyCol = <T,>(get: (r: T) => number): Col<T> => ({ key: "revenue", label: t("Revenu", "Revenue"), num: true, value: get, render: (r) => <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(get(r))}</span> });
   type C = Analytics["campaigns"][number];
   type A = Analytics["automations"][number];
   type P = Analytics["push_campaigns"][number];
@@ -666,17 +757,17 @@ function Tables({ data }: { data: Analytics }) {
 
   return (
     <Panel
-      title="Performance détaillée"
-      subtitle="Cliquez sur un en-tête pour trier."
+      title={t("Performance détaillée", "Detailed performance")}
+      subtitle={t("Cliquez sur un en-tête pour trier.", "Click a column header to sort.")}
       action={
         <Segmented<Tab>
           value={tab}
           onChange={setTab}
           options={[
-            { value: "campaigns", label: `Campagnes (${data.campaigns.length})` },
-            { value: "automations", label: `Automatisations (${data.automations.length})` },
-            { value: "push", label: `Push (${data.push_campaigns.length})` },
-            { value: "links", label: "Liens" },
+            { value: "campaigns", label: t(`Campagnes (${data.campaigns.length})`, `Campaigns (${data.campaigns.length})`) },
+            { value: "automations", label: t(`Automatisations (${data.automations.length})`, `Automations (${data.automations.length})`) },
+            { value: "push", label: t(`Push (${data.push_campaigns.length})`, `Push (${data.push_campaigns.length})`) },
+            { value: "links", label: t("Liens", "Links") },
           ]}
           className="max-w-full overflow-x-auto"
         />
@@ -686,14 +777,14 @@ function Tables({ data }: { data: Analytics }) {
         <SortTable<C>
           rows={data.campaigns}
           initial="date"
-          empty="Aucune campagne email envoyée sur la période."
+          empty={t("Aucune campagne email envoyée sur la période.", "No email campaigns sent in this period.")}
           cols={[
-            { key: "date", label: "Campagne", value: (r) => r.sent_at, render: (r) => nameCell(r.name, `${fmtDay(r.sent_at.slice(0, 10))} · ${r.subject.replace(/\{\{\s*\w+\|?([^}]*)\}\}/g, (_, d: string) => d || "…")}`, `/campagnes/${r.id}/rapport`) },
-            { key: "sent", label: "Envoyés", num: true, value: (r) => r.sent },
-            pctCol<C>("open", "Ouverture", (r) => r.open_rate),
-            pctCol<C>("click", "Clic", (r) => r.click_rate),
-            pctCol<C>("unsub", "Désabo.", (r) => r.unsubscribe_rate),
-            { key: "orders", label: "Commandes", num: true, value: (r) => r.orders },
+            { key: "date", label: t("Campagne", "Campaign"), value: (r) => r.sent_at, render: (r) => nameCell(r.name, `${fmtDay(r.sent_at.slice(0, 10))} · ${r.subject.replace(/\{\{\s*\w+\|?([^}]*)\}\}/g, (_, d: string) => d || "…")}`, `/campagnes/${r.id}/rapport`) },
+            { key: "sent", label: t("Envoyés", "Sent"), num: true, value: (r) => r.sent },
+            pctCol<C>("open", t("Ouverture", "Open"), (r) => r.open_rate),
+            pctCol<C>("click", t("Clic", "Click"), (r) => r.click_rate),
+            pctCol<C>("unsub", t("Désabo.", "Unsub."), (r) => r.unsubscribe_rate),
+            { key: "orders", label: t("Commandes", "Orders"), num: true, value: (r) => r.orders },
             moneyCol<C>((r) => r.revenue),
           ]}
         />
@@ -702,15 +793,15 @@ function Tables({ data }: { data: Analytics }) {
         <SortTable<A>
           rows={data.automations}
           initial="revenue"
-          empty="Aucune automatisation active sur la période."
+          empty={t("Aucune automatisation active sur la période.", "No active automations in this period.")}
           cols={[
-            { key: "name", label: "Automatisation", value: (r) => r.name, render: (r) => nameCell(r.name, TRIGGERS[r.trigger as AutomationTrigger]?.label ?? r.trigger, `/automatisations/${r.id}`) },
-            { key: "entered", label: "Entrées", num: true, value: (r) => r.entered },
-            { key: "sent", label: "Emails", num: true, value: (r) => r.emails_sent },
-            pctCol<A>("open", "Ouverture", (r) => r.open_rate),
-            pctCol<A>("click", "Clic", (r) => r.click_rate),
-            { key: "push", label: "Push", num: true, value: (r) => r.push_sent },
-            { key: "orders", label: "Commandes", num: true, value: (r) => r.orders },
+            { key: "name", label: t("Automatisation", "Automation"), value: (r) => r.name, render: (r) => nameCell(r.name, TRIGGERS[r.trigger as AutomationTrigger]?.label ?? r.trigger, `/automatisations/${r.id}`) },
+            { key: "entered", label: t("Entrées", "Entries"), num: true, value: (r) => r.entered },
+            { key: "sent", label: t("Emails", "Emails"), num: true, value: (r) => r.emails_sent },
+            pctCol<A>("open", t("Ouverture", "Open"), (r) => r.open_rate),
+            pctCol<A>("click", t("Clic", "Click"), (r) => r.click_rate),
+            { key: "push", label: t("Push", "Push"), num: true, value: (r) => r.push_sent },
+            { key: "orders", label: t("Commandes", "Orders"), num: true, value: (r) => r.orders },
             moneyCol<A>((r) => r.revenue),
           ]}
         />
@@ -719,12 +810,12 @@ function Tables({ data }: { data: Analytics }) {
         <SortTable<P>
           rows={data.push_campaigns}
           initial="date"
-          empty="Aucune notification push envoyée sur la période."
+          empty={t("Aucune notification push envoyée sur la période.", "No push notifications sent in this period.")}
           cols={[
-            { key: "date", label: "Notification", value: (r) => r.sent_at ?? "", render: (r) => nameCell(r.name, `${r.sent_at ? fmtDay(r.sent_at.slice(0, 10)) : ""} · ${r.title}`) },
-            { key: "sent", label: "Envoyées", num: true, value: (r) => r.sent },
-            pctCol<P>("open", "Ouverture", (r) => r.open_rate),
-            { key: "orders", label: "Commandes", num: true, value: (r) => r.orders },
+            { key: "date", label: t("Notification", "Notification"), value: (r) => r.sent_at ?? "", render: (r) => nameCell(r.name, `${r.sent_at ? fmtDay(r.sent_at.slice(0, 10)) : ""} · ${r.title}`) },
+            { key: "sent", label: t("Envoyées", "Sent"), num: true, value: (r) => r.sent },
+            pctCol<P>("open", t("Ouverture", "Open"), (r) => r.open_rate),
+            { key: "orders", label: t("Commandes", "Orders"), num: true, value: (r) => r.orders },
             moneyCol<P>((r) => r.revenue),
           ]}
         />
@@ -733,11 +824,11 @@ function Tables({ data }: { data: Analytics }) {
         <SortTable<L & { id: string }>
           rows={data.top_links.map((l) => ({ ...l, id: l.url }))}
           initial="clicks"
-          empty="Aucun clic sur la période."
+          empty={t("Aucun clic sur la période.", "No clicks in this period.")}
           cols={[
             {
               key: "url",
-              label: "Lien",
+              label: t("Lien", "Link"),
               value: (r) => r.url,
               render: (r) => (
                 <a href={r.url} target="_blank" rel="noreferrer" className="block max-w-[420px] truncate font-medium text-brand-600 hover:underline dark:text-brand-300">
@@ -745,8 +836,8 @@ function Tables({ data }: { data: Analytics }) {
                 </a>
               ),
             },
-            { key: "clicks", label: "Clics", num: true, value: (r) => r.clicks },
-            { key: "contacts", label: "Contacts uniques", num: true, value: (r) => r.contacts },
+            { key: "clicks", label: t("Clics", "Clicks"), num: true, value: (r) => r.clicks },
+            { key: "contacts", label: t("Contacts uniques", "Unique contacts"), num: true, value: (r) => r.contacts },
           ]}
         />
       )}
@@ -760,23 +851,26 @@ function Tables({ data }: { data: Analytics }) {
 
 function exportCsv(data: Analytics) {
   const cols: Array<[keyof AnalyticsDay, string]> = [
-    ["date", "Date"],
-    ["emails_sent", "Emails envoyés"],
-    ["opens", "Ouvertures"],
-    ["clicks", "Clics"],
-    ["push_sent", "Push envoyés"],
-    ["push_opens", "Push ouverts"],
-    ["orders", "Commandes"],
-    ["revenue", "Chiffre d'affaires (€)"],
-    ["revenue_attributed", "Revenu attribué (€)"],
-    ["new_contacts", "Nouveaux contacts"],
-    ["unsubscribes", "Désabonnements"],
+    ["date", t("Date", "Date")],
+    ["emails_sent", t("Emails envoyés", "Emails sent")],
+    ["opens", t("Ouvertures", "Opens")],
+    ["clicks", t("Clics", "Clicks")],
+    ["push_sent", t("Push envoyés", "Pushes sent")],
+    ["push_opens", t("Push ouverts", "Push opens")],
+    ["orders", t("Commandes", "Orders")],
+    ["revenue", t("Chiffre d'affaires (€)", "Revenue (€)")],
+    ["revenue_attributed", t("Revenu attribué (€)", "Attributed revenue (€)")],
+    ["new_contacts", t("Nouveaux contacts", "New contacts")],
+    ["unsubscribes", t("Désabonnements", "Unsubscribes")],
   ];
-  const lines = [cols.map((c) => c[1]).join(";"), ...data.daily.map((d) => cols.map(([k]) => String(d[k]).replace(".", ",")).join(";"))];
+  // French spreadsheets expect ";" and a decimal comma; English ones expect "," and a decimal point.
+  const sep = t(";", ",");
+  const cell = (v: unknown) => t(String(v).replace(".", ","), String(v));
+  const lines = [cols.map((c) => c[1]).join(sep), ...data.daily.map((d) => cols.map(([k]) => cell(d[k])).join(sep))];
   const blob = new Blob([`﻿${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `pingsell-statistiques-${data.range.from}-${data.range.to}.csv`;
+  a.download = t(`pingsell-statistiques-${data.range.from}-${data.range.to}.csv`, `pingsell-analytics-${data.range.from}-${data.range.to}.csv`);
   a.click();
   URL.revokeObjectURL(a.href);
 }

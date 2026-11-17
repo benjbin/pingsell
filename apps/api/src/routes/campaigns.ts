@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { all, get, newId, now, run, scalar, transaction, type SQLInputValue } from '../db.js';
 import type { Deps } from '../deps.js';
-import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString } from '../lib/http.js';
+import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString, zmsg } from '../lib/http.js';
 import {
   CAMPAIGN_STATUSES,
   audienceCount,
@@ -13,35 +13,36 @@ import {
 } from '../services/campaigns.js';
 import { findContactByEmail, isValidEmail, normalizeEmail } from '../services/contacts.js';
 import { accountSender, createMessage, markFailed, markSent } from '../services/messages.js';
+import { t } from '../i18n.js';
 
 const nullableText = (max: number) => z.string().trim().max(max).nullable().optional();
 
 const createSchema = z.object({
-  name: z.string().trim().min(1, 'Le nom est requis').max(200),
+  name: z.string().trim().min(1, zmsg('Le nom est requis', 'Name is required')).max(200),
   subject: z.string().trim().max(300).optional(),
   preheader: nullableText(300),
   from_name: nullableText(120),
-  from_email: z.email('Adresse expéditeur invalide').nullable().optional(),
+  from_email: z.email(zmsg('Adresse expéditeur invalide', 'Invalid sender address')).nullable().optional(),
   html: z.string().max(1_000_000).nullable().optional(),
   design: z.string().max(2_000_000).nullable().optional(),
   segment_id: z.string().trim().min(1).nullable().optional(),
 });
 const patchSchema = createSchema.partial();
-const testSchema = z.object({ to: z.string().trim().min(1, 'Destinataire requis') });
-const scheduleSchema = z.object({ scheduled_at: z.iso.datetime({ offset: true, message: 'Date ISO 8601 attendue' }) });
+const testSchema = z.object({ to: z.string().trim().min(1, zmsg('Destinataire requis', 'Recipient is required')) });
+const scheduleSchema = z.object({ scheduled_at: z.iso.datetime({ offset: true, ...zmsg('Date ISO 8601 attendue', 'ISO 8601 date expected') }) });
 
 type Params = { Params: { id: string } };
 
 export async function campaignRoutes(app: FastifyInstance, { db, config, provider, kickWorker }: Deps) {
   const load = (accountId: string, id: string) => {
     const row = get(db, 'SELECT * FROM campaigns WHERE id = ? AND account_id = ?', id, accountId);
-    if (!row) throw notFound('Campagne introuvable');
+    if (!row) throw notFound(t('Campagne introuvable', 'Campaign not found'));
     return serializeCampaign(row);
   };
 
   const assertSegment = (accountId: string, segmentId: string | null | undefined) => {
     if (segmentId && !get(db, 'SELECT id FROM segments WHERE id = ? AND account_id = ?', segmentId, accountId)) {
-      throw badRequest('Segment introuvable');
+      throw badRequest(t('Segment introuvable', 'Segment not found'));
     }
   };
 
@@ -52,11 +53,11 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
 
   /** Preconditions shared by send + schedule. */
   const assertSendable = (campaign: ReturnType<typeof serializeCampaign>) => {
-    if (!campaign.subject.trim()) throw badRequest("L'objet de la campagne est requis");
-    if (!campaign.html?.trim()) throw badRequest('Le contenu HTML de la campagne est requis');
+    if (!campaign.subject.trim()) throw badRequest(t("L'objet de la campagne est requis", 'Campaign subject is required'));
+    if (!campaign.html?.trim()) throw badRequest(t('Le contenu HTML de la campagne est requis', 'Campaign HTML content is required'));
     if (campaign.segment_id) assertSegment(campaign.account_id, campaign.segment_id);
     if (audienceCount(db, campaign.account_id, campaign.segment_id) === 0) {
-      throw badRequest('Aucun destinataire abonné ne correspond à cette audience');
+      throw badRequest(t('Aucun destinataire abonné ne correspond à cette audience', 'No subscribed recipients match this audience'));
     }
   };
 
@@ -66,7 +67,7 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     const params: SQLInputValue[] = [request.accountId];
     const status = queryString(request.query, 'status');
     if (status) {
-      if (!(CAMPAIGN_STATUSES as readonly string[]).includes(status)) throw badRequest('Statut inconnu');
+      if (!(CAMPAIGN_STATUSES as readonly string[]).includes(status)) throw badRequest(t('Statut inconnu', 'Unknown status'));
       where.push('status = ?');
       params.push(status);
     }
@@ -123,7 +124,7 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
   app.patch<Params>('/campaigns/:id', async (request) => {
     const body = parse(patchSchema, request.body);
     const campaign = load(request.accountId, request.params.id);
-    if (campaign.status !== 'draft') throw conflict('Seules les campagnes en brouillon sont modifiables');
+    if (campaign.status !== 'draft') throw conflict(t('Seules les campagnes en brouillon sont modifiables', 'Only draft campaigns can be edited'));
     if (body.segment_id !== undefined) assertSegment(request.accountId, body.segment_id);
     const updates: Record<string, SQLInputValue> = {};
     for (const key of ['name', 'subject', 'preheader', 'from_name', 'from_email', 'html', 'design', 'segment_id'] as const) {
@@ -144,7 +145,7 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
 
   app.delete<Params>('/campaigns/:id', async (request, reply) => {
     const campaign = load(request.accountId, request.params.id);
-    if (campaign.status === 'sending') throw conflict("Impossible de supprimer une campagne en cours d'envoi");
+    if (campaign.status === 'sending') throw conflict(t("Impossible de supprimer une campagne en cours d'envoi", 'You can’t delete a campaign that is sending'));
     transaction(db, () => {
       // Keep message history (account-level statistics) but detach it from the campaign.
       run(db, 'UPDATE messages SET campaign_id = NULL WHERE campaign_id = ?', campaign.id);
@@ -156,12 +157,12 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
   app.post<Params>('/campaigns/:id/test', async (request) => {
     const { to } = parse(testSchema, request.body);
     const email = normalizeEmail(to);
-    if (!isValidEmail(email)) throw badRequest('Adresse de test invalide');
+    if (!isValidEmail(email)) throw badRequest(t('Adresse de test invalide', 'Invalid test address'));
     const campaign = load(request.accountId, request.params.id);
-    if (!campaign.html?.trim()) throw badRequest('Le contenu HTML de la campagne est requis');
+    if (!campaign.html?.trim()) throw badRequest(t('Le contenu HTML de la campagne est requis', 'Campaign HTML content is required'));
 
     const known = findContactByEmail(db, request.accountId, email);
-    const contact = known ?? { email, first_name: 'Camille', last_name: 'Martin' };
+    const contact = known ?? { email, ...t({ first_name: 'Camille', last_name: 'Martin' }, { first_name: 'Taylor', last_name: 'Smith' }) };
     const sender = accountSender(db, config, request.accountId);
     const { id, rendered } = createMessage(db, config, {
       accountId: request.accountId,
@@ -188,7 +189,7 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
       markSent(db, id, result.providerId);
     } catch (err) {
       markFailed(db, id, (err as Error).message);
-      throw badRequest(`Échec de l'envoi du test : ${(err as Error).message}`);
+      throw badRequest(t(`Échec de l'envoi du test : ${(err as Error).message}`, `Test send failed: ${(err as Error).message}`));
     }
     return { ok: true, message_id: id, to: email, subject: rendered.subject };
   });
@@ -196,7 +197,7 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
   app.post<Params>('/campaigns/:id/send', async (request) => {
     const campaign = load(request.accountId, request.params.id);
     if (campaign.status !== 'draft' && campaign.status !== 'scheduled') {
-      throw conflict('Cette campagne a déjà été envoyée ou est en cours d’envoi');
+      throw conflict(t('Cette campagne a déjà été envoyée ou est en cours d’envoi', 'This campaign has already been sent or is sending'));
     }
     assertSendable(campaign);
     run(
@@ -213,10 +214,10 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     const { scheduled_at } = parse(scheduleSchema, request.body);
     const campaign = load(request.accountId, request.params.id);
     if (campaign.status !== 'draft' && campaign.status !== 'scheduled') {
-      throw conflict('Seules les campagnes en brouillon peuvent être programmées');
+      throw conflict(t('Seules les campagnes en brouillon peuvent être programmées', 'Only draft campaigns can be scheduled'));
     }
     const when = new Date(scheduled_at);
-    if (when.getTime() < Date.now() - 60_000) throw badRequest('La date de programmation doit être dans le futur');
+    if (when.getTime() < Date.now() - 60_000) throw badRequest(t('La date de programmation doit être dans le futur', 'The scheduled date must be in the future'));
     assertSendable(campaign);
     run(
       db,
@@ -230,7 +231,7 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
 
   app.post<Params>('/campaigns/:id/unschedule', async (request) => {
     const campaign = load(request.accountId, request.params.id);
-    if (campaign.status !== 'scheduled') throw conflict("Cette campagne n'est pas programmée");
+    if (campaign.status !== 'scheduled') throw conflict(t("Cette campagne n'est pas programmée", 'This campaign isn’t scheduled'));
     run(db, "UPDATE campaigns SET status = 'draft', scheduled_at = NULL, updated_at = ? WHERE id = ?", now(), campaign.id);
     return withStats(request.accountId, campaign.id);
   });

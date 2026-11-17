@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { Button } from "./ui/primitives";
+import { t } from "../lib/i18n";
 
 export async function copyText(text: string): Promise<boolean> {
   try {
@@ -20,7 +21,7 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function CopyButton({ text, label = "Copier", size = "sm" }: { text: string; label?: string; size?: "sm" | "md" }) {
+export function CopyButton({ text, label = t("Copier", "Copy"), size = "sm" }: { text: string; label?: string; size?: "sm" | "md" }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
@@ -34,7 +35,7 @@ export function CopyButton({ text, label = "Copier", size = "sm" }: { text: stri
         }
       }}
     >
-      {copied ? "Copié" : label}
+      {copied ? t("Copié", "Copied") : label}
     </Button>
   );
 }

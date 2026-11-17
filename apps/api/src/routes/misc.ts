@@ -2,14 +2,15 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { all, parseJson } from '../db.js';
 import type { Deps } from '../deps.js';
-import { badRequest, clampInt, parse } from '../lib/http.js';
+import { badRequest, clampInt, parse, zmsg } from '../lib/http.js';
+import { t } from '../i18n.js';
 import { generateEmail } from '../services/templates.js';
 import { serializeMessage } from '../services/messages.js';
 import { overviewStats } from '../services/stats.js';
 import { analytics } from '../services/analytics.js';
 
 const generateSchema = z.object({
-  prompt: z.string().trim().min(3, 'Décrivez l’email à générer').max(4000),
+  prompt: z.string().trim().min(3, zmsg('Décrivez l’email à générer', 'Describe the email to generate')).max(4000),
   tone: z.string().trim().max(60).optional(),
   brand: z.string().trim().max(120).optional(),
 });
@@ -36,8 +37,8 @@ export async function statsRoutes(app: FastifyInstance, { db }: Deps) {
       to = today;
       from = new Date(Date.parse(`${today}T00:00:00Z`) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
     }
-    if (from > to) throw badRequest('La date de début doit précéder la date de fin');
-    if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 366) throw badRequest('Période limitée à 1 an');
+    if (from > to) throw badRequest(t('La date de début doit précéder la date de fin', 'Start date must be before end date'));
+    if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 366) throw badRequest(t('Période limitée à 1 an', 'Range is limited to 1 year'));
     return analytics(db, request.accountId, { from, to, tz });
   });
 }

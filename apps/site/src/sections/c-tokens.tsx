@@ -1,11 +1,12 @@
 /** Hero C — design tokens of the live demo (brand colours, font pairings, themes, email types). */
+import { t } from "../i18n";
 
 export const COLORS = [
-  { id: "bleu", label: "Bleu", hex: "#145cff" },
-  { id: "corail", label: "Corail", hex: "#ef4f5a" },
-  { id: "emeraude", label: "Émeraude", hex: "#0c9b6c" },
-  { id: "violet", label: "Violet", hex: "#7438ea" },
-  { id: "ocre", label: "Ocre", hex: "#c47d0e" },
+  { id: "bleu", label: t("Bleu", "Blue"), hex: "#145cff" },
+  { id: "corail", label: t("Corail", "Coral"), hex: "#ef4f5a" },
+  { id: "emeraude", label: t("Émeraude", "Emerald"), hex: "#0c9b6c" },
+  { id: "violet", label: t("Violet", "Purple"), hex: "#7438ea" },
+  { id: "ocre", label: t("Ocre", "Ochre"), hex: "#c47d0e" },
 ] as const;
 export type ColorId = (typeof COLORS)[number]["id"];
 
@@ -41,16 +42,16 @@ export type ThemeSpec = {
 };
 
 export const THEMES = [
-  { id: "clair", label: "Clair", canvas: "#e9eef7", bg: "#ffffff", text: "#0b214a", muted: "#66738f", surface: "#f2f5fb", line: "rgba(11,33,74,0.09)", swatch: "#ffffff" },
-  { id: "sombre", label: "Sombre", canvas: "#040b1c", bg: "#0c1834", text: "#f2f5ff", muted: "#97a6c4", surface: "#15254a", line: "rgba(255,255,255,0.09)", swatch: "#0c1834" },
-  { id: "chaud", label: "Chaud", canvas: "#eadfce", bg: "#fff8ee", text: "#3a2517", muted: "#8a6e57", surface: "#f4e7d4", line: "rgba(58,37,23,0.11)", swatch: "#f4e7d4" },
+  { id: "clair", label: t("Clair", "Light"), canvas: "#e9eef7", bg: "#ffffff", text: "#0b214a", muted: "#66738f", surface: "#f2f5fb", line: "rgba(11,33,74,0.09)", swatch: "#ffffff" },
+  { id: "sombre", label: t("Sombre", "Dark"), canvas: "#040b1c", bg: "#0c1834", text: "#f2f5ff", muted: "#97a6c4", surface: "#15254a", line: "rgba(255,255,255,0.09)", swatch: "#0c1834" },
+  { id: "chaud", label: t("Chaud", "Warm"), canvas: "#eadfce", bg: "#fff8ee", text: "#3a2517", muted: "#8a6e57", surface: "#f4e7d4", line: "rgba(58,37,23,0.11)", swatch: "#f4e7d4" },
 ] as const satisfies readonly ThemeSpec[];
 export type ThemeId = (typeof THEMES)[number]["id"];
 
 export const TYPES = [
-  { id: "soldes", label: "Soldes", short: "Soldes", subject: "−30 % sur tout l'hiver, jusqu'à dimanche" },
-  { id: "nouveaute", label: "Nouveauté", short: "Nouveauté", subject: "La collection Printemps est arrivée" },
-  { id: "panier", label: "Panier abandonné", short: "Panier", subject: "Vous avez oublié quelque chose ?" },
+  { id: "soldes", label: t("Soldes", "Sale"), short: t("Soldes", "Sale"), subject: t("−30 % sur tout l'hiver, jusqu'à dimanche", "30% off all winter, through Sunday") },
+  { id: "nouveaute", label: t("Nouveauté", "New arrival"), short: t("Nouveauté", "New"), subject: t("La collection Printemps est arrivée", "The Spring collection has arrived") },
+  { id: "panier", label: t("Panier abandonné", "Abandoned cart"), short: t("Panier", "Cart"), subject: t("Vous avez oublié quelque chose ?", "Did you forget something?") },
 ] as const;
 export type TypeId = (typeof TYPES)[number]["id"];
 

@@ -2,7 +2,8 @@
  * Demo seed (test values only — see SPEC.md "Demo seed").
  * Idempotent: the demo account is deleted (cascade) and recreated on each run.
  *
- *   npm run seed
+ *   npm run seed                 (French demo)
+ *   SEED_LANG=en npm run seed    (English demo)
  */
 import { config } from './config.js';
 import { get, newId, openDatabase, run, transaction, type DatabaseSync } from './db.js';
@@ -12,9 +13,12 @@ import { createMessage } from './services/messages.js';
 import { generateFromTemplate } from './services/templates.js';
 import { audienceFilter } from './services/campaigns.js';
 import type { AutomationStep } from './services/automations.js';
+import { currentLang, normalizeLang, t, withLang } from './i18n.js';
 
 const DEMO = {
-  name: 'Boutique Démo',
+  get name() {
+    return t('Boutique Démo', 'Demo Store');
+  },
   email: 'demo@missive.local',
   password: 'demo1234',
   apiKey: 'msv_dev_key_123',
@@ -26,9 +30,9 @@ function mulberry32(seed: number) {
   return () => {
     a |= 0;
     a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    let x = Math.imul(a ^ (a >>> 15), 1 | a);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
   };
 }
 const rand = mulberry32(20261117);
@@ -189,7 +193,7 @@ function simulateEngagement(
   const clickedAt = openedAt + rand() * 20 * 60_000 + 15_000;
   if (clickedAt > NOW) return;
   run(db, 'UPDATE messages SET clicked_at = ? WHERE id = ?', iso(clickedAt), messageId);
-  recordEvent(db, accountId, contactId, 'click', { message_id: messageId, url: 'https://exemple.com', ...extra }, iso(clickedAt));
+  recordEvent(db, accountId, contactId, 'click', { message_id: messageId, url: t('https://exemple.com', 'https://example.com'), ...extra }, iso(clickedAt));
 }
 
 function insertCampaign(
@@ -310,12 +314,13 @@ function main() {
     const accountCreated = NOW - 400 * DAY;
     run(
       db,
-      'INSERT INTO accounts (id, name, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO accounts (id, name, email, password_hash, created_at, language) VALUES (?, ?, ?, ?, ?, ?)',
       accountId,
       DEMO.name,
       DEMO.email,
       hashPassword(DEMO.password),
       iso(accountCreated),
+      currentLang(),
     );
     run(
       db,
@@ -327,28 +332,28 @@ function main() {
       hashPassword(DEMO.password),
       iso(accountCreated),
     );
-    createApiKey(db, accountId, 'Clé de développement', DEMO.apiKey);
+    createApiKey(db, accountId, t('Clé de développement', 'Development key'), DEMO.apiKey);
 
     const contacts = seedContacts(db, accountId);
 
     const vipSegment = insertSegment(
       db,
       accountId,
-      'Clients VIP',
+      t('Clients VIP', 'VIP customers'),
       { match: 'any', conditions: [{ field: 'tags', op: 'has_tag', value: 'vip' }, { field: 'total_spent', op: 'gt', value: 300 }] },
       NOW - 60 * DAY,
     );
     insertSegment(
       db,
       accountId,
-      'Nouveaux inscrits (30 jours)',
+      t('Nouveaux inscrits (30 jours)', 'New subscribers (30 days)'),
       { match: 'all', conditions: [{ field: 'created_at', op: 'within_days', value: 30 }] },
       NOW - 45 * DAY,
     );
     const inactiveSegment = insertSegment(
       db,
       accountId,
-      'Clients à réactiver',
+      t('Clients à réactiver', 'Customers to win back'),
       {
         match: 'all',
         conditions: [
@@ -361,12 +366,12 @@ function main() {
 
     // --- Campaigns -------------------------------------------------------------------------
     const sale = generateFromTemplate({
-      prompt: "Soldes d'automne : -20 % sur toute la boutique avec le code AUTOMNE20",
+      prompt: t("Soldes d'automne : -20 % sur toute la boutique avec le code AUTOMNE20", 'Fall sale: 20% off the whole store with code FALL20'),
       brand: DEMO.name,
     });
     const saleSentAt = NOW - 24 * DAY + 9 * HOUR;
     const saleId = insertCampaign(db, accountId, {
-      name: "Soldes d'automne -20 %",
+      name: t("Soldes d'automne -20 %", 'Fall sale 20% off'),
       subject: sale.subject,
       preheader: sale.preheader,
       html: sale.html,
@@ -378,13 +383,16 @@ function main() {
     const saleRecipients = sendSeedCampaign(db, accountId, saleId, null, saleSentAt, 0.46, 0.32);
 
     const launch = generateFromTemplate({
-      prompt: 'Lancement de la nouvelle collection hiver en avant-première pour nos meilleurs clients',
+      prompt: t(
+        'Lancement de la nouvelle collection hiver en avant-première pour nos meilleurs clients',
+        'Launch of the new winter collection, early access for our best customers',
+      ),
       brand: DEMO.name,
       tone: 'premium',
     });
     const launchSentAt = NOW - 8 * DAY + 10 * HOUR;
     const launchId = insertCampaign(db, accountId, {
-      name: 'Avant-première collection hiver',
+      name: t('Avant-première collection hiver', 'Winter collection early access'),
       subject: launch.subject,
       preheader: launch.preheader,
       html: launch.html,
@@ -395,7 +403,10 @@ function main() {
     });
     const launchRecipients = sendSeedCampaign(db, accountId, launchId, vipSegment, launchSentAt, 0.58, 0.38);
 
-    const bf = generateFromTemplate({ prompt: 'Black Friday : jusqu’à 40 % de réduction pendant 4 jours', brand: DEMO.name });
+    const bf = generateFromTemplate({
+      prompt: t('Black Friday : jusqu’à 40 % de réduction pendant 4 jours', 'Black Friday: up to 40% off for 4 days'),
+      brand: DEMO.name,
+    });
     insertCampaign(db, accountId, {
       name: 'Black Friday 2026',
       subject: bf.subject,
@@ -407,12 +418,15 @@ function main() {
     });
 
     const winback = generateFromTemplate({
-      prompt: 'Vous nous manquez : 15 % pour votre retour, réactivation des clients inactifs',
+      prompt: t(
+        'Vous nous manquez : 15 % pour votre retour, réactivation des clients inactifs',
+        'We miss you: 15% off to welcome back inactive customers',
+      ),
       brand: DEMO.name,
       tone: 'amical',
     });
     insertCampaign(db, accountId, {
-      name: 'Réactivation clients inactifs',
+      name: t('Réactivation clients inactifs', 'Inactive customer win-back'),
       subject: winback.subject,
       preheader: winback.preheader,
       html: winback.html,
@@ -423,22 +437,32 @@ function main() {
     });
 
     // --- Automations -----------------------------------------------------------------------
-    const welcome = generateFromTemplate({ prompt: 'Bienvenue : 10 % sur la première commande avec le code BIENVENUE10', brand: DEMO.name });
-    const welcomeTips = generateFromTemplate({ prompt: 'Newsletter : nos conseils pour bien choisir et entretenir vos vêtements', brand: DEMO.name });
+    const welcome = generateFromTemplate({
+      prompt: t('Bienvenue : 10 % sur la première commande avec le code BIENVENUE10', 'Welcome: 10% off your first order with code WELCOME10'),
+      brand: DEMO.name,
+    });
+    const welcomeTips = generateFromTemplate({
+      prompt: t(
+        'Newsletter : nos conseils pour bien choisir et entretenir vos vêtements',
+        'Newsletter: our tips for choosing and caring for your clothes',
+      ),
+      brand: DEMO.name,
+    });
+    const welcomeTipsSubject = t('Nos conseils pour bien commencer, {{first_name|}}', 'Our tips to get started, {{first_name|}}');
     const welcomeId = insertAutomation(db, accountId, {
-      name: 'Série de bienvenue',
+      name: t('Série de bienvenue', 'Welcome series'),
       trigger: 'contact_created',
       config: {},
       steps: [
         { type: 'email', subject: welcome.subject, html: welcome.html, preheader: welcome.preheader },
         { type: 'wait', hours: 48 },
-        { type: 'email', subject: 'Nos conseils pour bien commencer, {{first_name|}}', html: welcomeTips.html },
+        { type: 'email', subject: welcomeTipsSubject, html: welcomeTips.html },
       ],
       createdAt: NOW - 90 * DAY,
     });
-    const cart = generateFromTemplate({ prompt: 'Relance panier abandonné', brand: DEMO.name });
+    const cart = generateFromTemplate({ prompt: t('Relance panier abandonné', 'Abandoned cart reminder'), brand: DEMO.name });
     insertAutomation(db, accountId, {
-      name: 'Relance panier abandonné',
+      name: t('Relance panier abandonné', 'Abandoned cart reminder'),
       trigger: 'cart_abandoned',
       config: {},
       steps: [
@@ -453,7 +477,7 @@ function main() {
     for (const contact of contacts.filter((c) => NOW - c.created < 30 * DAY)) {
       const steps = [
         { at: contact.created + 2 * 60_000, subject: welcome.subject, html: welcome.html },
-        { at: contact.created + 48 * HOUR, subject: 'Nos conseils pour bien commencer, {{first_name|}}', html: welcomeTips.html },
+        { at: contact.created + 48 * HOUR, subject: welcomeTipsSubject, html: welcomeTips.html },
       ].filter((s) => s.at < NOW);
       for (const step of steps) {
         const { id } = createMessage(db, config, {
@@ -490,14 +514,26 @@ function main() {
     return { contacts: contacts.length, saleRecipients, launchRecipients, automationEmails };
   });
 
-  console.log(`✔ Seed terminé (${config.databasePath})
+  console.log(
+    t(
+      `✔ Seed terminé (${config.databasePath})
   Compte      : ${DEMO.name}
   Connexion   : ${DEMO.email} / ${DEMO.password}
   Clé API     : ${DEMO.apiKey}
   Contacts    : ${summary.contacts}
   Segments    : 3 · Campagnes : 4 (2 envoyées : ${summary.saleRecipients} + ${summary.launchRecipients} destinataires)
-  Automations : 2 (${summary.automationEmails} emails de bienvenue historiques)`);
+  Automations : 2 (${summary.automationEmails} emails de bienvenue historiques)`,
+      `✔ Seed complete (${config.databasePath})
+  Account     : ${DEMO.name}
+  Sign-in     : ${DEMO.email} / ${DEMO.password}
+  API key     : ${DEMO.apiKey}
+  Contacts    : ${summary.contacts}
+  Segments    : 3 · Campaigns: 4 (2 sent: ${summary.saleRecipients} + ${summary.launchRecipients} recipients)
+  Automations : 2 (${summary.automationEmails} past welcome emails)`,
+    ),
+  );
   db.close();
 }
 
-main();
+// Demo language: SEED_LANG=en for an English demo account (French by default).
+withLang(normalizeLang(process.env.SEED_LANG), main);

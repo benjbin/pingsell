@@ -1,6 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
 import { get, newId, now, run, type DatabaseSync } from '../db.js';
+import { t } from '../i18n.js';
 
 const SCRYPT_KEYLEN = 64;
 const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1 } as const;
@@ -94,7 +95,9 @@ export function makeRequireAuth(db: DatabaseSync): preHandlerHookHandler {
     const token = bearerToken(request);
     const auth = token ? resolveToken(db, token) : undefined;
     if (!auth) {
-      return reply.code(401).send({ error: token ? 'Jeton invalide ou expiré' : 'Authentification requise' });
+      return reply.code(401).send({ error: token
+          ? t('Jeton invalide ou expiré', 'Invalid or expired token')
+          : t('Authentification requise', 'Authentication required') });
     }
     request.accountId = auth.accountId;
     request.userId = auth.userId;

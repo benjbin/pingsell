@@ -5,6 +5,7 @@ import { handleCheckoutPayload, markCheckoutsCompleted, summarizeLineItems } fro
 import { cleanEmail, customerFromRest, marketingStateFromRest, toNumber, upsertShopifyContact } from './contacts.js';
 import { findContactByEmail, orderAlreadyRecorded, updateIntegration } from './store.js';
 import { WEBHOOK_TOPICS } from './types.js';
+import { t } from '../../i18n.js';
 
 const toGraphqlTopic = (topic: string) => topic.replace('/', '_').toUpperCase(); // orders/create → ORDERS_CREATE
 
@@ -50,7 +51,10 @@ export async function registerWebhooks(
   if (!address.startsWith('https://') || /\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(address)) {
     return {
       webhooks: [],
-      error: `Webhooks non enregistrés : PUBLIC_URL (${publicUrl}) doit être une URL HTTPS publique (ex. tunnel cloudflared/ngrok).`,
+      error: t(
+        `Webhooks non enregistrés : PUBLIC_URL (${publicUrl}) doit être une URL HTTPS publique (ex. tunnel cloudflared/ngrok).`,
+        `Webhooks not registered: PUBLIC_URL (${publicUrl}) must be a public HTTPS URL (e.g. a cloudflared/ngrok tunnel).`,
+      ),
     };
   }
 
@@ -67,7 +71,7 @@ export async function registerWebhooks(
       } else if (result.userErrors.some((e) => /already been taken|already exists/i.test(e.message))) {
         webhooks.push({ id: '', topic }); // already subscribed with this address
       } else {
-        errors.push(`${topic} : ${result.userErrors.map((e) => e.message).join(', ')}`);
+        errors.push(t(`${topic} : ${result.userErrors.map((e) => e.message).join(', ')}`, `${topic}: ${result.userErrors.map((e) => e.message).join(', ')}`));
       }
     } catch (err) {
       // Older API versions only know `callbackUrl`: retry the same topic once with it.
@@ -80,17 +84,25 @@ export async function registerWebhooks(
           });
           const created = data.webhookSubscriptionCreate.webhookSubscription;
           if (created) webhooks.push({ id: created.id, topic });
-          else errors.push(`${topic} : ${data.webhookSubscriptionCreate.userErrors.map((e) => e.message).join(', ')}`);
+          else {
+            const detail = data.webhookSubscriptionCreate.userErrors.map((e) => e.message).join(', ');
+            errors.push(t(`${topic} : ${detail}`, `${topic}: ${detail}`));
+          }
           continue;
         } catch (retryErr) {
-          errors.push(`${topic} : ${(retryErr as Error).message}`);
+          errors.push(t(`${topic} : ${(retryErr as Error).message}`, `${topic}: ${(retryErr as Error).message}`));
           continue;
         }
       }
-      errors.push(`${topic} : ${(err as Error).message}`);
+      errors.push(t(`${topic} : ${(err as Error).message}`, `${topic}: ${(err as Error).message}`));
     }
   }
-  return { webhooks, error: errors.length ? `Certains webhooks n’ont pas pu être créés — ${errors.join(' ; ')}` : null };
+  return {
+    webhooks,
+    error: errors.length
+      ? t(`Certains webhooks n’ont pas pu être créés — ${errors.join(' ; ')}`, `Some webhooks couldn’t be created — ${errors.join('; ')}`)
+      : null,
+  };
 }
 
 /** Best-effort removal of every webhook subscription owned by the app on this shop. */
@@ -191,7 +203,7 @@ export function handleAppUninstalled(ctx: IntegrationContext, accountId: string)
   updateIntegration(
     ctx.db,
     accountId,
-    { error: 'Application désinstallée depuis Shopify : reconnectez la boutique.', uninstalled_at: new Date().toISOString(), webhooks: [] },
+    { error: t('Application désinstallée depuis Shopify : reconnectez la boutique.', 'App uninstalled from Shopify: reconnect the store.'), uninstalled_at: new Date().toISOString(), webhooks: [] },
     { status: 'error', access_token: '' },
   );
 }

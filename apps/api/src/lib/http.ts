@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { t } from '../i18n.js';
 
 export class HttpError extends Error {
   constructor(
@@ -11,17 +12,20 @@ export class HttpError extends Error {
 }
 
 export const badRequest = (message: string) => new HttpError(400, message);
-export const notFound = (message = 'Ressource introuvable') => new HttpError(404, message);
+export const notFound = (message = t('Ressource introuvable', 'Resource not found')) => new HttpError(404, message);
 export const conflict = (message: string) => new HttpError(409, message);
-export const forbidden = (message = 'Action réservée aux administrateurs du compte') => new HttpError(403, message);
-export const unauthorized = (message = 'Authentification requise') => new HttpError(401, message);
+export const forbidden = (message = t('Action réservée aux administrateurs du compte', 'Only account admins can do this')) => new HttpError(403, message);
+export const unauthorized = (message = t('Authentification requise', 'Authentication required')) => new HttpError(401, message);
 
-/** Formats a zod error into a short, human-readable French message. */
+/** Formats a zod error into a short, human-readable message (current language). */
 export function formatZodError(error: z.ZodError): string {
   const issue = error.issues[0];
-  if (!issue) return 'Requête invalide';
-  const path = issue.path.length ? `${issue.path.join('.')} : ` : '';
-  return `Requête invalide — ${path}${issue.message}`;
+  if (!issue) return t('Requête invalide', 'Invalid request');
+  const field = issue.path.join('.');
+  return t(
+    `Requête invalide — ${field ? `${field} : ` : ''}${issue.message}`,
+    `Invalid request — ${field ? `${field}: ` : ''}${issue.message}`,
+  );
 }
 
 /** Validates `input` against `schema`, throwing a 400 HttpError on failure. */
@@ -67,3 +71,9 @@ export function queryString(query: unknown, key: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
 }
+
+/**
+ * Localized zod message, resolved when the issue is raised (schemas are built at module load,
+ * before any request language is known): `z.string().min(1, zmsg('Requis', 'Required'))`.
+ */
+export const zmsg = (fr: string, en: string) => ({ error: () => t(fr, en) });

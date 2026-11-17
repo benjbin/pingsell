@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { all, get, newId, now, parseJson, run, scalar, transaction, type DatabaseSync } from '../db.js';
 import { fireTrigger } from './automations.js';
 import { CHANNELS, ensurePushConfig, queueContent, type PushChannel, type PushContent } from './push.js';
+import { zmsg } from '../lib/http.js';
+import { t } from '../i18n.js';
 
 /* -------------------------------------------------------------------------- */
 /* Pre-permission prompt                                                      */
@@ -13,8 +15,8 @@ import { CHANNELS, ensurePushConfig, queueContent, type PushChannel, type PushCo
  */
 export const promptSchema = z.object({
   enabled: z.boolean(),
-  title: z.string().trim().min(1, 'Le titre est requis').max(80),
-  body: z.string().trim().min(1, 'Le message est requis').max(300),
+  title: z.string().trim().min(1, zmsg('Le titre est requis', 'Title is required')).max(80),
+  body: z.string().trim().min(1, zmsg('Le message est requis', 'Message is required')).max(300),
   accept_label: z.string().trim().min(1).max(30),
   decline_label: z.string().trim().min(1).max(30),
   /** Show it from the Nth app launch (1 = first launch). */
@@ -25,21 +27,25 @@ export const promptSchema = z.object({
 });
 export type PromptSettings = z.output<typeof promptSchema>;
 
-export const DEFAULT_PROMPT: PromptSettings = {
+/** Default pre-permission screen, in the current language (until the merchant saves their own). */
+export const defaultPrompt = (): PromptSettings => ({
   enabled: true,
-  title: 'Ne ratez aucune bonne affaire',
-  body: 'Activez les notifications pour suivre vos commandes et recevoir nos offres en avant-première. Promis, pas plus de deux par semaine.',
-  accept_label: 'Activer',
-  decline_label: 'Plus tard',
+  title: t('Ne ratez aucune bonne affaire', 'Never miss a great deal'),
+  body: t(
+    'Activez les notifications pour suivre vos commandes et recevoir nos offres en avant-première. Promis, pas plus de deux par semaine.',
+    'Turn on notifications to track your orders and get early access to our offers. We promise, no more than two a week.',
+  ),
+  accept_label: t('Activer', 'Turn on'),
+  decline_label: t('Plus tard', 'Not now'),
   min_launches: 1,
   cooldown_days: 7,
   image_url: null,
-};
+});
 
 export function promptSettings(db: DatabaseSync, accountId: string): PromptSettings {
   ensurePushConfig(db, accountId);
   const raw = get<{ prompt: string | null }>(db, 'SELECT prompt FROM push_config WHERE account_id = ?', accountId)?.prompt;
-  return { ...DEFAULT_PROMPT, ...parseJson<Partial<PromptSettings>>(raw, {}) };
+  return { ...defaultPrompt(), ...parseJson<Partial<PromptSettings>>(raw, {}) };
 }
 
 export function savePromptSettings(db: DatabaseSync, accountId: string, settings: PromptSettings): PromptSettings {
@@ -231,13 +237,13 @@ export const transactionalSchema = z
   .object({
     email: z.string().trim().max(254).optional(),
     contact_id: z.string().trim().max(64).optional(),
-    title: z.string().trim().min(1, 'Le titre est requis').max(120),
-    body: z.string().trim().min(1, 'Le message est requis').max(500),
+    title: z.string().trim().min(1, zmsg('Le titre est requis', 'Title is required')).max(120),
+    body: z.string().trim().min(1, zmsg('Le message est requis', 'Message is required')).max(500),
     url: z.string().trim().max(2000).nullable().optional(),
     image_url: z.string().trim().url().max(2000).nullable().optional(),
     channels: z.array(z.enum(CHANNELS)).min(1).optional(),
   })
-  .refine((v) => v.email || v.contact_id, { message: 'Indiquez email ou contact_id' });
+  .refine((v) => v.email || v.contact_id, zmsg('Indiquez email ou contact_id', 'Provide email or contact_id'));
 
 /**
  * One notification to one customer, sent right away (order shipped, appointment reminder,

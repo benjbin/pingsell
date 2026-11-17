@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { t } from '@/lib/i18n';
 import { spacing, useColors } from '@/lib/theme';
 
 export interface BarDatum {
@@ -43,7 +44,10 @@ export function BarChart({
       <View
         style={[styles.plot, { height, gap, borderBottomColor: c.border }]}
         accessibilityRole="image"
-        accessibilityLabel={`Graphique : ${primaryLabel}${secondaryLabel ? ` et ${secondaryLabel}` : ''}`}
+        accessibilityLabel={t(
+          `Graphique : ${primaryLabel}${secondaryLabel ? ` et ${secondaryLabel}` : ''}`,
+          `Chart: ${primaryLabel}${secondaryLabel ? ` and ${secondaryLabel}` : ''}`,
+        )}
       >
         {data.map((d, i) => (
           <View key={`${d.label}-${i}`} style={styles.column}>

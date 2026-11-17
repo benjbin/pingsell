@@ -25,6 +25,7 @@ import {
 import { SyncInProgressError, isSyncRunning, runFullSync } from './sync.js';
 import { SHOPIFY_SCOPES, type ShopifyConfig } from './types.js';
 import { deleteWebhooks, dispatchWebhook, registerWebhooks } from './webhooks.js';
+import { t, withLang, accountLang } from '../../i18n.js';
 
 export { getShopifyRevenue, getCampaignAttributedRevenue } from './revenue.js';
 export { processAbandonedCheckouts } from './checkouts.js';
@@ -58,7 +59,7 @@ interface ShopInfo {
 /** Reads request.accountId (declared by core) without depending on the declaration merge. */
 function accountIdOf(request: FastifyRequest): string {
   const id = (request as FastifyRequest & { accountId?: string }).accountId;
-  if (!id) throw new HttpError(401, 'Non authentifié');
+  if (!id) throw new HttpError(401, t('Non authentifié', 'Not authenticated'));
   return id;
 }
 
@@ -79,7 +80,7 @@ function sendError(reply: FastifyReply, err: unknown, request: FastifyRequest): 
     return reply.code(code).send({ error: err.message });
   }
   request.log.error({ err }, 'Shopify : erreur inattendue');
-  return reply.code(500).send({ error: 'Erreur interne de l’intégration Shopify' });
+  return reply.code(500).send({ error: t('Erreur interne de l’intégration Shopify', 'Internal Shopify integration error') });
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
@@ -117,7 +118,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
       // write_* implies read_*.
       const missing = SHOPIFY_SCOPES.filter((s) => !scopes!.includes(s) && !scopes!.includes(s.replace('read_', 'write_')));
       if (missing.length) {
-        throw new HttpError(400, `Autorisations manquantes sur l’application Shopify : ${missing.join(', ')}`);
+        throw new HttpError(400, t(`Autorisations manquantes sur l’application Shopify : ${missing.join(', ')}`, `Missing permissions on the Shopify app: ${missing.join(', ')}`));
       }
     }
 
@@ -137,7 +138,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
     const client = clientFor(ctx.db, accountId, canonical);
     const hooks = await registerWebhooks(client, ctx.config.publicUrl).catch((err: Error) => ({
       webhooks: [],
-      error: `Webhooks non enregistrés : ${err.message}`,
+      error: t(`Webhooks non enregistrés : ${err.message}`, `Webhooks not registered: ${err.message}`),
     }));
     updateIntegration(ctx.db, accountId, { webhooks: hooks.webhooks, webhooks_error: hooks.error });
     if (hooks.error) log.warn({ shop: canonical }, hooks.error);
@@ -170,7 +171,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
       const accountId = accountIdOf(request);
       const body = request.body ?? {};
       const shop = normalizeShopDomain(body.shop_domain);
-      if (!shop) throw new HttpError(400, 'Domaine de boutique invalide (attendu : ma-boutique.myshopify.com)');
+      if (!shop) throw new HttpError(400, t('Domaine de boutique invalide (attendu : ma-boutique.myshopify.com)', 'Invalid store domain (expected: my-store.myshopify.com)'));
 
       const accessToken = str(body.access_token);
       const clientId = str(body.client_id);
@@ -194,7 +195,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
           request.log,
         );
       } else {
-        throw new HttpError(400, 'Fournissez access_token (jeton Admin API) ou client_id + client_secret');
+        throw new HttpError(400, t('Fournissez access_token (jeton Admin API) ou client_id + client_secret', 'Provide access_token (Admin API token) or client_id + client_secret'));
       }
       return reply.code(201).send(result);
     } catch (err) {
@@ -220,10 +221,10 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
         const accountId = accountIdOf(request);
         const { shopifyApiKey, shopifyApiSecret } = ctx.config;
         if (!shopifyApiKey || !shopifyApiSecret) {
-          throw new HttpError(400, 'OAuth Shopify non configuré : définissez SHOPIFY_API_KEY et SHOPIFY_API_SECRET');
+          throw new HttpError(400, t('OAuth Shopify non configuré : définissez SHOPIFY_API_KEY et SHOPIFY_API_SECRET', 'Shopify OAuth isn’t configured: set SHOPIFY_API_KEY and SHOPIFY_API_SECRET'));
         }
         const shop = normalizeShopDomain(request.query.shop);
-        if (!shop) throw new HttpError(400, 'Paramètre shop invalide (attendu : ma-boutique.myshopify.com)');
+        if (!shop) throw new HttpError(400, t('Paramètre shop invalide (attendu : ma-boutique.myshopify.com)', 'Invalid shop parameter (expected: my-store.myshopify.com)'));
         const url = buildInstallUrl(shop, shopifyApiKey, ctx.config.publicUrl, createState(accountId, shop));
         const wantsJson = request.query.format === 'json' || (request.headers.accept ?? '').includes('application/json');
         return wantsJson ? { url } : reply.redirect(url);
@@ -238,21 +239,21 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
       reply.redirect(`${webUrl}/integrations?shopify=error&message=${encodeURIComponent(message)}`);
     try {
       const { shopifyApiKey, shopifyApiSecret } = ctx.config;
-      if (!shopifyApiKey || !shopifyApiSecret) return fail('OAuth Shopify non configuré');
+      if (!shopifyApiKey || !shopifyApiSecret) return fail(t('OAuth Shopify non configuré', 'Shopify OAuth isn’t configured'));
       const query = request.query;
-      if (!verifyOAuthHmac(query, shopifyApiSecret)) return fail('Signature Shopify invalide');
+      if (!verifyOAuthHmac(query, shopifyApiSecret)) return fail(t('Signature Shopify invalide', 'Invalid Shopify signature'));
       const shop = normalizeShopDomain(query.shop);
-      if (!shop) return fail('Boutique invalide');
+      if (!shop) return fail(t('Boutique invalide', 'Invalid store'));
       const install = consumeState(query.state, shop);
-      if (!install) return fail('Session d’installation expirée, veuillez recommencer');
-      if (!query.code) return fail('Code d’autorisation manquant');
+      if (!install) return fail(t('Session d’installation expirée, veuillez recommencer', 'Installation session expired, please start again'));
+      if (!query.code) return fail(t('Code d’autorisation manquant', 'Missing authorization code'));
 
       const token = await requestAccessToken(shop, { client_id: shopifyApiKey, client_secret: shopifyApiSecret, code: query.code });
       await establish(install.accountId, shop, token.access_token, 'oauth', {}, request.log);
       return reply.redirect(`${webUrl}/integrations?shopify=connected`);
     } catch (err) {
       request.log.warn({ err }, 'Shopify : échec du callback OAuth');
-      return fail(err instanceof Error ? err.message : 'Échec de la connexion Shopify');
+      return fail(err instanceof Error ? err.message : t('Échec de la connexion Shopify', 'Shopify connection failed'));
     }
   });
 
@@ -261,7 +262,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
     try {
       const accountId = accountIdOf(request);
       const row = getIntegration(ctx.db, accountId);
-      if (!row || row.status !== 'connected' || !row.access_token) throw new HttpError(400, 'Aucune boutique Shopify connectée');
+      if (!row || row.status !== 'connected' || !row.access_token) throw new HttpError(400, t('Aucune boutique Shopify connectée', 'No Shopify store connected'));
       return await runFullSync(ctx, accountId, clientFor(ctx.db, accountId, row.shop_domain));
     } catch (err) {
       return sendError(reply, err, request);
@@ -273,7 +274,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
     try {
       const accountId = accountIdOf(request);
       const row = getIntegration(ctx.db, accountId);
-      if (!row) throw new HttpError(404, 'Aucune intégration Shopify');
+      if (!row) throw new HttpError(404, t('Aucune intégration Shopify', 'No Shopify integration'));
       if (row.access_token && row.status === 'connected') {
         await deleteWebhooks(clientFor(ctx.db, accountId, row.shop_domain)).catch((err: Error) =>
           request.log.warn({ err }, 'Shopify : suppression des webhooks impossible'),
@@ -293,10 +294,10 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
       const body = request.body ?? {};
       const type = body.type;
       if (type !== 'order' && type !== 'cart_abandoned' && type !== 'order_fulfilled') {
-        throw new HttpError(400, "type doit valoir 'order', 'order_fulfilled' ou 'cart_abandoned'");
+        throw new HttpError(400, t("type doit valoir 'order', 'order_fulfilled' ou 'cart_abandoned'", "type must be 'order', 'order_fulfilled' or 'cart_abandoned'"));
       }
       const email = cleanEmail(body.email);
-      if (!email) throw new HttpError(400, 'Adresse email invalide');
+      if (!email) throw new HttpError(400, t('Adresse email invalide', 'Invalid email address'));
       const total = body.total !== undefined ? toNumber(body.total) : Math.round((20 + Math.random() * 130) * 100) / 100;
       const currency = 'EUR';
       const existing = findContactByEmail(ctx.db, accountId, email);
@@ -330,7 +331,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
           order_name: `#SIM${Math.floor(1000 + Math.random() * 9000)}`,
           total,
           currency,
-          line_items: [{ title: 'Produit de démonstration', quantity: 1, price: total }],
+          line_items: [{ title: t('Produit de démonstration', 'Demo product'), quantity: 1, price: total }],
           source: 'simulation',
         };
         ctx.recordEvent(accountId, contactId, 'order', data);
@@ -341,7 +342,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
       const { contactId, created } = upsertShopifyContact(ctx, accountId, { email, marketing_state });
       const checkoutId = `sim_${randomUUID()}`;
       const now = new Date().toISOString();
-      const lineItems = [{ title: 'Produit de démonstration', quantity: 1, price: total }];
+      const lineItems = [{ title: t('Produit de démonstration', 'Demo product'), quantity: 1, price: total }];
       ctx.db
         .prepare(
           `INSERT INTO shopify_checkouts (id, account_id, shop_domain, checkout_id, email, total, currency, line_items, status, created_at, updated_at, abandoned_at)
@@ -379,7 +380,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
       const topic = header('x-shopify-topic') ?? '';
       const shop = normalizeShopDomain(header('x-shopify-shop-domain'));
       const webhookId = header('x-shopify-webhook-id') ?? header('x-shopify-event-id');
-      if (!hmac || !shop || !topic) return reply.code(401).send({ error: 'Webhook Shopify non signé' });
+      if (!hmac || !shop || !topic) return reply.code(401).send({ error: t('Webhook Shopify non signé', 'Unsigned Shopify webhook') });
 
       const integrations = getIntegrationsByShop(ctx.db, shop);
       const globalSecret = ctx.config.shopifyApiSecret;
@@ -390,7 +391,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
             const secret = getCredentials(ctx.db, row.account_id)?.webhook_secret;
             return Boolean(secret) && verifyWebhookHmac(raw, hmac, secret!);
           });
-      if (!globalOk && targets.length === 0) return reply.code(401).send({ error: 'Signature HMAC invalide' });
+      if (!globalOk && targets.length === 0) return reply.code(401).send({ error: t('Signature HMAC invalide', 'Invalid HMAC signature') });
 
       // GDPR mandatory topics: acknowledged (Pingsell keeps no Shopify data beyond contacts).
       if (topic.startsWith('customers/data_request') || topic.startsWith('customers/redact') || topic.startsWith('shop/redact')) {
@@ -405,13 +406,14 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
       try {
         for (const row of targets) {
           if (row.status !== 'connected' && topic !== 'app/uninstalled') continue;
-          dispatchWebhook(ctx, row.account_id, shop, topic, payload);
+          // Shopify sends no language: texts stored for the merchant follow the account's language.
+          withLang(accountLang(ctx.db, row.account_id), () => dispatchWebhook(ctx, row.account_id, shop, topic, payload));
         }
       } catch (err) {
         // Let Shopify retry: forget the delivery id.
         if (webhookId) ctx.db.prepare('DELETE FROM shopify_webhook_log WHERE webhook_id = ?').run(webhookId);
         request.log.error({ err, shop, topic }, 'Shopify : échec du traitement du webhook');
-        return reply.code(500).send({ error: 'Échec du traitement du webhook' });
+        return reply.code(500).send({ error: t('Échec du traitement du webhook', 'Webhook processing failed') });
       }
       return { ok: true };
     });

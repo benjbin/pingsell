@@ -2,10 +2,11 @@ import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowRight, Check, ChevronDown, Minus } from "lucide-react";
 import { PLAN_TABLE, PLANS, PRICING, SIGNUP_URL, VOLUMES, planPrice, type Plan, type Volume } from "../content";
+import { LOCALE, t } from "../i18n";
 
 const EASE = [0.2, 0.8, 0.2, 1] as const;
-const fmt = (n: number) => n.toLocaleString("fr-FR").replace(/\u202f/g, "\u00a0");
-const short = (n: number) => (n >= 1_000_000 ? `${n / 1_000_000} M` : `${n / 1000} k`);
+const fmt = (n: number) => n.toLocaleString(LOCALE).replace(/\u202f/g, "\u00a0");
+const short = (n: number) => (n >= 1_000_000 ? t(`${n / 1_000_000} M`, `${n / 1_000_000}M`) : t(`${n / 1000} k`, `${n / 1000}K`));
 
 /** Three SaaS plans with monthly / yearly billing and an email-volume picker for the paid plans. */
 export function PricingSection() {
@@ -22,21 +23,24 @@ export function PricingSection() {
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[620px] bg-[radial-gradient(55%_60%_at_50%_0%,#dce6ff_0%,transparent_70%)]" />
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <div className="reveal mx-auto max-w-2xl text-center">
-          <p className="eyebrow">Tarifs</p>
+          <p className="eyebrow">{t("Tarifs", "Pricing")}</p>
           <h2 className="display mt-4 text-[38px] leading-[0.92] sm:text-[52px]">
-            Une formule pour <em className="text-brand-500">chaque étape.</em>
+            {t(<>Une formule pour <em className="text-brand-500">chaque étape.</em></>, <>A plan for <em className="text-brand-500">every stage.</em></>)}
           </h2>
           <p className="mt-5 text-[17px] leading-relaxed text-slate-600">
-            {fmt(PRICING.freeEmails)} emails offerts chaque mois, puis les automatisations dès {proFrom} € par mois. Vos contacts restent illimités : seul le volume d'emails compte.
+            {t(
+              `${fmt(PRICING.freeEmails)} emails offerts chaque mois, puis les automatisations dès ${fmt(proFrom)} € par mois. Vos contacts restent illimités : seul le volume d'emails compte.`,
+              `${fmt(PRICING.freeEmails)} free emails every month, then automations from €${fmt(proFrom)} per month. Contacts are always unlimited: only email volume counts.`,
+            )}
           </p>
         </div>
 
         {/* Controls */}
         <div className="reveal mt-10 flex flex-col items-center gap-5">
-          <div role="group" aria-label="Facturation" className="flex rounded-full bg-slate-100 p-1 ring-1 ring-slate-900/[0.06]">
+          <div role="group" aria-label={t("Facturation", "Billing")} className="flex rounded-full bg-slate-100 p-1 ring-1 ring-slate-900/[0.06]">
             {[
-              [false, "Mensuel"],
-              [true, "Annuel"],
+              [false, t("Mensuel", "Monthly")],
+              [true, t("Annuel", "Yearly")],
             ].map(([y, label]) => {
               const on = yearly === y;
               return (
@@ -51,7 +55,7 @@ export function PricingSection() {
                   <span className="relative">{label as string}</span>
                   {y && (
                     <span className={`relative rounded-full px-1.5 py-0.5 text-[10px] font-bold ${on ? "bg-brand-500 text-white" : "bg-brand-100 text-brand-700"}`}>
-                      -{Math.round(PRICING.yearlyDiscount * 100)} %
+                      {t(`-${Math.round(PRICING.yearlyDiscount * 100)} %`, `-${Math.round(PRICING.yearlyDiscount * 100)}%`)}
                     </span>
                   )}
                 </button>
@@ -62,7 +66,7 @@ export function PricingSection() {
           <div className="w-full max-w-xl">
             <div className="flex items-baseline justify-between gap-4">
               <label htmlFor="plan-volume" className="text-sm font-medium text-slate-600">
-                Emails envoyés par mois
+                {t("Emails envoyés par mois", "Emails sent per month")}
               </label>
               <span className="font-display text-xl font-extrabold tracking-tight text-slate-900 tabular-nums">{fmt(volume)}</span>
             </div>
@@ -74,7 +78,7 @@ export function PricingSection() {
               value={vi}
               onChange={(e) => setVi(Number(e.target.value))}
               className="mt-3 w-full accent-brand-500"
-              aria-valuetext={`${fmt(volume)} emails par mois`}
+              aria-valuetext={t(`${fmt(volume)} emails par mois`, `${fmt(volume)} emails per month`)}
             />
             <div className="mt-1 flex justify-between text-[11px] text-slate-400" aria-hidden>
               {VOLUMES.map((v, i) => (
@@ -94,7 +98,10 @@ export function PricingSection() {
         </div>
 
         <p className="reveal mt-6 text-center text-sm text-slate-500">
-          Prix HT. Sans engagement en mensuel. Les {fmt(PRICING.freeEmails)} premiers emails sont toujours offerts, sans carte bancaire.
+          {t(
+            `Prix HT. Sans engagement en mensuel. Les ${fmt(PRICING.freeEmails)} premiers emails sont toujours offerts, sans carte bancaire.`,
+            `Prices exclude VAT. No commitment on monthly billing. Your first ${fmt(PRICING.freeEmails)} emails are always free, no credit card required.`,
+          )}
         </p>
 
         {/* Comparison */}
@@ -105,7 +112,7 @@ export function PricingSection() {
             onClick={() => setOpen((o) => !o)}
             className="inline-flex h-11 items-center gap-2 rounded-full px-5 font-display text-sm font-semibold text-slate-900 ring-1 ring-slate-900/15 transition hover:ring-slate-900/40"
           >
-            {open ? "Masquer la comparaison" : "Comparer les formules"}
+            {open ? t("Masquer la comparaison", "Hide comparison") : t("Comparer les formules", "Compare plans")}
             <ChevronDown className={`size-4 transition-transform ${open ? "rotate-180" : ""}`} />
           </button>
         </div>
@@ -122,7 +129,7 @@ export function PricingSection() {
                 <table className="w-full min-w-[560px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-900/[0.07]">
-                      <th className="p-4 font-display text-xs font-bold tracking-wider text-slate-400 uppercase">Fonctionnalité</th>
+                      <th className="p-4 font-display text-xs font-bold tracking-wider text-slate-400 uppercase">{t("Fonctionnalité", "Feature")}</th>
                       {PLANS.map((p) => (
                         <th key={p.id} className={`p-4 text-center font-display text-sm font-extrabold ${p.highlight ? "text-brand-500" : "text-slate-900"}`}>
                           {p.name}
@@ -137,9 +144,9 @@ export function PricingSection() {
                         {cells.map((c, j) => (
                           <td key={j} className={`p-4 text-center ${PLANS[j].highlight ? "bg-brand-50/60" : ""}`}>
                             {c === true ? (
-                              <Check className="mx-auto size-4 text-brand-500" aria-label="Inclus" />
+                              <Check className="mx-auto size-4 text-brand-500" aria-label={t("Inclus", "Included")} />
                             ) : c === false ? (
-                              <Minus className="mx-auto size-4 text-slate-300" aria-label="Non inclus" />
+                              <Minus className="mx-auto size-4 text-slate-300" aria-label={t("Non inclus", "Not included")} />
                             ) : (
                               <span className="font-medium text-slate-900">{c}</span>
                             )}
@@ -179,7 +186,7 @@ function PlanCard({ plan, volume, yearly, reduce, index }: { plan: Plan; volume:
             <div className="absolute -top-24 -right-16 size-64 rounded-full bg-brand-500/40 blur-[80px]" />
           </div>
           <span className="absolute -top-3 left-7 rounded-full bg-brand-500 px-3 py-1 font-display text-[11px] font-bold tracking-wide text-white uppercase shadow-lg">
-            Recommandé
+            {t("Recommandé", "Recommended")}
           </span>
         </>
       )}
@@ -198,18 +205,18 @@ function PlanCard({ plan, volume, yearly, reduce, index }: { plan: Plan; volume:
                 transition={{ duration: reduce ? 0 : 0.35, ease: EASE }}
                 className="display block text-[52px] leading-none tabular-nums"
               >
-                {price} €
+                {t(`${fmt(price)} €`, `€${fmt(price)}`)}
               </motion.span>
             </AnimatePresence>
           </div>
-          <span className={`pb-1.5 text-sm ${dark ? "text-white/60" : "text-slate-500"}`}>/ mois</span>
+          <span className={`pb-1.5 text-sm ${dark ? "text-white/60" : "text-slate-500"}`}>{t("/ mois", "/ month")}</span>
         </div>
         <p className={`mt-2 h-5 text-[13px] ${dark ? "text-white/55" : "text-slate-500"}`}>
           {plan.prices
             ? yearly
-              ? `Facturé annuellement · ${monthly} € en mensuel`
-              : `${fmt(volume)} emails par mois`
-            : `${fmt(PRICING.freeEmails)} emails par mois, pour toujours`}
+              ? t(`Facturé annuellement · ${fmt(monthly)} € en mensuel`, `Billed yearly · €${fmt(monthly)} billed monthly`)
+              : t(`${fmt(volume)} emails par mois`, `${fmt(volume)} emails per month`)
+            : t(`${fmt(PRICING.freeEmails)} emails par mois, pour toujours`, `${fmt(PRICING.freeEmails)} emails per month, forever`)}
         </p>
 
         <a

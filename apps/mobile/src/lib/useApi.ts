@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from './auth';
 import type { ApiClient } from './api';
+import { t } from './i18n';
 
 interface QueryState<T> {
   data: T | null;
@@ -47,7 +48,7 @@ export function useApiQuery<T>(
       setError(null);
     } catch (e) {
       if (id !== requestId.current) return;
-      setError(e instanceof Error ? e.message : 'Une erreur est survenue');
+      setError(e instanceof Error ? e.message : t('Une erreur est survenue', 'Something went wrong'));
     } finally {
       if (id === requestId.current) {
         setSettled(true);

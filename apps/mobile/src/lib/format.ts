@@ -1,6 +1,5 @@
+import { LOCALE, t } from './i18n';
 import type { CampaignStatus, ContactStatus, EventType, MessageStatus } from './types';
-
-const LOCALE = 'fr-FR';
 
 export function formatNumber(value: number | null | undefined): string {
   return new Intl.NumberFormat(LOCALE).format(value ?? 0);
@@ -48,40 +47,40 @@ export function plural(count: number, singular: string, pluralForm = `${singular
 export type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
 
 export const campaignStatusLabel: Record<CampaignStatus, { label: string; tone: Tone }> = {
-  draft: { label: 'Brouillon', tone: 'neutral' },
-  scheduled: { label: 'Programmée', tone: 'info' },
-  sending: { label: "En cours d'envoi", tone: 'warning' },
-  sent: { label: 'Envoyée', tone: 'success' },
-  failed: { label: 'Échec', tone: 'danger' },
+  draft: { label: t('Brouillon', 'Draft'), tone: 'neutral' },
+  scheduled: { label: t('Programmée', 'Scheduled'), tone: 'info' },
+  sending: { label: t("En cours d'envoi", 'Sending'), tone: 'warning' },
+  sent: { label: t('Envoyée', 'Sent'), tone: 'success' },
+  failed: { label: t('Échec', 'Failed'), tone: 'danger' },
 };
 
 export const contactStatusLabel: Record<ContactStatus, { label: string; tone: Tone }> = {
-  subscribed: { label: 'Abonné', tone: 'success' },
-  unsubscribed: { label: 'Désabonné', tone: 'neutral' },
-  bounced: { label: 'Rebond', tone: 'warning' },
-  complained: { label: 'Plainte', tone: 'danger' },
+  subscribed: { label: t('Abonné', 'Subscribed'), tone: 'success' },
+  unsubscribed: { label: t('Désabonné', 'Unsubscribed'), tone: 'neutral' },
+  bounced: { label: t('Rebond', 'Bounced'), tone: 'warning' },
+  complained: { label: t('Plainte', 'Complaint'), tone: 'danger' },
 };
 
 export const messageStatusLabel: Record<MessageStatus, string> = {
-  queued: 'En file',
-  sent: 'Envoyé',
-  failed: 'Échec',
-  bounced: 'Rebond',
+  queued: t('En file', 'Queued'),
+  sent: t('Envoyé', 'Sent'),
+  failed: t('Échec', 'Failed'),
+  bounced: t('Rebond', 'Bounced'),
 };
 
 export const eventLabel: Record<EventType, { label: string; icon: string }> = {
-  open: { label: 'Ouverture', icon: 'mail-open-outline' },
-  click: { label: 'Clic', icon: 'link-outline' },
-  unsubscribe: { label: 'Désabonnement', icon: 'remove-circle-outline' },
-  bounce: { label: 'Rebond', icon: 'alert-circle-outline' },
-  order: { label: 'Commande', icon: 'bag-check-outline' },
-  cart_abandoned: { label: 'Panier abandonné', icon: 'cart-outline' },
-  tag_added: { label: 'Tag ajouté', icon: 'pricetag-outline' },
-  contact_created: { label: 'Contact créé', icon: 'person-add-outline' },
+  open: { label: t('Ouverture', 'Open'), icon: 'mail-open-outline' },
+  click: { label: t('Clic', 'Click'), icon: 'link-outline' },
+  unsubscribe: { label: t('Désabonnement', 'Unsubscribe'), icon: 'remove-circle-outline' },
+  bounce: { label: t('Rebond', 'Bounce'), icon: 'alert-circle-outline' },
+  order: { label: t('Commande', 'Order'), icon: 'bag-check-outline' },
+  cart_abandoned: { label: t('Panier abandonné', 'Abandoned cart'), icon: 'cart-outline' },
+  tag_added: { label: t('Tag ajouté', 'Tag added'), icon: 'pricetag-outline' },
+  contact_created: { label: t('Contact créé', 'Contact created'), icon: 'person-add-outline' },
 };
 
 export const sourceLabel: Record<string, string> = {
-  manual: 'Manuel',
+  manual: t('Manuel', 'Manual'),
   import: 'Import',
   shopify: 'Shopify',
   api: 'API',

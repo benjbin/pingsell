@@ -3,6 +3,7 @@ import { motion, useInView, useMotionValue, useReducedMotion, useScroll, useSpri
 import { BLOCKS } from "../content";
 import { B_EMAILS } from "./b-emails";
 import { useFinePointer } from "./motion-kit";
+import { t } from "../i18n";
 
 const CARD_NAMES = ["Maison Brume", "Atelier Nord", "Ferme Colibri", "Pétale Labo"];
 const CYCLE_MS = 3000;
@@ -19,10 +20,10 @@ const GRAIN =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.03 0 0 0 0 0.09 0 0 0 0 0.2 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
 
 const BRAND_LINES = [
-  "Mode, serif élégant et grandes photos.",
-  "Soldes avec code promo et compte à rebours.",
-  "Épicerie fine, relance de panier abandonné.",
-  "Cosmétique, remerciement et code fidélité.",
+  t("Mode, serif élégant et grandes photos.", "Fashion, elegant serif and big photos."),
+  t("Soldes avec code promo et compte à rebours.", "Sale with a promo code and countdown."),
+  t("Épicerie fine, relance de panier abandonné.", "Fine foods, abandoned cart follow-up."),
+  t("Cosmétique, remerciement et code fidélité.", "Cosmetics, thank-you and loyalty code."),
 ];
 
 /** "Un email pour chaque boutique": 3D fan of example emails, cycling (or picked) one by one. */
@@ -52,14 +53,17 @@ export function BrandShowcase() {
       <div className="pointer-events-none absolute inset-0 -z-10 opacity-[0.18] mix-blend-multiply" style={{ backgroundImage: GRAIN }} />
       <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-24 sm:px-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:py-32">
         <div>
-          <p className="eyebrow">Exemples</p>
+          <p className="eyebrow">{t("Exemples", "Examples")}</p>
           <h2 className="display mt-4 text-[38px] leading-[0.92] sm:text-[52px]">
-            Un email pour <em className="text-brand-500">chaque boutique.</em>
+            {t(<>Un email pour <em className="text-brand-500">chaque boutique.</em></>, <>An email for <em className="text-brand-500">every store.</em></>)}
           </h2>
           <p className="mt-5 max-w-md text-[17px] leading-relaxed text-slate-600">
-            Mode, cosmétique, épicerie, déco : partez d'une page vierge ou d'un modèle, et faites-en votre style. Ici, quatre marques fictives.
+            {t(
+              "Mode, cosmétique, épicerie, déco : partez d'une page vierge ou d'un modèle, et faites-en votre style. Ici, quatre marques fictives.",
+              "Fashion, cosmetics, food, home decor: start from a blank page or a template and make it your own. Here are four fictional brands.",
+            )}
           </p>
-          <div role="group" aria-label="Exemples d'emails" className="mt-8 space-y-1.5">
+          <div role="group" aria-label={t("Exemples d'emails", "Email examples")} className="mt-8 space-y-1.5">
             {CARD_NAMES.map((n, i) => {
               const on = active === i;
               return (
@@ -163,8 +167,8 @@ function CardStage({ active, reduced, interactive, progress }: { active: number;
   // Entrance delays only apply once.
   const [entered, setEntered] = useState(false);
   useEffect(() => {
-    const t = window.setTimeout(() => setEntered(true), 1400);
-    return () => window.clearTimeout(t);
+    const tid = window.setTimeout(() => setEntered(true), 1400);
+    return () => window.clearTimeout(tid);
   }, []);
 
   return (
@@ -262,10 +266,10 @@ function BlockTicker() {
     <div className="relative border-y border-slate-900/[0.07] bg-white/70 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center">
         <p className="relative z-10 hidden shrink-0 border-r border-slate-900/[0.07] bg-white px-6 py-3.5 font-mono text-[10px] tracking-[0.18em] text-slate-500 uppercase sm:block lg:px-8">
-          {BLOCKS.length} blocs
+          {t(`${BLOCKS.length} blocs`, `${BLOCKS.length} blocks`)}
         </p>
         <div className="relative min-w-0 flex-1 overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_8%,black_92%,transparent)]">
-          <ul className="marquee flex w-max items-center gap-6 py-3.5 pr-6" aria-label="Blocs de l'éditeur">
+          <ul className="marquee flex w-max items-center gap-6 py-3.5 pr-6" aria-label={t("Blocs de l'éditeur", "Editor blocks")}>
             {items.map((b, i) => (
               <li key={i} aria-hidden={i >= BLOCKS.length} className="flex items-center gap-6 font-display text-[13px] font-bold tracking-tight whitespace-nowrap text-slate-700 uppercase">
                 {b}

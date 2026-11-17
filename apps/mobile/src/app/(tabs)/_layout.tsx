@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router/js-tabs';
 
 import type { IconName } from '@/components/ui';
+import { t } from '@/lib/i18n';
 import { useColors } from '@/lib/theme';
 
 function tabIcon(active: IconName, inactive: IconName) {
@@ -27,14 +28,14 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Accueil',
+          title: t('Accueil', 'Home'),
           tabBarIcon: tabIcon('home', 'home-outline'),
         }}
       />
       <Tabs.Screen
         name="campaigns"
         options={{
-          title: 'Campagnes',
+          title: t('Campagnes', 'Campaigns'),
           headerShown: false,
           tabBarIcon: tabIcon('paper-plane', 'paper-plane-outline'),
         }}
@@ -50,7 +51,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Réglages',
+          title: t('Réglages', 'Settings'),
           tabBarIcon: tabIcon('settings', 'settings-outline'),
         }}
       />

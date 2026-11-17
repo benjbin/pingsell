@@ -1,5 +1,6 @@
 // Minimal Shopify Admin API client built on global fetch (no SDK).
 import { SHOPIFY_API_VERSION } from './types.js';
+import { t } from '../../i18n.js';
 
 const MAX_RETRIES = 4;
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -110,9 +111,16 @@ export class ShopifyClient {
         continue;
       }
       if (body.errors?.length) {
-        throw new ShopifyError(`Erreur GraphQL Shopify : ${body.errors.map((e) => e.message).join(' ; ')}`, 400, body.errors);
+        throw new ShopifyError(
+          t(
+            `Erreur GraphQL Shopify : ${body.errors.map((e) => e.message).join(' ; ')}`,
+            `Shopify GraphQL error: ${body.errors.map((e) => e.message).join('; ')}`,
+          ),
+          400,
+          body.errors,
+        );
       }
-      if (!body.data) throw new ShopifyError('Réponse GraphQL Shopify vide', 502);
+      if (!body.data) throw new ShopifyError(t('Réponse GraphQL Shopify vide', 'Empty Shopify GraphQL response'), 502);
       // Be polite with the leaky bucket: pause when we're running low.
       const status = body.extensions?.cost?.throttleStatus;
       if (status && status.currentlyAvailable < status.maximumAvailable * 0.1) {
@@ -136,7 +144,7 @@ export class ShopifyClient {
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch (err) {
-      throw new ShopifyError(`Impossible de joindre ${this.shop} : ${(err as Error).message}`, 502);
+      throw new ShopifyError(t(`Impossible de joindre ${this.shop} : ${(err as Error).message}`, `Can’t reach ${this.shop}: ${(err as Error).message}`), 502);
     }
   }
 }
@@ -150,12 +158,12 @@ function safeJson(text: string): unknown {
 }
 
 function describeHttpError(status: number, body: unknown): string {
-  if (status === 401) return 'Jeton d’accès Shopify invalide ou révoqué';
-  if (status === 403) return 'Accès refusé par Shopify : vérifiez les autorisations (scopes) de l’application';
-  if (status === 404) return 'Boutique Shopify introuvable';
+  if (status === 401) return t('Jeton d’accès Shopify invalide ou révoqué', 'Shopify access token is invalid or revoked');
+  if (status === 403) return t('Accès refusé par Shopify : vérifiez les autorisations (scopes) de l’application', 'Access denied by Shopify: check the app’s permissions (scopes)');
+  if (status === 404) return t('Boutique Shopify introuvable', 'Shopify store not found');
   const detail =
     body && typeof body === 'object' && 'errors' in body ? JSON.stringify((body as { errors: unknown }).errors) : '';
-  return `Erreur Shopify (HTTP ${status})${detail ? ` : ${detail}` : ''}`;
+  return t(`Erreur Shopify (HTTP ${status})${detail ? ` : ${detail}` : ''}`, `Shopify error (HTTP ${status})${detail ? `: ${detail}` : ''}`);
 }
 
 /** Exchanges credentials at the shop's OAuth token endpoint (authorization code or client credentials). */
@@ -172,13 +180,19 @@ export async function requestAccessToken(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (err) {
-    throw new ShopifyError(`Impossible de joindre ${shop} : ${(err as Error).message}`, 502);
+    throw new ShopifyError(t(`Impossible de joindre ${shop} : ${(err as Error).message}`, `Can’t reach ${shop}: ${(err as Error).message}`), 502);
   }
   const text = await res.text();
   const body = safeJson(text) as { access_token?: string; scope?: string; expires_in?: number; error_description?: string };
   if (!res.ok || !body?.access_token) {
-    const reason = typeof body === 'object' && body?.error_description ? ` : ${body.error_description}` : '';
-    throw new ShopifyError(`Échec de l’obtention du jeton Shopify (HTTP ${res.status})${reason}`, res.status === 200 ? 502 : 400);
+    const detail = typeof body === 'object' && body?.error_description ? body.error_description : '';
+    throw new ShopifyError(
+      t(
+        `Échec de l’obtention du jeton Shopify (HTTP ${res.status})${detail ? ` : ${detail}` : ''}`,
+        `Couldn’t get the Shopify token (HTTP ${res.status})${detail ? `: ${detail}` : ''}`,
+      ),
+      res.status === 200 ? 502 : 400,
+    );
   }
   return { access_token: body.access_token, scope: body.scope, expires_in: body.expires_in };
 }

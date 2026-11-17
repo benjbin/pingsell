@@ -23,6 +23,7 @@ import { useToast } from "../components/ui/Toast";
 import { ApiGuide, AppGuide, FileGuide, ShopifyGuide } from "../components/connect/ConnectGuides";
 import { PingsellLogo } from "../components/brand/PingsellLogo";
 import { DEFAULT_EMAIL_HTML } from "./campaigns/defaultTemplate";
+import { t } from "../lib/i18n";
 
 /* -------------------------------------------------------------------------- */
 /* Sources                                                                    */
@@ -31,10 +32,10 @@ import { DEFAULT_EMAIL_HTML } from "./campaigns/defaultTemplate";
 type SourceId = "shopify" | "api" | "app" | "file";
 
 const SOURCES: Array<{ id: SourceId; icon: LucideIcon; title: string; text: string; effort: string }> = [
-  { id: "shopify", icon: ShoppingBag, title: "Ma boutique Shopify", text: "Clients, commandes et paniers abandonnés synchronisés.", effort: "1 clic" },
-  { id: "api", icon: Code2, title: "Mon site ou mon logiciel", text: "CRM, back-office, caisse, site sur mesure : tout ce qui sait appeler une API.", effort: "≈ 5 min" },
-  { id: "app", icon: Smartphone, title: "Mon app iOS / Android", text: "Notifications sur l'écran verrouillé et centre de notifications dans l'app.", effort: "SDK prêt" },
-  { id: "file", icon: FileSpreadsheet, title: "Un fichier de contacts", text: "Export Excel ou CSV de votre ancien outil.", effort: "1 min" },
+  { id: "shopify", icon: ShoppingBag, title: t("Ma boutique Shopify", "My Shopify store"), text: t("Clients, commandes et paniers abandonnés synchronisés.", "Customers, orders and abandoned carts, in sync."), effort: t("1 clic", "1 click") },
+  { id: "api", icon: Code2, title: t("Mon site ou mon logiciel", "My website or software"), text: t("CRM, back-office, caisse, site sur mesure : tout ce qui sait appeler une API.", "CRM, back office, POS, custom site: anything that can call an API."), effort: t("≈ 5 min", "≈ 5 min") },
+  { id: "app", icon: Smartphone, title: t("Mon app iOS / Android", "My iOS / Android app"), text: t("Notifications sur l'écran verrouillé et centre de notifications dans l'app.", "Lock-screen notifications and an in-app notification center."), effort: t("SDK prêt", "SDK ready") },
+  { id: "file", icon: FileSpreadsheet, title: t("Un fichier de contacts", "A contact file"), text: t("Export Excel ou CSV de votre ancien outil.", "An Excel or CSV export from your old tool."), effort: t("1 min", "1 min") },
 ];
 
 const STORE_KEY = "missive_onboarding";
@@ -80,7 +81,7 @@ export function OnboardingPage() {
   useEffect(() => save({ selected, step, index }), [selected, step, index]);
   // Back from Shopify's OAuth page.
   useEffect(() => {
-    if (params.get("shopify") === "connected") setDone((d) => ({ ...d, shopify: "Boutique connectée" }));
+    if (params.get("shopify") === "connected") setDone((d) => ({ ...d, shopify: t("Boutique connectée", "Store connected") }));
   }, [params]);
 
   const toggle = (id: SourceId) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...SOURCES.map((x) => x.id).filter((x) => s.includes(x) || x === id)]));
@@ -103,8 +104,8 @@ export function OnboardingPage() {
       <header className="mx-auto flex max-w-5xl items-center justify-between px-4 py-6 sm:px-6">
         <PingsellLogo className="h-8 w-auto" />
         <div className="flex items-center gap-4">
-          <ol className="hidden items-center gap-2 text-xs font-semibold sm:flex" aria-label="Étapes">
-            {["Vos outils", "Branchement", "Premier scénario"].map((label, i) => (
+          <ol className="hidden items-center gap-2 text-xs font-semibold sm:flex" aria-label={t("Étapes", "Steps")}>
+            {[t("Vos outils", "Your tools"), t("Branchement", "Connect"), t("Premier scénario", "First workflow")].map((label, i) => (
               <li key={label} className="flex items-center gap-2">
                 <span
                   className={cx(
@@ -120,7 +121,7 @@ export function OnboardingPage() {
             ))}
           </ol>
           <button type="button" onClick={finish} className="text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white">
-            Passer
+            {t("Passer", "Skip")}
           </button>
         </div>
       </header>
@@ -128,12 +129,22 @@ export function OnboardingPage() {
       <main className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
         {step === "choose" && (
           <section className="animate-rise">
-            <p className="eyebrow">Bienvenue{account?.name ? `, ${account.name}` : ""}</p>
+            <p className="eyebrow">{t("Bienvenue", "Welcome")}{account?.name ? `, ${account.name}` : ""}</p>
             <h1 className="display mt-4 text-[40px] leading-[0.92] text-slate-900 sm:text-[60px] dark:text-white">
-              Qu'est-ce que vous voulez <em className="text-brand-500">brancher&nbsp;?</em>
+              {t(
+                <>
+                  Qu'est-ce que vous voulez <em className="text-brand-500">brancher&nbsp;?</em>
+                </>,
+                <>
+                  What do you want to <em className="text-brand-500">connect?</em>
+                </>,
+              )}
             </h1>
             <p className="mt-4 max-w-xl text-[17px] text-slate-600 dark:text-slate-300">
-              Choisissez un ou plusieurs outils. Pingsell s'adapte à ce que vous utilisez déjà, et vous pourrez en ajouter d'autres plus tard.
+              {t(
+                "Choisissez un ou plusieurs outils. Pingsell s'adapte à ce que vous utilisez déjà, et vous pourrez en ajouter d'autres plus tard.",
+                "Pick one or more tools. Pingsell works with what you already use, and you can add more later.",
+              )}
             </p>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-2">
@@ -175,7 +186,7 @@ export function OnboardingPage() {
 
             <div className="mt-10 flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
               <button type="button" onClick={() => setStep("scenario")} className="text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white">
-                Je n'ai rien à brancher pour l'instant
+                {t("Je n'ai rien à brancher pour l'instant", "I have nothing to connect right now")}
               </button>
               <Button
                 size="lg"
@@ -185,7 +196,7 @@ export function OnboardingPage() {
                   setStep("connect");
                 }}
               >
-                Continuer {selected.length > 1 ? `(${selected.length} outils)` : ""}
+                {t("Continuer", "Continue")} {selected.length > 1 ? t(`(${selected.length} outils)`, `(${selected.length} tools)`) : ""}
                 <ArrowRight className="size-4" />
               </Button>
             </div>
@@ -194,7 +205,7 @@ export function OnboardingPage() {
 
         {step === "connect" && current && (
           <section className="grid animate-rise gap-8 lg:grid-cols-[240px_minmax(0,1fr)]">
-            <nav aria-label="Outils à brancher" className="space-y-2">
+            <nav aria-label={t("Outils à brancher", "Tools to connect")} className="space-y-2">
               {selected.map((id, i) => {
                 const s = SOURCES.find((x) => x.id === id)!;
                 return (
@@ -222,10 +233,10 @@ export function OnboardingPage() {
 
               <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-900/10 pt-6 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
                 <Button variant="ghost" icon={ArrowLeft} onClick={() => (index === 0 ? setStep("choose") : setIndex(index - 1))}>
-                  Retour
+                  {t("Retour", "Back")}
                 </Button>
                 <Button onClick={() => (index < selected.length - 1 ? setIndex(index + 1) : setStep("scenario"))}>
-                  {done[current] ? "Continuer" : "Je le ferai plus tard"}
+                  {done[current] ? t("Continuer", "Continue") : t("Je le ferai plus tard", "I'll do it later")}
                   <ArrowRight className="size-4" />
                 </Button>
               </div>
@@ -245,9 +256,12 @@ export function OnboardingPage() {
 
 function emailHtml(body: string): string {
   return DEFAULT_EMAIL_HTML.replace(
-    "Écrivez ici votre message. Présentez votre offre, votre nouveauté ou votre actualité en quelques phrases.",
+    t(
+      "Écrivez ici votre message. Présentez votre offre, votre nouveauté ou votre actualité en quelques phrases.",
+      "Write your message here. Introduce your offer, new product or latest news in a few sentences.",
+    ),
     body,
-  ).replace("Ou partez d'un de nos modèles prêts à l'emploi.", "À très vite !");
+  ).replace(t("Ou partez d'un de nos modèles prêts à l'emploi.", "Or start from one of our ready-made templates."), t("À très vite !", "See you soon!"));
 }
 
 interface Template {
@@ -264,16 +278,21 @@ const TEMPLATES: Template[] = [
   {
     id: "welcome",
     icon: Sparkles,
-    title: "Bienvenue",
-    text: "Un email chaleureux dès qu'un nouveau contact arrive.",
+    title: t("Bienvenue", "Welcome"),
+    text: t("Un email chaleureux dès qu'un nouveau contact arrive.", "A warm email as soon as a new contact joins."),
     input: (brand) => ({
-      name: "Bienvenue",
+      name: t("Bienvenue", "Welcome"),
       trigger: "contact_created",
       steps: [
         {
           type: "email",
-          subject: `Bienvenue chez ${brand || "nous"}, {{first_name|}} !`,
-          html: emailHtml(`Merci de nous avoir rejoints ! Vous recevrez nos nouveautés et nos offres en avant-première. Une question ? Répondez simplement à cet email.`),
+          subject: t(`Bienvenue chez ${brand || "nous"}, {{first_name|}} !`, `Welcome to ${brand || "the family"}, {{first_name|}}!`),
+          html: emailHtml(
+            t(
+              `Merci de nous avoir rejoints ! Vous recevrez nos nouveautés et nos offres en avant-première. Une question ? Répondez simplement à cet email.`,
+              `Thanks for joining us! You'll be the first to hear about new arrivals and offers. Questions? Just reply to this email.`,
+            ),
+          ),
         },
       ],
     }),
@@ -281,62 +300,90 @@ const TEMPLATES: Template[] = [
   {
     id: "cart",
     icon: ShoppingBag,
-    title: "Panier abandonné",
-    text: "Une relance 1 h après, puis une seconde le lendemain si rien n'est commandé.",
+    title: t("Panier abandonné", "Abandoned cart"),
+    text: t("Une relance 1 h après, puis une seconde le lendemain si rien n'est commandé.", "A reminder 1 hour later, then a second one the next day if nothing is ordered."),
     needs: [["shopify"]],
     input: () => ({
-      name: "Relance panier abandonné",
+      name: t("Relance panier abandonné", "Abandoned cart reminder"),
       trigger: "cart_abandoned",
       steps: [
-        { type: "email", subject: "Vous avez oublié quelque chose, {{first_name|}} ?", html: emailHtml("Votre panier vous attend. Finalisez votre commande en un clic, nous l'avons gardé de côté pour vous.") },
+        {
+          type: "email",
+          subject: t("Vous avez oublié quelque chose, {{first_name|}} ?", "Forgot something, {{first_name|}}?"),
+          html: emailHtml(t("Votre panier vous attend. Finalisez votre commande en un clic, nous l'avons gardé de côté pour vous.", "Your cart is waiting. Complete your order in one click, we've saved it for you.")),
+        },
         { type: "wait", hours: 24 },
         { type: "exit_if", condition: "ordered" },
-        { type: "email", subject: "Votre panier est toujours là", html: emailHtml("Dernier rappel : vos articles sont toujours dans votre panier, mais les stocks partent vite.") },
+        {
+          type: "email",
+          subject: t("Votre panier est toujours là", "Your cart is still here"),
+          html: emailHtml(t("Dernier rappel : vos articles sont toujours dans votre panier, mais les stocks partent vite.", "Last reminder: your items are still in your cart, but stock is going fast.")),
+        },
       ],
     }),
   },
   {
     id: "thanks",
     icon: Mail,
-    title: "Merci pour votre commande",
-    text: "Un remerciement juste après chaque achat.",
+    title: t("Merci pour votre commande", "Thanks for your order"),
+    text: t("Un remerciement juste après chaque achat.", "A thank-you right after every purchase."),
     needs: [["shopify", "api"]],
     input: () => ({
-      name: "Merci pour votre commande",
+      name: t("Merci pour votre commande", "Thanks for your order"),
       trigger: "order_created",
-      steps: [{ type: "email", subject: "Merci pour votre commande, {{first_name|}} !", html: emailHtml("Nous préparons votre commande avec soin. Vous recevrez un message dès son expédition.") }],
+      steps: [
+        {
+          type: "email",
+          subject: t("Merci pour votre commande, {{first_name|}} !", "Thanks for your order, {{first_name|}}!"),
+          html: emailHtml(t("Nous préparons votre commande avec soin. Vous recevrez un message dès son expédition.", "We're carefully preparing your order. We'll let you know as soon as it ships.")),
+        },
+      ],
     }),
   },
   {
     id: "shipped",
     icon: BellRing,
-    title: "Commande expédiée",
-    text: "Une notification sur le téléphone du client dès l'expédition.",
+    title: t("Commande expédiée", "Order shipped"),
+    text: t("Une notification sur le téléphone du client dès l'expédition.", "A notification on the customer's phone as soon as it ships."),
     needs: [["shopify", "api"], ["app"]],
     input: () => ({
-      name: "Commande expédiée",
+      name: t("Commande expédiée", "Order shipped"),
       trigger: "order_fulfilled",
-      steps: [{ type: "push", title: "Votre commande est en route 🚚", body: "{{first_name|Bonne nouvelle}}, votre colis vient de partir. Suivez-le depuis l'app.", in_app: true }],
+      steps: [
+        {
+          type: "push",
+          title: t("Votre commande est en route 🚚", "Your order is on its way 🚚"),
+          body: t("{{first_name|Bonne nouvelle}}, votre colis vient de partir. Suivez-le depuis l'app.", "{{first_name|Good news}}, your package just shipped. Track it in the app."),
+          in_app: true,
+        },
+      ],
     }),
   },
   {
     id: "app",
     icon: Smartphone,
-    title: "Bienvenue dans l'app",
-    text: "Une notification à la première connexion d'un client dans votre app.",
+    title: t("Bienvenue dans l'app", "Welcome to the app"),
+    text: t("Une notification à la première connexion d'un client dans votre app.", "A notification the first time a customer signs in to your app."),
     needs: [["app"]],
     input: () => ({
-      name: "Bienvenue dans l'app",
+      name: t("Bienvenue dans l'app", "Welcome to the app"),
       trigger: "app_signed_in",
-      steps: [{ type: "push", title: "Bienvenue {{first_name|}} 👋", body: "Retrouvez ici vos commandes, nos nouveautés et vos offres réservées à l'app.", in_app: true }],
+      steps: [
+        {
+          type: "push",
+          title: t("Bienvenue {{first_name|}} 👋", "Welcome {{first_name|}} 👋"),
+          body: t("Retrouvez ici vos commandes, nos nouveautés et vos offres réservées à l'app.", "Find your orders, new arrivals and app-only offers right here."),
+          in_app: true,
+        },
+      ],
     }),
   },
 ];
 
 function ScenarioStep({ selected, brand, onBack, onFinish }: { selected: SourceId[]; brand: string; onBack: () => void; onFinish: () => void }) {
   const toast = useToast();
-  const available = TEMPLATES.filter((t) => !t.needs || t.needs.every((group) => group.some((n) => selected.includes(n))));
-  const [chosen, setChosen] = useState<string[]>(() => available.map((t) => t.id));
+  const available = TEMPLATES.filter((tpl) => !tpl.needs || tpl.needs.every((group) => group.some((n) => selected.includes(n))));
+  const [chosen, setChosen] = useState<string[]>(() => available.map((tpl) => tpl.id));
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<string[] | null>(null);
   // Templates already saved, so a retry after a failure never creates them twice.
@@ -345,10 +392,10 @@ function ScenarioStep({ selected, brand, onBack, onFinish }: { selected: SourceI
   async function create() {
     setBusy(true);
     try {
-      for (const t of available.filter((x) => chosen.includes(x.id))) {
-        if (saved.current.has(t.id)) continue;
-        const a = await api.automations.create(t.input(brand));
-        saved.current.set(t.id, a.name);
+      for (const tpl of available.filter((x) => chosen.includes(x.id))) {
+        if (saved.current.has(tpl.id)) continue;
+        const a = await api.automations.create(tpl.input(brand));
+        saved.current.set(tpl.id, a.name);
       }
       setCreated([...saved.current.values()]);
     } catch (err) {
@@ -365,14 +412,26 @@ function ScenarioStep({ selected, brand, onBack, onFinish }: { selected: SourceI
           <Check className="size-8" />
         </span>
         <h1 className="display mt-6 text-[40px] leading-[0.92] text-slate-900 sm:text-[56px] dark:text-white">
-          C'est <em className="text-brand-500">branché.</em>
+          {t(
+            <>
+              C'est <em className="text-brand-500">branché.</em>
+            </>,
+            <>
+              You're <em className="text-brand-500">connected.</em>
+            </>,
+          )}
         </h1>
         <p className="mt-4 text-[17px] text-slate-600 dark:text-slate-300">
-          {created.length ? `${created.length > 1 ? `${created.length} scénarios actifs` : "1 scénario actif"} : ${created.join(", ")}. Les textes se modifient à tout moment dans Automatisations.` : "Vous pourrez créer vos scénarios dans Automatisations."}
+          {created.length
+            ? t(
+                `${created.length > 1 ? `${created.length} scénarios actifs` : "1 scénario actif"} : ${created.join(", ")}. Les textes se modifient à tout moment dans Automatisations.`,
+                `${created.length > 1 ? `${created.length} active workflows` : "1 active workflow"}: ${created.join(", ")}. You can edit the copy anytime in Automations.`,
+              )
+            : t("Vous pourrez créer vos scénarios dans Automatisations.", "You can create your workflows in Automations.")}
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Button size="lg" onClick={onFinish}>
-            Aller au tableau de bord <ArrowRight className="size-4" />
+            {t("Aller au tableau de bord", "Go to dashboard")} <ArrowRight className="size-4" />
           </Button>
         </div>
       </section>
@@ -381,31 +440,43 @@ function ScenarioStep({ selected, brand, onBack, onFinish }: { selected: SourceI
 
   return (
     <section className="animate-rise">
-      <p className="eyebrow">Dernière étape</p>
+      <p className="eyebrow">{t("Dernière étape", "Last step")}</p>
       <h1 className="display mt-4 text-[40px] leading-[0.92] text-slate-900 sm:text-[60px] dark:text-white">
-        Vos premiers scénarios, <em className="text-brand-500">prêts à tourner.</em>
+        {t(
+          <>
+            Vos premiers scénarios, <em className="text-brand-500">prêts à tourner.</em>
+          </>,
+          <>
+            Your first workflows, <em className="text-brand-500">ready to run.</em>
+          </>,
+        )}
       </h1>
-      <p className="mt-4 max-w-xl text-[17px] text-slate-600 dark:text-slate-300">Choisissez selon ce que vous avez branché. Ils partent tout seuls, et vous pourrez modifier les textes quand vous voulez.</p>
+      <p className="mt-4 max-w-xl text-[17px] text-slate-600 dark:text-slate-300">
+        {t(
+          "Choisissez selon ce que vous avez branché. Ils partent tout seuls, et vous pourrez modifier les textes quand vous voulez.",
+          "Pick based on what you connected. They run on their own, and you can edit the copy whenever you like.",
+        )}
+      </p>
       <div className="mt-10 grid gap-4 sm:grid-cols-2">
-        {available.map((t) => {
-          const on = chosen.includes(t.id);
+        {available.map((tpl) => {
+          const on = chosen.includes(tpl.id);
           return (
             <button
-              key={t.id}
+              key={tpl.id}
               type="button"
               aria-pressed={on}
-              onClick={() => setChosen((c) => (on ? c.filter((x) => x !== t.id) : [...c, t.id]))}
+              onClick={() => setChosen((c) => (on ? c.filter((x) => x !== tpl.id) : [...c, tpl.id]))}
               className={cx(
                 "relative flex gap-4 rounded-[22px] bg-white p-5 text-left ring-1 transition dark:bg-slate-900",
                 on ? "ring-2 ring-brand-500" : "ring-slate-900/10 hover:ring-slate-900/30 dark:ring-white/10",
               )}
             >
               <span className={cx("flex size-11 shrink-0 items-center justify-center rounded-2xl", on ? "bg-brand-500 text-white" : "bg-brand-50 text-brand-500 dark:bg-brand-900/30")}>
-                <t.icon className="size-5" strokeWidth={1.75} />
+                <tpl.icon className="size-5" strokeWidth={1.75} />
               </span>
               <span className="min-w-0 pr-6">
-                <span className="block font-display text-base font-bold text-slate-900 dark:text-white">{t.title}</span>
-                <span className="mt-1 block text-sm text-slate-500 dark:text-slate-400">{t.text}</span>
+                <span className="block font-display text-base font-bold text-slate-900 dark:text-white">{tpl.title}</span>
+                <span className="mt-1 block text-sm text-slate-500 dark:text-slate-400">{tpl.text}</span>
               </span>
               <span className={cx("absolute top-4 right-4 flex size-6 items-center justify-center rounded-full ring-1", on ? "bg-brand-500 text-white ring-brand-500" : "ring-slate-300 dark:ring-slate-600")}>
                 {on && <Check className="size-3.5" />}
@@ -416,14 +487,14 @@ function ScenarioStep({ selected, brand, onBack, onFinish }: { selected: SourceI
       </div>
       <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="ghost" icon={ArrowLeft} onClick={onBack}>
-          Retour
+          {t("Retour", "Back")}
         </Button>
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
           <button type="button" onClick={onFinish} className="text-sm font-medium text-slate-500 hover:text-slate-900 dark:hover:text-white">
-            Plus tard
+            {t("Plus tard", "Later")}
           </button>
           <Button size="lg" loading={busy} disabled={!chosen.length} onClick={() => void create()}>
-            Activer {chosen.length > 1 ? `ces ${chosen.length} scénarios` : "ce scénario"}
+            {chosen.length > 1 ? t(`Activer ces ${chosen.length} scénarios`, `Activate these ${chosen.length} workflows`) : t("Activer ce scénario", "Activate this workflow")}
             <ArrowRight className="size-4" />
           </Button>
         </div>

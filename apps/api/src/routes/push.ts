@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { all, get, newId, now, run, scalar } from '../db.js';
 import type { Deps } from '../deps.js';
-import { badRequest, forbidden, HttpError, listResponse, notFound, pagination, parse } from '../lib/http.js';
+import { badRequest, forbidden, HttpError, listResponse, notFound, pagination, parse, zmsg } from '../lib/http.js';
 import {
   accountForAppKey,
   apnsSchema,
@@ -48,6 +48,7 @@ import {
   transactionalSchema,
 } from '../services/pushGrowth.js';
 import { fireTrigger } from '../services/automations.js';
+import { t } from '../i18n.js';
 
 type Params = { Params: { id: string } };
 
@@ -59,7 +60,7 @@ const configSchema = z.object({
 });
 
 const campaignSchema = pushContentSchema.extend({
-  name: z.string().trim().min(1, 'Le nom est requis').max(200),
+  name: z.string().trim().min(1, zmsg('Le nom est requis', 'Name is required')).max(200),
   audience: audienceSchema.default({ type: 'all' }),
   channels: channelsSchema.default(['push', 'in_app']),
   /** `smart` delivers to each customer at the hour they usually open (within 24 h). */
@@ -77,7 +78,7 @@ const identifySchema = z
     user_hash: z.string().trim().max(128).optional(),
     token: z.string().trim().min(8).max(4096).optional(),
   })
-  .refine((v) => v.email || v.contact_id, { message: 'Indiquez email ou contact_id' });
+  .refine((v) => v.email || v.contact_id, zmsg('Indiquez email ou contact_id', 'Provide email or contact_id'));
 
 const tokenSchema = z.object({ token: z.string().trim().min(8).max(4096) });
 const openedSchema = z.object({ message_id: z.string().trim().min(1).max(64) });
@@ -95,10 +96,10 @@ function parseFcm(raw: string): FcmCredentials {
   try {
     json = JSON.parse(raw);
   } catch {
-    throw badRequest('Le fichier de compte de service Firebase doit être un JSON valide');
+    throw badRequest(t('Le fichier de compte de service Firebase doit être un JSON valide', 'The Firebase service account file must be valid JSON'));
   }
   const result = fcmSchema.safeParse(json);
-  if (!result.success) throw badRequest('Compte de service Firebase incomplet : project_id, client_email et private_key sont requis');
+  if (!result.success) throw badRequest(t('Compte de service Firebase incomplet : project_id, client_email et private_key sont requis', 'Incomplete Firebase service account: project_id, client_email and private_key are required'));
   return result.data;
 }
 
@@ -108,16 +109,16 @@ export async function pushAppRoutes(app: FastifyInstance, { db, kickWorker }: De
     const header = String(request.headers.authorization ?? (request.headers['x-pingsell-app-key'] ?? request.headers['x-missive-app-key']) ?? '');
     const key = header.replace(/^Bearer\s+/i, '').trim();
     const accountId = key.startsWith('msvapp_') ? accountForAppKey(db, key) : undefined;
-    if (!accountId) throw new HttpError(401, "Clé d'application invalide");
+    if (!accountId) throw new HttpError(401, t("Clé d'application invalide", 'Invalid app key'));
     return accountId;
   };
 
   /** The device push token identifies the phone for its inbox (header `X-Pingsell-Device`, or `token`). */
   const appDevice = (request: FastifyRequest, accountId: string, bodyToken?: string) => {
     const token = String((request.headers['x-pingsell-device'] ?? request.headers['x-missive-device']) ?? bodyToken ?? '').trim();
-    if (!token) throw badRequest('Jeton de l’appareil manquant (en-tête X-Pingsell-Device)');
+    if (!token) throw badRequest(t('Jeton de l’appareil manquant (en-tête X-Pingsell-Device)', 'Missing device token (X-Pingsell-Device header)'));
     const device = deviceByToken(db, accountId, token);
-    if (!device) throw notFound('Appareil inconnu : enregistrez-le d’abord avec POST /push/app/devices');
+    if (!device) throw notFound(t('Appareil inconnu : enregistrez-le d’abord avec POST /push/app/devices', 'Unknown device: register it first with POST /push/app/devices'));
     return device;
   };
 
@@ -125,7 +126,7 @@ export async function pushAppRoutes(app: FastifyInstance, { db, kickWorker }: De
     const accountId = appAccount(request);
     const input = parse(deviceSchema, request.body);
     if (!identityAllowed(ensurePushConfig(db, accountId), input)) {
-      throw new HttpError(401, 'Signature d’identité (user_hash) manquante ou invalide');
+      throw new HttpError(401, t('Signature d’identité (user_hash) manquante ou invalide', 'Missing or invalid identity signature (user_hash)'));
     }
     const contactId = contactIdFor(db, accountId, input);
     // First reachable device of this customer → `push_subscribed` automations.
@@ -157,7 +158,7 @@ export async function pushAppRoutes(app: FastifyInstance, { db, kickWorker }: De
     const accountId = appAccount(request);
     const input = parse(identifySchema, request.body ?? {});
     if (!identityAllowed(ensurePushConfig(db, accountId), input)) {
-      throw new HttpError(401, 'Signature d’identité (user_hash) manquante ou invalide');
+      throw new HttpError(401, t('Signature d’identité (user_hash) manquante ou invalide', 'Missing or invalid identity signature (user_hash)'));
     }
     const contactId = contactIdFor(db, accountId, input);
     if (!contactId) return { ok: true, known: false, first: false };
@@ -221,7 +222,7 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
     !!request.userId && get<{ role: string }>(db, 'SELECT role FROM users WHERE id = ?', request.userId)?.role === 'editor';
   const assertManager = (request: FastifyRequest) => {
     // A secret API key acts at account level.
-    if (isEditor(request)) throw forbidden('Les réglages push sont réservés au propriétaire et aux administrateurs');
+    if (isEditor(request)) throw forbidden(t('Les réglages push sont réservés au propriétaire et aux administrateurs', 'Push settings are limited to the owner and admins'));
   };
 
   /* ---- Settings ---- */
@@ -249,7 +250,7 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
 
   app.post('/push/send', async (request, reply) => {
     const result = sendTransactionalPush(db, request.accountId, parse(transactionalSchema, request.body));
-    if (!result) throw notFound('Contact introuvable');
+    if (!result) throw notFound(t('Contact introuvable', 'Contact not found'));
     kickWorker();
     return reply.code(202).send({ ok: true, ...result });
   });
@@ -311,13 +312,13 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
 
   app.delete<Params>('/push/devices/:id', async (request, reply) => {
     const changed = run(db, 'UPDATE push_devices SET active = 0 WHERE id = ? AND account_id = ?', request.params.id, request.accountId);
-    if (!changed) throw notFound('Appareil introuvable');
+    if (!changed) throw notFound(t('Appareil introuvable', 'Device not found'));
     return reply.code(204).send();
   });
 
   app.post('/push/test', async (request) => {
     const body = parse(testSchema, request.body);
-    if (!queueTestPush(db, request.accountId, body.device_id, body, body.channels)) throw notFound('Appareil introuvable');
+    if (!queueTestPush(db, request.accountId, body.device_id, body, body.channels)) throw notFound(t('Appareil introuvable', 'Device not found'));
     kickWorker();
     return { ok: true };
   });
@@ -326,7 +327,7 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
 
   const findCampaign = (accountId: string, id: string) => {
     const row = get(db, 'SELECT * FROM push_campaigns WHERE id = ? AND account_id = ?', id, accountId);
-    if (!row) throw notFound('Campagne push introuvable');
+    if (!row) throw notFound(t('Campagne push introuvable', 'Push campaign not found'));
     return serializePushCampaign(row);
   };
   const withStats = (c: ReturnType<typeof serializePushCampaign>) => ({ ...c, stats: pushCampaignStats(db, c.id) });
@@ -348,7 +349,7 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
   app.post('/push/campaigns', async (request, reply) => {
     const body = parse(campaignSchema, request.body);
     if (body.audience.type === 'segment' && !get(db, 'SELECT 1 FROM segments WHERE id = ? AND account_id = ?', body.audience.segment_id, request.accountId)) {
-      throw badRequest('Segment introuvable');
+      throw badRequest(t('Segment introuvable', 'Segment not found'));
     }
     const id = newId();
     const timestamp = now();
@@ -378,7 +379,7 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
 
   app.patch<Params>('/push/campaigns/:id', async (request) => {
     const current = findCampaign(request.accountId, request.params.id);
-    if (current.status !== 'draft') throw badRequest('Seul un brouillon peut être modifié');
+    if (current.status !== 'draft') throw badRequest(t('Seul un brouillon peut être modifié', 'Only a draft can be edited'));
     // `.partial()` still applies `.default()`s: keep only the fields actually sent.
     const sent = new Set(Object.keys((request.body ?? {}) as object));
     const parsed = parse(campaignSchema.partial(), request.body);
@@ -413,15 +414,15 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
 
   app.delete<Params>('/push/campaigns/:id', async (request, reply) => {
     const current = findCampaign(request.accountId, request.params.id);
-    if (current.status === 'sending') throw badRequest("Une campagne en cours d'envoi ne peut pas être supprimée");
+    if (current.status === 'sending') throw badRequest(t("Une campagne en cours d'envoi ne peut pas être supprimée", 'A campaign that is sending can’t be deleted'));
     run(db, 'DELETE FROM push_campaigns WHERE id = ?', current.id);
     return reply.code(204).send();
   });
 
   app.post<Params>('/push/campaigns/:id/send', async (request) => {
     const current = findCampaign(request.accountId, request.params.id);
-    if (current.status !== 'draft') throw badRequest('Cette campagne a déjà été envoyée');
-    if (!audienceDevices(db, request.accountId, current.audience).length) throw badRequest("Aucun appareil ne correspond à cette audience");
+    if (current.status !== 'draft') throw badRequest(t('Cette campagne a déjà été envoyée', 'This campaign has already been sent'));
+    if (!audienceDevices(db, request.accountId, current.audience).length) throw badRequest(t("Aucun appareil ne correspond à cette audience", 'No devices match this audience'));
     run(db, "UPDATE push_campaigns SET status = 'sending', updated_at = ? WHERE id = ?", now(), current.id);
     kickWorker();
     return withStats(findCampaign(request.accountId, current.id));

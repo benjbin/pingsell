@@ -7,6 +7,7 @@ import { Badge, Button, Card, ErrorState, InfoRow, LoadingState, Screen, Section
 import { useAuth } from '@/lib/auth';
 import { confirmAsync, notify } from '@/lib/dialogs';
 import { campaignStatusLabel, formatDateTime, formatNumber, formatPercent, plural } from '@/lib/format';
+import { LOCALE, t } from '@/lib/i18n';
 import { spacing, useColors } from '@/lib/theme';
 import type { CampaignStats } from '@/lib/types';
 import { useApiQuery } from '@/lib/useApi';
@@ -55,9 +56,12 @@ export default function CampaignDetailScreen() {
     try {
       const to = account?.email ?? (await api.me()).account.email;
       await api.sendTestCampaign(campaign.id, to);
-      notify('Test envoyé', `Un email de test a été envoyé à ${to}.`);
+      notify(t('Test envoyé', 'Test sent'), t(`Un email de test a été envoyé à ${to}.`, `A test email was sent to ${to}.`));
     } catch (e) {
-      notify('Échec du test', e instanceof Error ? e.message : "L'envoi du test a échoué.");
+      notify(
+        t('Échec du test', 'Test failed'),
+        e instanceof Error ? e.message : t("L'envoi du test a échoué.", "Couldn't send the test."),
+      );
     } finally {
       setTesting(false);
     }
@@ -68,22 +72,43 @@ export default function CampaignDetailScreen() {
     try {
       const count = await api.countRecipients(campaign.segment_id);
       if (count === 0) {
-        notify('Aucun destinataire', "Aucun contact abonné ne correspond à l'audience de cette campagne.");
+        notify(
+          t('Aucun destinataire', 'No recipients'),
+          t(
+            "Aucun contact abonné ne correspond à l'audience de cette campagne.",
+            'No subscribed contacts match this campaign’s audience.',
+          ),
+        );
         return;
       }
       const audience = campaign.segment_id ? `du segment « ${segmentName ?? 'sélectionné'} »` : 'abonnés';
+      const audienceEn = campaign.segment_id
+        ? `${plural(count, 'contact')} in the ${segmentName ? `“${segmentName}” segment` : 'selected segment'}`
+        : `${plural(count, 'subscribed contact')}`;
       const ok = await confirmAsync(
-        'Envoyer maintenant ?',
-        `« ${campaign.name} » va être envoyée à ${plural(count, 'contact')} ${audience}. Cette action est irréversible.`,
-        `Envoyer à ${formatNumber(count)}`,
+        t('Envoyer maintenant ?', 'Send now?'),
+        t(
+          `« ${campaign.name} » va être envoyée à ${plural(count, 'contact')} ${audience}. Cette action est irréversible.`,
+          `“${campaign.name}” will be sent to ${audienceEn}. This can’t be undone.`,
+        ),
+        t(`Envoyer à ${formatNumber(count)}`, `Send to ${formatNumber(count)}`),
         { destructive: true },
       );
       if (!ok) return;
       await api.sendCampaign(campaign.id);
       await reload();
-      notify('Envoi lancé', `La campagne part vers ${plural(count, 'destinataire')}.`);
+      notify(
+        t('Envoi lancé', 'Sending started'),
+        t(
+          `La campagne part vers ${plural(count, 'destinataire')}.`,
+          `Your campaign is on its way to ${plural(count, 'recipient')}.`,
+        ),
+      );
     } catch (e) {
-      notify("Échec de l'envoi", e instanceof Error ? e.message : "L'envoi a échoué.");
+      notify(
+        t("Échec de l'envoi", 'Send failed'),
+        e instanceof Error ? e.message : t("L'envoi a échoué.", "Couldn't send the campaign."),
+      );
     } finally {
       setSending(false);
     }
@@ -103,66 +128,76 @@ export default function CampaignDetailScreen() {
 
       {stats ? (
         <>
-          <SectionTitle>Statistiques</SectionTitle>
+          <SectionTitle>{t('Statistiques', 'Stats')}</SectionTitle>
           <Card style={styles.statsGrid}>
-            <Stat label="Destinataires" value={formatNumber(stats.recipients)} />
-            <Stat label="Envoyés" value={formatNumber(stats.sent)} />
-            <Stat label="Échecs" value={formatNumber(stats.failed)} />
-            <Stat label="Ouvertures" value={formatNumber(stats.opened)} />
-            <Stat label="Clics" value={formatNumber(stats.clicked)} />
-            <Stat label="Désabonnés" value={formatNumber(stats.unsubscribed)} />
+            <Stat label={t('Destinataires', 'Recipients')} value={formatNumber(stats.recipients)} />
+            <Stat label={t('Envoyés', 'Sent')} value={formatNumber(stats.sent)} />
+            <Stat label={t('Échecs', 'Failed')} value={formatNumber(stats.failed)} />
+            <Stat label={t('Ouvertures', 'Opens')} value={formatNumber(stats.opened)} />
+            <Stat label={t('Clics', 'Clicks')} value={formatNumber(stats.clicked)} />
+            <Stat label={t('Désabonnés', 'Unsubscribed')} value={formatNumber(stats.unsubscribed)} />
           </Card>
           <View style={styles.rates}>
-            <RateCard label="Taux d'ouverture" rate={stats.open_rate} />
-            <RateCard label="Taux de clic" rate={stats.click_rate} />
+            <RateCard label={t("Taux d'ouverture", 'Open rate')} rate={stats.open_rate} />
+            <RateCard label={t('Taux de clic', 'Click rate')} rate={stats.click_rate} />
           </View>
           {timeline.length ? (
             <Card>
-              <Text style={[styles.cardTitle, { color: c.text }]}>Engagement par heure</Text>
+              <Text style={[styles.cardTitle, { color: c.text }]}>{t('Engagement par heure', 'Engagement by hour')}</Text>
               <BarChart
                 data={timeline.slice(-24).map((p) => ({
                   label: formatHour(p.hour),
                   primary: p.opens,
                   secondary: p.clicks,
                 }))}
-                primaryLabel="Ouvertures"
-                secondaryLabel="Clics"
+                primaryLabel={t('Ouvertures', 'Opens')}
+                secondaryLabel={t('Clics', 'Clicks')}
               />
             </Card>
           ) : null}
         </>
       ) : null}
 
-      <SectionTitle>Détails</SectionTitle>
+      <SectionTitle>{t('Détails', 'Details')}</SectionTitle>
       <Card style={{ paddingVertical: 0 }}>
-        <InfoRow label="Objet" value={campaign.subject} />
-        {campaign.preheader ? <InfoRow label="Pré-en-tête" value={campaign.preheader} /> : null}
+        <InfoRow label={t('Objet', 'Subject')} value={campaign.subject} />
+        {campaign.preheader ? <InfoRow label={t('Pré-en-tête', 'Preheader')} value={campaign.preheader} /> : null}
         <InfoRow
-          label="Expéditeur"
+          label={t('Expéditeur', 'From')}
           value={[campaign.from_name, campaign.from_email ? `<${campaign.from_email}>` : null].filter(Boolean).join(' ') || '—'}
         />
-        <InfoRow label="Audience" value={campaign.segment_id ? (segmentName ?? 'Segment') : 'Tous les abonnés'} />
-        {campaign.scheduled_at ? <InfoRow label="Programmée" value={formatDateTime(campaign.scheduled_at)} /> : null}
-        {campaign.sent_at ? <InfoRow label="Envoyée" value={formatDateTime(campaign.sent_at)} /> : null}
-        <InfoRow label="Créée" value={formatDateTime(campaign.created_at)} last />
+        <InfoRow
+          label={t('Audience', 'Audience')}
+          value={campaign.segment_id ? (segmentName ?? t('Segment', 'Segment')) : t('Tous les abonnés', 'All subscribers')}
+        />
+        {campaign.scheduled_at ? <InfoRow label={t('Programmée', 'Scheduled')} value={formatDateTime(campaign.scheduled_at)} /> : null}
+        {campaign.sent_at ? <InfoRow label={t('Envoyée', 'Sent')} value={formatDateTime(campaign.sent_at)} /> : null}
+        <InfoRow label={t('Créée', 'Created')} value={formatDateTime(campaign.created_at)} last />
       </Card>
 
-      <SectionTitle>Actions</SectionTitle>
+      <SectionTitle>{t('Actions', 'Actions')}</SectionTitle>
       <View style={{ gap: spacing.md }}>
         <Button
-          label={account?.email ? `Envoyer un test à ${account.email}` : 'Envoyer un test à mon email'}
+          label={
+            account?.email
+              ? t(`Envoyer un test à ${account.email}`, `Send a test to ${account.email}`)
+              : t('Envoyer un test à mon email', 'Send a test to my email')
+          }
           icon="flask-outline"
           variant="secondary"
           onPress={sendTest}
           loading={testing}
         />
         {canSend ? (
-          <Button label="Envoyer maintenant" icon="send" onPress={sendNow} loading={sending} />
+          <Button label={t('Envoyer maintenant', 'Send now')} icon="send" onPress={sendNow} loading={sending} />
         ) : (
           <Text style={[styles.note, { color: c.textSubtle }]}>
             {campaign.status === 'sending'
-              ? 'Envoi en cours… les statistiques se mettent à jour automatiquement.'
-              : 'Cette campagne a déjà été envoyée.'}
+              ? t(
+                  'Envoi en cours… les statistiques se mettent à jour automatiquement.',
+                  'Sending… stats update automatically.',
+                )
+              : t('Cette campagne a déjà été envoyée.', 'This campaign has already been sent.')}
           </Text>
         )}
       </View>
@@ -186,8 +221,8 @@ function RateCard({ label, rate }: { label: string; rate: number }) {
 
 function formatHour(hour: string): string {
   const d = new Date(hour);
-  if (Number.isNaN(d.getTime())) return hour.slice(11, 13) ? `${hour.slice(11, 13)}h` : hour;
-  return `${d.getHours()}h`;
+  if (Number.isNaN(d.getTime())) return hour.slice(11, 13) ? t(`${hour.slice(11, 13)}h`, `${hour.slice(11, 13)}:00`) : hour;
+  return t(`${d.getHours()}h`, d.toLocaleTimeString(LOCALE, { hour: 'numeric' }));
 }
 
 const styles = StyleSheet.create({

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cx } from "../../lib/format";
 import { Button } from "./primitives";
+import { t } from "../../lib/i18n";
 
 function useEscape(open: boolean, onClose: () => void) {
   useEffect(() => {
@@ -52,7 +53,7 @@ export function Modal({
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h2>
             {description && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>}
           </div>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800" aria-label="Fermer">
+          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800" aria-label={t("Fermer", "Close")}>
             <X className="size-5" />
           </button>
         </div>
@@ -74,7 +75,7 @@ export function ConfirmModal({
   onConfirm,
   title,
   description,
-  confirmLabel = "Confirmer",
+  confirmLabel = t("Confirmer", "Confirm"),
   danger,
   loading,
   children,
@@ -99,7 +100,7 @@ export function ConfirmModal({
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={loading}>
-            Annuler
+            {t("Annuler", "Cancel")}
           </Button>
           <Button variant={danger ? "danger" : "primary"} onClick={onConfirm} loading={loading}>
             {confirmLabel}
@@ -133,7 +134,7 @@ export function Drawer({
       <div className={cx("absolute inset-y-0 right-0 flex w-full animate-slide-in-right flex-col bg-white shadow-2xl dark:bg-slate-900", width)}>
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
           <div className="min-w-0 text-lg font-semibold text-slate-900 dark:text-white">{title}</div>
-          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800" aria-label="Fermer">
+          <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800" aria-label={t("Fermer", "Close")}>
             <X className="size-5" />
           </button>
         </div>

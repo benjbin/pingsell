@@ -1,5 +1,6 @@
 import { get, newId, now, parseJson, run, type DatabaseSync, type Row, type SQLInputValue } from '../db.js';
 import { badRequest } from '../lib/http.js';
+import { t } from '../i18n.js';
 
 export const CONTACT_STATUSES = ['subscribed', 'unsubscribed', 'bounced', 'complained'] as const;
 export const CONTACT_SOURCES = ['manual', 'import', 'shopify', 'api'] as const;
@@ -116,7 +117,7 @@ export function upsertContact(
   input: UpsertContactInput,
 ): { contact: Contact; created: boolean; addedTags: string[] } {
   const email = normalizeEmail(String(input.email ?? ''));
-  if (!isValidEmail(email)) throw badRequest(`Adresse email invalide : ${input.email || '(vide)'}`);
+  if (!isValidEmail(email)) throw badRequest(t(`Adresse email invalide : ${input.email || '(vide)'}`, `Invalid email address: ${input.email || '(empty)'}`));
   const timestamp = now();
   const tags = normalizeTags(input.tags);
   const status = asStatus(input.status);

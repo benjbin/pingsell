@@ -9,14 +9,15 @@ import type { Campaign, CampaignStatus } from "../../lib/types";
 import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, TableSkeleton } from "../../components/ui/primitives";
 import { ConfirmModal } from "../../components/ui/Overlay";
 import { useToast } from "../../components/ui/Toast";
+import { t } from "../../lib/i18n";
 
 type Filter = "all" | CampaignStatus;
 const FILTERS: Array<{ value: Filter; label: string }> = [
-  { value: "all", label: "Toutes" },
-  { value: "draft", label: "Brouillons" },
-  { value: "scheduled", label: "Programmées" },
-  { value: "sending", label: "En cours" },
-  { value: "sent", label: "Envoyées" },
+  { value: "all", label: t("Toutes", "All") },
+  { value: "draft", label: t("Brouillons", "Drafts") },
+  { value: "scheduled", label: t("Programmées", "Scheduled") },
+  { value: "sending", label: t("En cours", "Sending") },
+  { value: "sent", label: t("Envoyées", "Sent") },
 ];
 
 function campaignLink(c: Campaign) {
@@ -57,7 +58,7 @@ export function CampaignsPage() {
   async function duplicate(c: Campaign) {
     try {
       const copy = await api.campaigns.create({
-        name: `${c.name} (copie)`,
+        name: t(`${c.name} (copie)`, `${c.name} (copy)`),
         subject: c.subject,
         preheader: c.preheader ?? undefined,
         from_name: c.from_name ?? undefined,
@@ -65,7 +66,7 @@ export function CampaignsPage() {
         html: c.html ?? undefined,
         segment_id: c.segment_id,
       });
-      toast.success("Campagne dupliquée");
+      toast.success(t("Campagne dupliquée", "Campaign duplicated"));
       navigate(`/campagnes/${copy.id}`);
     } catch (err) {
       toast.error(err);
@@ -78,7 +79,7 @@ export function CampaignsPage() {
     try {
       await api.campaigns.remove(toDelete.id);
       campaigns.setData((prev) => (prev ?? []).filter((c) => c.id !== toDelete.id));
-      toast.success("Campagne supprimée");
+      toast.success(t("Campagne supprimée", "Campaign deleted"));
       setToDelete(null);
     } catch (err) {
       toast.error(err);
@@ -90,11 +91,11 @@ export function CampaignsPage() {
   return (
     <>
       <PageHeader
-        title="Campagnes"
-        description="Créez, testez et envoyez vos emails."
+        title={t("Campagnes", "Campaigns")}
+        description={t("Créez, testez et envoyez vos emails.", "Create, test and send your emails.")}
         actions={
           <Link to="/campagnes/nouvelle">
-            <Button icon={Plus}>Nouvelle campagne</Button>
+            <Button icon={Plus}>{t("Nouvelle campagne", "New campaign")}</Button>
           </Link>
         }
       />
@@ -126,11 +127,11 @@ export function CampaignsPage() {
         ) : rows.length === 0 ? (
           <EmptyState
             icon={Send}
-            title={filter === "all" ? "Aucune campagne" : "Aucune campagne dans cette catégorie"}
-            description="Rédigez votre première campagne en quelques minutes, à partir de nos modèles."
+            title={filter === "all" ? t("Aucune campagne", "No campaigns") : t("Aucune campagne dans cette catégorie", "No campaigns in this category")}
+            description={t("Rédigez votre première campagne en quelques minutes, à partir de nos modèles.", "Write your first campaign in minutes, starting from our templates.")}
             action={
               <Link to="/campagnes/nouvelle">
-                <Button icon={Plus}>Créer une campagne</Button>
+                <Button icon={Plus}>{t("Créer une campagne", "Create a campaign")}</Button>
               </Link>
             }
           />
@@ -139,12 +140,12 @@ export function CampaignsPage() {
             <table className="w-full min-w-[820px] text-left text-sm">
               <thead className="text-xs font-medium tracking-wide whitespace-nowrap text-slate-500 uppercase dark:text-slate-400">
                 <tr className="border-b border-slate-100 dark:border-slate-800">
-                  <th className="px-5 py-3 font-medium">Campagne</th>
-                  <th className="px-3 py-3 font-medium">Statut</th>
-                  <th className="px-3 py-3 font-medium">Envoyés</th>
-                  <th className="px-3 py-3 font-medium">Ouvertures</th>
-                  <th className="px-3 py-3 font-medium">Clics</th>
-                  <th className="px-3 py-3 font-medium">Date</th>
+                  <th className="px-5 py-3 font-medium">{t("Campagne", "Campaign")}</th>
+                  <th className="px-3 py-3 font-medium">{t("Statut", "Status")}</th>
+                  <th className="px-3 py-3 font-medium">{t("Envoyés", "Sent")}</th>
+                  <th className="px-3 py-3 font-medium">{t("Ouvertures", "Opens")}</th>
+                  <th className="px-3 py-3 font-medium">{t("Clics", "Clicks")}</th>
+                  <th className="px-3 py-3 font-medium">{t("Date", "Date")}</th>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
@@ -165,22 +166,22 @@ export function CampaignsPage() {
                           {CAMPAIGN_STATUS[c.status]?.label ?? c.status}
                         </Badge>
                       </td>
-                      <td className="px-3 py-3.5">{hasStats ? <Rate value={formatNumber(st.sent)} sub={`sur ${formatNumber(st.recipients)}`} /> : <span className="text-slate-400">—</span>}</td>
-                      <td className="px-3 py-3.5">{hasStats ? <Rate value={formatPercent(st.open_rate)} sub={`${formatNumber(st.opened)} ouvertures`} /> : <span className="text-slate-400">—</span>}</td>
-                      <td className="px-3 py-3.5">{hasStats ? <Rate value={formatPercent(st.click_rate)} sub={`${formatNumber(st.clicked)} clics`} /> : <span className="text-slate-400">—</span>}</td>
+                      <td className="px-3 py-3.5">{hasStats ? <Rate value={formatNumber(st.sent)} sub={t(`sur ${formatNumber(st.recipients)}`, `of ${formatNumber(st.recipients)}`)} /> : <span className="text-slate-400">—</span>}</td>
+                      <td className="px-3 py-3.5">{hasStats ? <Rate value={formatPercent(st.open_rate)} sub={t(`${formatNumber(st.opened)} ouvertures`, `${formatNumber(st.opened)} ${st.opened === 1 ? "open" : "opens"}`)} /> : <span className="text-slate-400">—</span>}</td>
+                      <td className="px-3 py-3.5">{hasStats ? <Rate value={formatPercent(st.click_rate)} sub={t(`${formatNumber(st.clicked)} clics`, `${formatNumber(st.clicked)} ${st.clicked === 1 ? "click" : "clicks"}`)} /> : <span className="text-slate-400">—</span>}</td>
                       <td className="px-3 py-3.5 text-xs text-slate-500 dark:text-slate-400">
-                        {c.status === "scheduled" ? `Prévue le ${formatDateTime(c.scheduled_at)}` : c.sent_at ? formatDateTime(c.sent_at) : `Modifiée le ${formatDateTime(c.updated_at)}`}
+                        {c.status === "scheduled" ? t(`Prévue le ${formatDateTime(c.scheduled_at)}`, `Scheduled for ${formatDateTime(c.scheduled_at)}`) : c.sent_at ? formatDateTime(c.sent_at) : t(`Modifiée le ${formatDateTime(c.updated_at)}`, `Edited ${formatDateTime(c.updated_at)}`)}
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex justify-end gap-1">
                           {c.status === "draft" || c.status === "scheduled" ? (
-                            <Button variant="ghost" size="sm" icon={Pencil} onClick={() => navigate(`/campagnes/${c.id}`)} aria-label="Modifier" title="Modifier" />
+                            <Button variant="ghost" size="sm" icon={Pencil} onClick={() => navigate(`/campagnes/${c.id}`)} aria-label={t("Modifier", "Edit")} title={t("Modifier", "Edit")} />
                           ) : (
-                            <Button variant="ghost" size="sm" icon={BarChart3} onClick={() => navigate(`/campagnes/${c.id}/rapport`)} aria-label="Rapport" title="Rapport" />
+                            <Button variant="ghost" size="sm" icon={BarChart3} onClick={() => navigate(`/campagnes/${c.id}/rapport`)} aria-label={t("Rapport", "Report")} title={t("Rapport", "Report")} />
                           )}
-                          <Button variant="ghost" size="sm" icon={Copy} onClick={() => void duplicate(c)} aria-label="Dupliquer" title="Dupliquer" />
+                          <Button variant="ghost" size="sm" icon={Copy} onClick={() => void duplicate(c)} aria-label={t("Dupliquer", "Duplicate")} title={t("Dupliquer", "Duplicate")} />
                           {c.status === "draft" && (
-                            <Button variant="ghost" size="sm" icon={Trash2} onClick={() => setToDelete(c)} aria-label="Supprimer" title="Supprimer" />
+                            <Button variant="ghost" size="sm" icon={Trash2} onClick={() => setToDelete(c)} aria-label={t("Supprimer", "Delete")} title={t("Supprimer", "Delete")} />
                           )}
                         </div>
                       </td>
@@ -199,9 +200,9 @@ export function CampaignsPage() {
         onConfirm={remove}
         loading={deleting}
         danger
-        title="Supprimer ce brouillon ?"
-        description={`« ${toDelete?.name ?? ""} » sera définitivement supprimé.`}
-        confirmLabel="Supprimer"
+        title={t("Supprimer ce brouillon ?", "Delete this draft?")}
+        description={t(`« ${toDelete?.name ?? ""} » sera définitivement supprimé.`, `“${toDelete?.name ?? ""}” will be permanently deleted.`)}
+        confirmLabel={t("Supprimer", "Delete")}
       />
     </>
   );

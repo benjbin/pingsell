@@ -1,17 +1,19 @@
-const numberFmt = new Intl.NumberFormat("fr-FR");
-const currencyFmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
-const currencyPreciseFmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
-const pctFmt = new Intl.NumberFormat("fr-FR", { style: "percent", maximumFractionDigits: 1 });
-const dateFmt = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" });
-const dateTimeFmt = new Intl.DateTimeFormat("fr-FR", {
+import { LOCALE } from "./i18n";
+
+const numberFmt = new Intl.NumberFormat(LOCALE);
+const currencyFmt = new Intl.NumberFormat(LOCALE, { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const currencyPreciseFmt = new Intl.NumberFormat(LOCALE, { style: "currency", currency: "EUR" });
+const pctFmt = new Intl.NumberFormat(LOCALE, { style: "percent", maximumFractionDigits: 1 });
+const dateFmt = new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short", year: "numeric" });
+const dateTimeFmt = new Intl.DateTimeFormat(LOCALE, {
   day: "numeric",
   month: "short",
   year: "numeric",
   hour: "2-digit",
   minute: "2-digit",
 });
-const shortDateFmt = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
-const relFmt = new Intl.RelativeTimeFormat("fr-FR", { numeric: "auto" });
+const shortDateFmt = new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short" });
+const relFmt = new Intl.RelativeTimeFormat(LOCALE, { numeric: "auto" });
 
 export const formatNumber = (n: number | null | undefined) => numberFmt.format(n ?? 0);
 export const formatCurrency = (n: number | null | undefined, precise = false) =>

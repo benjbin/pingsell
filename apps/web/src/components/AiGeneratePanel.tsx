@@ -4,20 +4,21 @@ import { api } from "../lib/api";
 import type { GeneratedEmail } from "../lib/types";
 import { Button, Field, Input, Select, Textarea } from "./ui/primitives";
 import { useToast } from "./ui/Toast";
+import { t } from "../lib/i18n";
 
 const TONES = [
-  { value: "chaleureux", label: "Chaleureux" },
-  { value: "professionnel", label: "Professionnel" },
-  { value: "enthousiaste", label: "Enthousiaste" },
-  { value: "luxe", label: "Haut de gamme" },
-  { value: "humoristique", label: "Décalé" },
+  { value: "chaleureux", label: t("Chaleureux", "Warm") },
+  { value: "professionnel", label: t("Professionnel", "Professional") },
+  { value: "enthousiaste", label: t("Enthousiaste", "Enthusiastic") },
+  { value: "luxe", label: t("Haut de gamme", "Premium") },
+  { value: "humoristique", label: t("Décalé", "Playful") },
 ];
 
 const IDEAS = [
-  "Soldes d'hiver : -20 % sur toute la boutique ce week-end",
-  "Bienvenue aux nouveaux abonnés avec un code de 10 %",
-  "Lancement de notre nouvelle collection printemps",
-  "Relance panier abandonné avec livraison offerte",
+  t("Soldes d'hiver : -20 % sur toute la boutique ce week-end", "Winter sale: 20% off the entire store this weekend"),
+  t("Bienvenue aux nouveaux abonnés avec un code de 10 %", "Welcome new subscribers with a 10% discount code"),
+  t("Lancement de notre nouvelle collection printemps", "Launch of our new spring collection"),
+  t("Relance panier abandonné avec livraison offerte", "Abandoned cart reminder with free shipping"),
 ];
 
 export function AiGeneratePanel({
@@ -37,14 +38,14 @@ export function AiGeneratePanel({
 
   async function generate() {
     if (!prompt.trim()) {
-      toast.error("Décrivez l'email à générer");
+      toast.error(t("Décrivez l'email à générer", "Describe the email to generate"));
       return;
     }
     setLoading(true);
     try {
       const email = await api.ai.generateEmail({ prompt: prompt.trim(), tone, brand: brand.trim() || undefined });
       onGenerated(email);
-      toast.success("Email généré", "Relisez et ajustez avant l'envoi.");
+      toast.success(t("Email généré", "Email generated"), t("Relisez et ajustez avant l'envoi.", "Review and tweak it before sending."));
     } catch (err) {
       toast.error(err);
     } finally {
@@ -59,8 +60,8 @@ export function AiGeneratePanel({
           <Sparkles className="size-4" />
         </span>
         <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Partir d'un modèle</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Objet, pré-en-tête et HTML responsive en quelques secondes.</p>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("Partir d'un modèle", "Start from a template")}</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("Objet, pré-en-tête et HTML responsive en quelques secondes.", "Subject line, preheader and responsive HTML in seconds.")}</p>
         </div>
       </div>
       <div className="space-y-3">
@@ -68,8 +69,8 @@ export function AiGeneratePanel({
           rows={compact ? 2 : 3}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Ex : Annonce de nos soldes d'hiver, -20 % sur les pulls, ton complice, bouton vers la boutique."
-          aria-label="Décrivez votre email"
+          placeholder={t("Ex : Annonce de nos soldes d'hiver, -20 % sur les pulls, ton complice, bouton vers la boutique.", "E.g. Announce our winter sale, 20% off sweaters, friendly tone, button to the store.")}
+          aria-label={t("Décrivez votre email", "Describe your email")}
         />
         {!compact && (
           <div className="flex flex-wrap gap-1.5">
@@ -86,21 +87,21 @@ export function AiGeneratePanel({
           </div>
         )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Ton" htmlFor="ai-tone">
+          <Field label={t("Ton", "Tone")} htmlFor="ai-tone">
             <Select id="ai-tone" value={tone} onChange={(e) => setTone(e.target.value)}>
-              {TONES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
+              {TONES.map((tone) => (
+                <option key={tone.value} value={tone.value}>
+                  {tone.label}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Marque" htmlFor="ai-brand">
-            <Input id="ai-brand" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="Nom de votre marque" />
+          <Field label={t("Marque", "Brand")} htmlFor="ai-brand">
+            <Input id="ai-brand" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder={t("Nom de votre marque", "Your brand name")} />
           </Field>
         </div>
         <Button variant="accent" onClick={generate} loading={loading} icon={Wand2} className="w-full">
-          {loading ? "Rédaction en cours…" : "Générer l'email"}
+          {loading ? t("Rédaction en cours…", "Writing…") : t("Générer l'email", "Generate email")}
         </Button>
       </div>
     </div>

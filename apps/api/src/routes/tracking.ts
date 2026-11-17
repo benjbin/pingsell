@@ -4,6 +4,7 @@ import type { Deps } from '../deps.js';
 import { cancelRunsForContact } from '../services/automations.js';
 import { recordEvent } from '../services/contacts.js';
 import { escapeHtml } from '../services/render.js';
+import { currentLang, t } from '../i18n.js';
 
 // 1x1 transparent GIF.
 const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
@@ -26,7 +27,7 @@ function page(reply: FastifyReply, status: number, title: string, body: string) 
     .type('text/html; charset=utf-8')
     .header('cache-control', 'no-store')
     .send(`<!DOCTYPE html>
-<html lang="fr">
+<html lang="${currentLang()}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -89,7 +90,12 @@ export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
       /^https?:\/\//i.test(target) &&
       (message.html.includes(encoded) || message.html.includes(escapeHtml(encoded)));
     if (!legit) {
-      return page(reply, 404, 'Lien invalide', '<p style="margin:0;color:#475569;">Ce lien est invalide ou a expiré.</p>');
+      return page(
+        reply,
+        404,
+        t('Lien invalide', 'Invalid link'),
+        `<p style="margin:0;color:#475569;">${t('Ce lien est invalide ou a expiré.', 'This link is invalid or has expired.')}</p>`,
+      );
     }
     transaction(db, () => {
       const timestamp = now();
@@ -115,28 +121,43 @@ export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
     });
   };
 
+  // The page follows the visitor's browser language (Accept-Language), not the sender's.
   app.get<{ Params: { id: string } }>('/u/:id', async (request, reply) => {
     const message = loadMessage(request.params.id);
     if (!message) {
-      return page(reply, 404, 'Lien introuvable', '<p style="margin:0;color:#475569;">Ce lien de désinscription est invalide.</p>');
+      return page(
+        reply,
+        404,
+        t('Lien introuvable', 'Link not found'),
+        `<p style="margin:0;color:#475569;">${t('Ce lien de désinscription est invalide.', 'This unsubscribe link is invalid.')}</p>`,
+      );
     }
     const account = get<{ name: string }>(db, 'SELECT name FROM accounts WHERE id = ?', message.account_id);
-    const sender = escapeHtml(account?.name ?? 'cet expéditeur');
+    const sender = escapeHtml(account?.name ?? t('cet expéditeur', 'this sender'));
     if (!message.contact_id) {
       return page(
         reply,
         200,
-        'Email de test',
-        `<p style="margin:0;color:#475569;">Cet email était un envoi de test : aucune désinscription n'est nécessaire.</p>`,
+        t('Email de test', 'Test email'),
+        `<p style="margin:0;color:#475569;">${t(
+          "Cet email était un envoi de test : aucune désinscription n'est nécessaire.",
+          'This was a test email: no need to unsubscribe.',
+        )}</p>`,
       );
     }
     unsubscribe(message, 'link');
     return page(
       reply,
       200,
-      'Vous êtes désinscrit(e)',
-      `<p style="margin:0 0 8px;color:#475569;line-height:24px;">Vous ne recevrez plus d'emails marketing de <strong>${sender}</strong>.</p>
-       <p style="margin:0;color:#94a3b8;font-size:14px;">C'était une erreur ? Contactez directement ${sender} pour vous réinscrire.</p>`,
+      t('Vous êtes désinscrit(e)', 'You’re unsubscribed'),
+      `<p style="margin:0 0 8px;color:#475569;line-height:24px;">${t(
+        `Vous ne recevrez plus d'emails marketing de <strong>${sender}</strong>.`,
+        `You won’t receive any more marketing emails from <strong>${sender}</strong>.`,
+      )}</p>
+       <p style="margin:0;color:#94a3b8;font-size:14px;">${t(
+         `C'était une erreur ? Contactez directement ${sender} pour vous réinscrire.`,
+         `Was this a mistake? Contact ${sender} directly to resubscribe.`,
+       )}</p>`,
     );
   });
 

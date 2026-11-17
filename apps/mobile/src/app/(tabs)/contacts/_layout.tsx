@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 
+import { t } from '@/lib/i18n';
 import { useColors } from '@/lib/theme';
 
 export default function ContactsStackLayout() {
@@ -11,7 +12,7 @@ export default function ContactsStackLayout() {
         headerShadowVisible: false,
         headerTintColor: c.accentText,
         headerTitleStyle: { color: c.text, fontWeight: '700' },
-        headerBackTitle: 'Retour',
+        headerBackTitle: t('Retour', 'Back'),
         contentStyle: { backgroundColor: c.background },
       }}
     >

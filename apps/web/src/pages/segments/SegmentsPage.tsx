@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Filter, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { api } from "../../lib/api";
+import { t } from "../../lib/i18n";
 import { useAsync } from "../../lib/useAsync";
 import { formatDate, formatNumber } from "../../lib/format";
 import type { Segment } from "../../lib/types";
@@ -23,7 +24,7 @@ export function SegmentsPage() {
     try {
       await api.segments.remove(toDelete.id);
       segments.setData((prev) => (prev ?? []).filter((s) => s.id !== toDelete.id));
-      toast.success("Segment supprimé");
+      toast.success(t("Segment supprimé", "Segment deleted"));
       setToDelete(null);
     } catch (err) {
       toast.error(err);
@@ -36,10 +37,10 @@ export function SegmentsPage() {
     <>
       <PageHeader
         title="Segments"
-        description="Ciblez les bons contacts grâce à des règles dynamiques."
+        description={t("Ciblez les bons contacts grâce à des règles dynamiques.", "Target the right contacts with dynamic rules.")}
         actions={
           <Link to="/segments/nouveau">
-            <Button icon={Plus}>Nouveau segment</Button>
+            <Button icon={Plus}>{t("Nouveau segment", "New segment")}</Button>
           </Link>
         }
       />
@@ -60,11 +61,11 @@ export function SegmentsPage() {
         <Card>
           <EmptyState
             icon={Filter}
-            title="Aucun segment"
-            description="Créez un segment, par exemple « Clients VIP » ou « Inactifs depuis 90 jours »."
+            title={t("Aucun segment", "No segments")}
+            description={t("Créez un segment, par exemple « Clients VIP » ou « Inactifs depuis 90 jours ».", "Create a segment, like “VIP customers” or “Inactive for 90 days”.")}
             action={
               <Link to="/segments/nouveau">
-                <Button icon={Plus}>Créer un segment</Button>
+                <Button icon={Plus}>{t("Créer un segment", "Create a segment")}</Button>
               </Link>
             }
           />
@@ -88,11 +89,13 @@ export function SegmentsPage() {
                     <Users className="size-4 text-slate-400" />
                     {formatNumber(s.count)}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">contacts · modifié le {formatDate(s.updated_at)}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {t(`contacts · modifié le ${formatDate(s.updated_at)}`, `${s.count === 1 ? "contact" : "contacts"} · updated ${formatDate(s.updated_at)}`)}
+                  </p>
                 </div>
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" icon={Pencil} onClick={() => navigate(`/segments/${s.id}`)} aria-label="Modifier" />
-                  <Button variant="ghost" size="sm" icon={Trash2} onClick={() => setToDelete(s)} aria-label="Supprimer" />
+                  <Button variant="ghost" size="sm" icon={Pencil} onClick={() => navigate(`/segments/${s.id}`)} aria-label={t("Modifier", "Edit")} />
+                  <Button variant="ghost" size="sm" icon={Trash2} onClick={() => setToDelete(s)} aria-label={t("Supprimer", "Delete")} />
                 </div>
               </div>
             </Card>
@@ -106,9 +109,12 @@ export function SegmentsPage() {
         onConfirm={remove}
         loading={deleting}
         danger
-        title="Supprimer ce segment ?"
-        description={`« ${toDelete?.name ?? ""} » sera supprimé. Les contacts ne sont pas affectés.`}
-        confirmLabel="Supprimer"
+        title={t("Supprimer ce segment ?", "Delete this segment?")}
+        description={t(
+          `« ${toDelete?.name ?? ""} » sera supprimé. Les contacts ne sont pas affectés.`,
+          `“${toDelete?.name ?? ""}” will be deleted. Contacts aren't affected.`,
+        )}
+        confirmLabel={t("Supprimer", "Delete")}
       />
     </>
   );

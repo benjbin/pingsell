@@ -15,6 +15,7 @@ import {
 import { Badge, EmptyState, ErrorState } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { contactDisplayName, contactStatusLabel, formatCurrency, formatNumber, initials } from '@/lib/format';
+import { t } from '@/lib/i18n';
 import { radius, spacing, useColors } from '@/lib/theme';
 import type { Contact, ContactStatus } from '@/lib/types';
 
@@ -23,10 +24,10 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 type StatusFilter = 'all' | ContactStatus;
 const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
-  { key: 'all', label: 'Tous' },
-  { key: 'subscribed', label: 'Abonnés' },
-  { key: 'unsubscribed', label: 'Désabonnés' },
-  { key: 'bounced', label: 'Rebonds' },
+  { key: 'all', label: t('Tous', 'All') },
+  { key: 'subscribed', label: t('Abonnés', 'Subscribed') },
+  { key: 'unsubscribed', label: t('Désabonnés', 'Unsubscribed') },
+  { key: 'bounced', label: t('Rebonds', 'Bounced') },
 ];
 
 export default function ContactsScreen() {
@@ -48,11 +49,11 @@ export default function ContactsScreen() {
   useEffect(() => {
     const next = query.trim();
     if (next === search) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       setLoading(true);
       setSearch(next);
     }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [query, search]);
 
   /** Fetches one page; callers set the matching spinner flag beforehand. Only the latest request applies. */
@@ -85,7 +86,7 @@ export default function ContactsScreen() {
           },
           (e: unknown) => {
             if (!isLatest()) return;
-            setError(e instanceof Error ? e.message : 'Une erreur est survenue');
+            setError(e instanceof Error ? e.message : t('Une erreur est survenue', 'Something went wrong'));
             settle();
           },
         );
@@ -145,7 +146,7 @@ export default function ContactsScreen() {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Rechercher un nom ou un email"
+              placeholder={t('Rechercher un nom ou un email', 'Search by name or email')}
               placeholderTextColor={c.textSubtle}
               autoCapitalize="none"
               autoCorrect={false}
@@ -174,7 +175,12 @@ export default function ContactsScreen() {
             })}
           </View>
           <Text style={[styles.count, { color: c.textMuted }]}>
-            {loading ? 'Chargement…' : `${formatNumber(total)} contact${total > 1 ? 's' : ''}`}
+            {loading
+              ? t('Chargement…', 'Loading…')
+              : t(
+                  `${formatNumber(total)} contact${total > 1 ? 's' : ''}`,
+                  `${formatNumber(total)} contact${total === 1 ? '' : 's'}`,
+                )}
           </Text>
         </View>
       }
@@ -184,8 +190,12 @@ export default function ContactsScreen() {
         ) : (
           <EmptyState
             icon="people-outline"
-            title="Aucun contact"
-            text={search ? `Aucun résultat pour « ${search} ».` : 'Importez des contacts ou connectez Shopify.'}
+            title={t('Aucun contact', 'No contacts')}
+            text={
+              search
+                ? t(`Aucun résultat pour « ${search} ».`, `No results for “${search}”.`)
+                : t('Importez des contacts ou connectez Shopify.', 'Import contacts or connect Shopify.')
+            }
           />
         )
       }

@@ -8,6 +8,7 @@ import { CAMPAIGN_STATUS } from "../lib/constants";
 import { formatCurrency, formatDate, formatNumber, formatPercent, formatShortDate } from "../lib/format";
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Segmented, Skeleton, StatCard } from "../components/ui/primitives";
 import { SERIES_COLORS, TimeAreaChart } from "../components/charts";
+import { t } from "../lib/i18n";
 
 type Range = "7" | "30" | "90";
 
@@ -24,13 +25,13 @@ export function DashboardPage() {
 
   const firstName = account?.name ?? "";
   const hour = new Date().getHours();
-  const greeting = hour < 6 ? "Bonne nuit" : hour < 18 ? "Bonjour" : "Bonsoir";
+  const greeting = hour < 6 ? t("Bonne nuit", "Good night") : hour < 12 ? t("Bonjour", "Good morning") : hour < 18 ? t("Bonjour", "Good afternoon") : t("Bonsoir", "Good evening");
 
   return (
     <>
       <div className="mb-10 flex animate-rise flex-col gap-6 pb-4 lg:flex-row lg:items-end lg:justify-between dark:border-white/10">
         <div>
-          <p className="eyebrow">Tableau de bord — {range} derniers jours</p>
+          <p className="eyebrow">{t(`Tableau de bord — ${range} derniers jours`, `Dashboard — last ${range} days`)}</p>
           <h1 className="display mt-4 text-[52px] leading-[0.88] text-slate-900 sm:text-[76px] dark:text-white">
             {greeting},
             <br />
@@ -42,14 +43,14 @@ export function DashboardPage() {
             value={range}
             onChange={setRange}
             options={[
-              { value: "7", label: "7 j" },
-              { value: "30", label: "30 j" },
-              { value: "90", label: "90 j" },
+              { value: "7", label: t("7 j", "7d") },
+              { value: "30", label: t("30 j", "30d") },
+              { value: "90", label: t("90 j", "90d") },
             ]}
           />
           <Link to="/campagnes/nouvelle">
             <Button variant="accent" size="lg" icon={Plus}>
-              Nouvelle campagne
+              {t("Nouvelle campagne", "New campaign")}
             </Button>
           </Link>
         </div>
@@ -64,11 +65,11 @@ export function DashboardPage() {
             <Plug className="size-6" />
           </span>
           <span className="flex-1">
-            <span className="block font-display text-lg font-bold">Branchez votre premier outil</span>
-            <span className="mt-0.5 block text-sm text-white/80">Shopify, votre site, votre logiciel, votre app mobile ou un fichier : quelques minutes suffisent.</span>
+            <span className="block font-display text-lg font-bold">{t("Branchez votre premier outil", "Connect your first tool")}</span>
+            <span className="mt-0.5 block text-sm text-white/80">{t("Shopify, votre site, votre logiciel, votre app mobile ou un fichier : quelques minutes suffisent.", "Shopify, your website, your software, your mobile app or a file: it only takes a few minutes.")}</span>
           </span>
           <span className="inline-flex items-center gap-2 font-display text-sm font-bold">
-            Commencer <ArrowRight className="size-4" />
+            {t("Commencer", "Get started")} <ArrowRight className="size-4" />
           </span>
         </Link>
       )}
@@ -85,12 +86,12 @@ export function DashboardPage() {
           <div className="pointer-events-none absolute -right-20 -bottom-20 size-64 rounded-full border-[40px] border-brand-500 dark:border-slate-900" />
           <Link
             to="/campagnes"
-            aria-label="Voir les campagnes"
+            aria-label={t("Voir les campagnes", "View campaigns")}
             className="absolute top-6 right-6 flex size-10 items-center justify-center rounded-full ring-1 ring-white/25 transition duration-300 hover:bg-white hover:text-slate-900"
           >
             <ArrowUpRight className="size-4" strokeWidth={1.5} />
           </Link>
-          <p className="relative font-display text-[11px] font-semibold tracking-[0.2em] uppercase opacity-60">01 — Taux d'ouverture</p>
+          <p className="relative font-display text-[11px] font-semibold tracking-[0.2em] uppercase opacity-60">{t("01 — Taux d'ouverture", "01 — Open rate")}</p>
           {stats.loading ? (
             <Skeleton className="relative mt-6 h-28 w-48 !bg-white/10" />
           ) : (
@@ -98,41 +99,41 @@ export function DashboardPage() {
           )}
           <div className="relative mt-8 flex gap-8 font-display text-[11px] font-semibold tracking-wider">
             <div>
-              <p className="opacity-50">CLICS</p>
+              <p className="opacity-50">{t("CLICS", "CLICKS")}</p>
               <p className="mt-1 text-lg font-bold">{formatPercent(s?.click_rate)}</p>
             </div>
             <div>
-              <p className="opacity-50">DÉSABO.</p>
+              <p className="opacity-50">{t("DÉSABO.", "UNSUBS.")}</p>
               <p className="mt-1 text-lg font-bold">{formatPercent(s?.unsubscribe_rate)}</p>
             </div>
           </div>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:col-span-7">
           <StatCard
-            label="Abonnés"
+            label={t("Abonnés", "Subscribers")}
             icon={Users}
             loading={stats.loading}
             value={formatNumber(s?.contacts_subscribed)}
-            hint={s && `${formatNumber(s.contacts_total)} au total · +${formatNumber(s.contacts_new)}`}
+            hint={s && t(`${formatNumber(s.contacts_total)} au total · +${formatNumber(s.contacts_new)}`, `${formatNumber(s.contacts_total)} total · +${formatNumber(s.contacts_new)}`)}
           />
           <StatCard
-            label="Emails envoyés"
+            label={t("Emails envoyés", "Emails sent")}
             icon={Send}
             loading={stats.loading}
             value={formatNumber(s?.emails_sent)}
-            hint={s && `${formatNumber(s.campaigns_sent)} campagne${s.campaigns_sent > 1 ? "s" : ""}`}
+            hint={s && t(`${formatNumber(s.campaigns_sent)} campagne${s.campaigns_sent > 1 ? "s" : ""}`, `${formatNumber(s.campaigns_sent)} campaign${s.campaigns_sent === 1 ? "" : "s"}`)}
           />
-          <Link to="/statistiques" className="block rounded-[20px] transition hover:ring-2 hover:ring-brand-500/40" aria-label="Revenu généré : voir les statistiques détaillées">
+          <Link to="/statistiques" className="block rounded-[20px] transition hover:ring-2 hover:ring-brand-500/40" aria-label={t("Revenu généré : voir les statistiques détaillées", "Revenue generated: view detailed stats")}>
             <StatCard
-              label="Revenu généré"
+              label={t("Revenu généré", "Revenue generated")}
               icon={Euro}
               loading={stats.loading}
               value={formatCurrency(s?.revenue_attributed)}
               hint={
                 s &&
                 (s.revenue_shopify > 0
-                  ? `${Math.round((s.revenue_attributed / s.revenue_shopify) * 100)}\u00a0% de ${formatCurrency(s.revenue_shopify)} de CA`
-                  : "Grâce à vos emails et notifications")
+                  ? t(`${Math.round((s.revenue_attributed / s.revenue_shopify) * 100)}\u00a0% de ${formatCurrency(s.revenue_shopify)} de CA`, `${Math.round((s.revenue_attributed / s.revenue_shopify) * 100)}% of ${formatCurrency(s.revenue_shopify)} in sales`)
+                  : t("Grâce à vos emails et notifications", "From your emails and notifications"))
               }
             />
           </Link>
@@ -142,11 +143,11 @@ export function DashboardPage() {
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader
-            title="Activité"
-            description="Envois, ouvertures et clics, jour par jour"
+            title={t("Activité", "Activity")}
+            description={t("Envois, ouvertures et clics, jour par jour", "Sends, opens and clicks, day by day")}
             action={
               <Link to="/statistiques" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300">
-                Statistiques détaillées <ArrowRight className="size-4" />
+                {t("Statistiques détaillées", "Detailed stats")} <ArrowRight className="size-4" />
               </Link>
             }
           />
@@ -160,28 +161,28 @@ export function DashboardPage() {
                 height={300}
                 formatX={formatShortDate}
                 series={[
-                  { key: "sent", label: "Envoyés", color: SERIES_COLORS.sent },
-                  { key: "opened", label: "Ouverts", color: SERIES_COLORS.opened },
-                  { key: "clicked", label: "Cliqués", color: SERIES_COLORS.clicked },
+                  { key: "sent", label: t("Envoyés", "Sent"), color: SERIES_COLORS.sent },
+                  { key: "opened", label: t("Ouverts", "Opened"), color: SERIES_COLORS.opened },
+                  { key: "clicked", label: t("Cliqués", "Clicked"), color: SERIES_COLORS.clicked },
                 ]}
               />
             ) : (
-              <EmptyState icon={Send} title="Pas encore d'activité" description="Envoyez votre première campagne pour voir vos statistiques ici." />
+              <EmptyState icon={Send} title={t("Pas encore d'activité", "No activity yet")} description={t("Envoyez votre première campagne pour voir vos statistiques ici.", "Send your first campaign to see your stats here.")} />
             )}
           </div>
         </Card>
 
         <Card>
-          <CardHeader title="Ce mois-ci" description="Facturation au volume d'emails" />
+          <CardHeader title={t("Ce mois-ci", "This month")} description={t("Facturation au volume d'emails", "Billed by email volume")} />
           <dl className="divide-y divide-slate-200/80 px-6 dark:divide-slate-800">
-            <UsageRow icon={Send} label="Emails envoyés" value={usage ? formatNumber(usage.emails_sent_month) : undefined} />
-            <UsageRow icon={Users} label="Contacts" value={usage ? formatNumber(usage.contacts) : undefined} />
-            <UsageRow icon={UserPlus} label={`Nouveaux (${range} j)`} value={s ? formatNumber(s.contacts_new) : undefined} />
-            <UsageRow icon={MousePointerClick} label="Taux de clic" value={s ? formatPercent(s.click_rate) : undefined} />
+            <UsageRow icon={Send} label={t("Emails envoyés", "Emails sent")} value={usage ? formatNumber(usage.emails_sent_month) : undefined} />
+            <UsageRow icon={Users} label={t("Contacts", "Contacts")} value={usage ? formatNumber(usage.contacts) : undefined} />
+            <UsageRow icon={UserPlus} label={t(`Nouveaux (${range} j)`, `New (${range}d)`)} value={s ? formatNumber(s.contacts_new) : undefined} />
+            <UsageRow icon={MousePointerClick} label={t("Taux de clic", "Click rate")} value={s ? formatPercent(s.click_rate) : undefined} />
           </dl>
           <div className="px-6 pt-2 pb-6">
             <Link to="/parametres" className="group inline-flex items-center gap-1.5 text-sm font-medium text-slate-950 dark:text-white">
-              <span className="underline decoration-brand-500 decoration-2 underline-offset-4">Gérer mon compte</span>
+              <span className="underline decoration-brand-500 decoration-2 underline-offset-4">{t("Gérer mon compte", "Manage my account")}</span>
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
             </Link>
           </div>
@@ -190,9 +191,9 @@ export function DashboardPage() {
 
       <section className="mt-14">
         <div className="mb-5 flex items-end justify-between border-b border-slate-900/10 pb-4 dark:border-white/10">
-          <h2 className="display text-[36px] leading-none text-slate-900 dark:text-white">Campagnes récentes<span className="text-brand-500">.</span></h2>
+          <h2 className="display text-[36px] leading-none text-slate-900 dark:text-white">{t("Campagnes récentes", "Recent campaigns")}<span className="text-brand-500">.</span></h2>
           <Link to="/campagnes" className="group inline-flex items-center gap-1.5 font-display text-[11px] font-semibold tracking-wider text-slate-600 uppercase hover:text-brand-500 dark:hover:text-white">
-            Tout voir <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" />
+            {t("Tout voir", "View all")} <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" />
           </Link>
         </div>
         {campaigns.loading ? (
@@ -204,11 +205,11 @@ export function DashboardPage() {
         ) : recent.length === 0 ? (
           <EmptyState
             icon={Send}
-            title="Aucune campagne"
-            description="Créez votre première campagne, partez d'un de nos modèles."
+            title={t("Aucune campagne", "No campaigns")}
+            description={t("Créez votre première campagne, partez d'un de nos modèles.", "Create your first campaign, starting from one of our templates.")}
             action={
               <Link to="/campagnes/nouvelle">
-                <Button icon={Plus}>Créer une campagne</Button>
+                <Button icon={Plus}>{t("Créer une campagne", "Create a campaign")}</Button>
               </Link>
             }
           />
@@ -231,12 +232,12 @@ export function DashboardPage() {
                     {c.stats && c.status === "sent" ? (
                       <>
                         <span>
-                          <span className="text-slate-950 dark:text-white">{formatNumber(c.stats.sent)}</span> envois
+                          <span className="text-slate-950 dark:text-white">{formatNumber(c.stats.sent)}</span> {t("envois", "sent")}
                         </span>
                         <span>
-                          <span className="text-brand-600 dark:text-brand-400">{formatPercent(c.stats.open_rate)}</span> ouv.
+                          <span className="text-brand-600 dark:text-brand-400">{formatPercent(c.stats.open_rate)}</span> {t("ouv.", "opens")}
                         </span>
-                        <span className="hidden md:inline">{formatPercent(c.stats.click_rate)} clics</span>
+                        <span className="hidden md:inline">{formatPercent(c.stats.click_rate)} {t("clics", "clicks")}</span>
                       </>
                     ) : (
                       <span className="hidden md:inline">{formatDate(c.sent_at ?? c.scheduled_at ?? c.updated_at)}</span>

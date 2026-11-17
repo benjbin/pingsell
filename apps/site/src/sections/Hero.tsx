@@ -3,8 +3,9 @@ import { motion, useReducedMotion, useScroll, useTransform } from "motion/react"
 import { ArrowRight, Check } from "lucide-react";
 import { PRICING, SIGNUP_URL } from "../content";
 import { EditorStage, phaseOf, useHeroTimeline } from "./a-stage";
+import { LOCALE, t } from "../i18n";
 
-const WORDS = ["Composez.", "Envoyez.", "Vendez."];
+const WORDS = [t("Composez.", "Design."), t("Envoyez.", "Send."), t("Vendez.", "Sell.")];
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
 /**
@@ -52,7 +53,7 @@ export function Hero() {
         {/* Copy */}
         <motion.div style={reduce ? undefined : { y: textY, opacity: textOpacity }} className="min-w-0">
           <motion.p {...enter(0)} className="eyebrow flex items-center gap-2">
-            <span className="size-1.5 rounded-full bg-brand-500" /> Emailing pour e-commerçants
+            <span className="size-1.5 rounded-full bg-brand-500" /> {t("Emailing pour e-commerçants", "Email marketing for online stores")}
           </motion.p>
 
           <h1 className="display mt-5 text-[52px] leading-[0.9] sm:text-[76px] lg:text-[80px]">
@@ -82,8 +83,10 @@ export function Hero() {
           </h1>
 
           <motion.p {...enter(0.45)} className="mt-6 max-w-md text-[17px] leading-relaxed text-slate-600">
-            Emails, notifications push et automatisations, branchés sur les outils que vous utilisez déjà : votre site, votre CRM ou votre app en
-            quelques lignes. Pingsell s'adapte à votre façon de travailler.
+            {t(
+              "Emails, notifications push et automatisations, branchés sur les outils que vous utilisez déjà : votre site, votre CRM ou votre app en quelques lignes. Pingsell s'adapte à votre façon de travailler.",
+              "Emails, push notifications and automations, plugged into the tools you already use: your website, your CRM or your app in a few lines of code. Pingsell adapts to the way you work.",
+            )}
           </motion.p>
 
           <motion.div {...enter(0.55)} className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -91,21 +94,25 @@ export function Hero() {
               href={SIGNUP_URL}
               className="group inline-flex h-12 items-center justify-center gap-2 rounded-full bg-brand-500 px-6 font-display text-sm font-semibold text-white shadow-[0_10px_30px_-10px_rgba(20,92,255,0.7)] transition hover:bg-brand-600"
             >
-              Commencer gratuitement
+              {t("Commencer gratuitement", "Start for free")}
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
             </a>
             <a
               href="#adapte"
               className="inline-flex h-12 items-center justify-center rounded-full px-6 font-display text-sm font-semibold text-slate-900 ring-1 ring-slate-900/15 transition hover:ring-slate-900/40"
             >
-              Voir comment ça se branche
+              {t("Voir comment ça se branche", "See how it connects")}
             </a>
           </motion.div>
 
           <motion.ul {...enter(0.65)} className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
-            {[`${PRICING.freeEmails.toLocaleString("fr-FR")} emails offerts / mois`, "Sans carte bancaire", "Branché en quelques minutes"].map((t) => (
-              <li key={t} className="flex items-center gap-1.5">
-                <Check className="size-4 text-brand-500" /> {t}
+            {[
+              t(`${PRICING.freeEmails.toLocaleString(LOCALE)} emails offerts / mois`, `${PRICING.freeEmails.toLocaleString(LOCALE)} free emails / month`),
+              t("Sans carte bancaire", "No credit card required"),
+              t("Branché en quelques minutes", "Connected in minutes"),
+            ].map((item) => (
+              <li key={item} className="flex items-center gap-1.5">
+                <Check className="size-4 text-brand-500" /> {item}
               </li>
             ))}
           </motion.ul>

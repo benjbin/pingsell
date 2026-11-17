@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { API_URL } from "../content";
 import { Line } from "./ApiSection";
+import { t, LOCALE } from "../i18n";
 
 type OS = "ios" | "android";
 
@@ -42,84 +43,102 @@ const NOTIFS = [
     id: "cart",
     icon: Shirt,
     thumb: "from-[#c9b8a3] to-[#8a6f55]",
-    title: "Vous avez oublié quelque chose ?",
-    body: "Votre pull en mérinos vous attend. Plus que 2 en taille M.",
+    title: t("Vous avez oublié quelque chose ?", "Forgot something?"),
+    body: t("Votre pull en mérinos vous attend. Plus que 2 en taille M.", "Your merino sweater is waiting. Only 2 left in size M."),
   },
   {
     id: "flash",
     icon: Zap,
     thumb: "from-[#ffcf4d] to-[#f08a00]",
-    title: "Vente flash : -30 % sur l'hiver",
-    body: "Fin dans {t}. Les manteaux partent vite.",
+    title: t("Vente flash : -30 % sur l'hiver", "Flash sale: 30% off winter"),
+    body: t("Fin dans {t}. Les manteaux partent vite.", "Ends in {t}. Coats are going fast."),
   },
   {
     id: "ship",
     icon: Package,
     thumb: "from-[#85a8ff] to-[#145cff]",
-    title: "Votre commande est en route",
-    body: "Colis AN-20418 expédié, livraison prévue jeudi.",
+    title: t("Votre commande est en route", "Your order is on its way"),
+    body: t("Colis AN-20418 expédié, livraison prévue jeudi.", "Package AN-20418 shipped, arriving Thursday."),
   },
 ] as const;
 
 const PROVIDERS = [
-  ["Firebase Cloud Messaging", "Android et iOS"],
+  ["Firebase Cloud Messaging", t("Android et iOS", "Android and iOS")],
   ["APNs", "Apple Push Notification service"],
   ["Expo", "Expo Push"],
-] as const;
+];
 
 const FEATURES = [
   {
     icon: Megaphone,
-    title: "Écran verrouillé et dans l'app",
-    text: "Son, badge et lien profond sur l'écran verrouillé, et une copie dans le centre de notifications de votre app. Segment, tag ou toute la base, avec test avant envoi.",
+    title: t("Écran verrouillé et dans l'app", "Lock screen and in-app"),
+    text: t(
+      "Son, badge et lien profond sur l'écran verrouillé, et une copie dans le centre de notifications de votre app. Segment, tag ou toute la base, avec test avant envoi.",
+      "Sound, badge and deep link on the lock screen, plus a copy in your app's notification center. A segment, a tag or your whole list, with a test before sending.",
+    ),
   },
   {
     icon: BellRing,
-    title: "Écran de pré-permission",
-    text: "Votre écran passe avant la fenêtre système, qui ne s'ouvre que si le client touche « Activer ». Texte modifiable sans republier l'app, taux d'opt-in suivi.",
+    title: t("Écran de pré-permission", "Pre-permission screen"),
+    text: t(
+      "Votre écran passe avant la fenêtre système, qui ne s'ouvre que si le client touche « Activer ». Texte modifiable sans republier l'app, taux d'opt-in suivi.",
+      "Your screen shows before the system prompt, which only opens if the customer taps “Enable”. Edit the copy without republishing the app, and track your opt-in rate.",
+    ),
   },
   {
     icon: Repeat,
-    title: "Relance des non-ouvreurs",
-    text: "Une seule relance, de 2 h à 3 jours plus tard, pour ceux qui n'ont ni ouvert le push ni lu le message dans l'app. Titre au choix, statistiques à part.",
+    title: t("Relance des non-ouvreurs", "Resend to non-openers"),
+    text: t(
+      "Une seule relance, de 2 h à 3 jours plus tard, pour ceux qui n'ont ni ouvert le push ni lu le message dans l'app. Titre au choix, statistiques à part.",
+      "One follow-up, 2 hours to 3 days later, for anyone who neither opened the push nor read the message in the app. Your choice of title, separate stats.",
+    ),
   },
   {
     icon: Timer,
-    title: "Envoi intelligent",
-    text: "Chaque client reçoit la campagne dans les 24 h, à l'heure où il ouvre d'habitude ses notifications et ses emails. Sinon, à la meilleure heure de votre audience.",
+    title: t("Envoi intelligent", "Smart send"),
+    text: t(
+      "Chaque client reçoit la campagne dans les 24 h, à l'heure où il ouvre d'habitude ses notifications et ses emails. Sinon, à la meilleure heure de votre audience.",
+      "Each customer gets the campaign within 24 hours, at the time they usually open their notifications and emails. Otherwise, at your audience's best time.",
+    ),
   },
   {
     icon: Workflow,
-    title: "Dans vos automatisations",
-    text: "Une étape « Notification push » entre vos emails, les déclencheurs « Première connexion à l'app » et « Notifications activées », et « Arrêter si… » dès qu'un client ouvre ou commande.",
+    title: t("Dans vos automatisations", "In your automations"),
+    text: t(
+      "Une étape « Notification push » entre vos emails, les déclencheurs « Première connexion à l'app » et « Notifications activées », et « Arrêter si… » dès qu'un client ouvre ou commande.",
+      "A “Push notification” step between your emails, “First app sign-in” and “Notifications enabled” triggers, and “Stop if…” as soon as a customer opens or orders.",
+    ),
   },
   {
     icon: Truck,
-    title: "Push transactionnel",
-    text: "Un appel à /push/send prévient tout de suite un client, retrouvé par son email, même désinscrit du marketing. Ou sans code depuis votre boutique : « Commande expédiée », suivi compris.",
+    title: t("Push transactionnel", "Transactional push"),
+    text: t(
+      "Un appel à /push/send prévient tout de suite un client, retrouvé par son email, même désinscrit du marketing. Ou sans code depuis votre boutique : « Commande expédiée », suivi compris.",
+      "One call to /push/send notifies a customer right away, matched by email, even if they unsubscribed from marketing. Or no-code from your store: “Order shipped”, tracking included.",
+    ),
   },
-] as const;
+];
 
 /** Pre-permission demo: the merchant's own screen, then the one-shot system dialog, then subscribed. */
 const PROMPT_STEPS = [
-  { caption: "Votre écran, modifiable dans Pingsell", ms: 2400 },
-  { caption: "Le client touche « Activer »", ms: 900 },
-  { caption: "La fenêtre système, une seule fois", ms: 1800 },
-  { caption: "Client abonné aux notifications", ms: 2400 },
-] as const;
+  { caption: t("Votre écran, modifiable dans Pingsell", "Your screen, editable in Pingsell"), ms: 2400 },
+  { caption: t("Le client touche « Activer »", "The customer taps “Enable”"), ms: 900 },
+  { caption: t("La fenêtre système, une seule fois", "The system prompt, just once"), ms: 1800 },
+  { caption: t("Client abonné aux notifications", "Customer subscribed to notifications"), ms: 2400 },
+];
 const OPTIN = { shown: 2480, accepted: 1538 };
-const num = (n: number) => n.toLocaleString("fr-FR").replace(/\u202f/g, "\u00a0");
+const num = (n: number) => n.toLocaleString(LOCALE).replace(/\u202f/g, "\u00a0");
 
 const SCENARIO = [
-  { icon: ShoppingCart, label: "Panier abandonné", sub: "Déclencheur" },
-  { icon: Clock, label: "Attendre 1 h", sub: "Délai" },
-  { icon: Bell, label: "Notification push", sub: "« Vous avez oublié quelque chose ? »" },
-  { icon: Clock, label: "Attendre 24 h", sub: "Délai" },
-  { icon: CircleStop, label: "Arrêter si…", sub: "Le client a commandé entre-temps" },
-  { icon: Mail, label: "Email de relance", sub: "Avec le contenu du panier" },
-] as const;
+  { icon: ShoppingCart, label: t("Panier abandonné", "Abandoned cart"), sub: t("Déclencheur", "Trigger") },
+  { icon: Clock, label: t("Attendre 1 h", "Wait 1 hour"), sub: t("Délai", "Delay") },
+  { icon: Bell, label: t("Notification push", "Push notification"), sub: t("« Vous avez oublié quelque chose ? »", "“Forgot something?”") },
+  { icon: Clock, label: t("Attendre 24 h", "Wait 24 hours"), sub: t("Délai", "Delay") },
+  { icon: CircleStop, label: t("Arrêter si…", "Stop if…"), sub: t("Le client a commandé entre-temps", "The customer ordered in the meantime") },
+  { icon: Mail, label: t("Email de relance", "Follow-up email"), sub: t("Avec le contenu du panier", "With the cart contents") },
+];
 
-const SNIPPET = `// Dans votre app, une fois le jeton push obtenu
+const SNIPPET = `${t("// Dans votre app, une fois le jeton push obtenu", "// In your app, once you have the push token")}
 await fetch("${API_URL}/push/app/devices", {
   method: "POST",
   headers: {
@@ -193,19 +212,28 @@ export function PushSection() {
                 {!reduce && <span className="absolute inset-0 animate-ping rounded-full bg-brand-500/60" />}
                 <span className="relative size-1.5 rounded-full bg-brand-500" />
               </span>
-              Notifications push
+              {t("Notifications push", "Push notifications")}
             </p>
             <h2 className="display mt-4 text-[38px] leading-[0.92] sm:text-[52px]">
-              Vos clients, jusque sur <em className="text-brand-500">leur écran d'accueil.</em>
+              {t(
+                <>
+                  Vos clients, jusque sur <em className="text-brand-500">leur écran d'accueil.</em>
+                </>,
+                <>
+                  Your customers, right on <em className="text-brand-500">their home screen.</em>
+                </>,
+              )}
             </h2>
             <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-slate-600">
-              Vous avez votre propre app iOS ou Android ? Connectez-la à Pingsell et envoyez-lui des notifications push depuis le même endroit que vos emails : mêmes
-              contacts, mêmes segments, mêmes automatisations.
+              {t(
+                "Vous avez votre propre app iOS ou Android ? Connectez-la à Pingsell et envoyez-lui des notifications push depuis le même endroit que vos emails : mêmes contacts, mêmes segments, mêmes automatisations.",
+                "Have your own iOS or Android app? Connect it to Pingsell and send push notifications from the same place as your emails: same contacts, same segments, same automations.",
+              )}
             </p>
           </div>
 
           <div className="reveal mt-9">
-            <p className="text-[13px] text-slate-500">Compatible avec :</p>
+            <p className="text-[13px] text-slate-500">{t("Compatible avec :", "Works with:")}</p>
             <ul className="mt-2.5 flex flex-wrap gap-2">
               {PROVIDERS.map(([name, sub]) => (
                 <li key={name} title={sub} className="flex items-center gap-2 rounded-full bg-white px-3.5 py-2 text-[12.5px] font-semibold text-slate-900 shadow-sm ring-1 ring-slate-900/10">
@@ -214,10 +242,13 @@ export function PushSection() {
               ))}
             </ul>
             <p className="mt-3 text-[13px] leading-relaxed text-slate-500">
-              App native, React Native, Flutter ou Expo : si votre app sait obtenir un jeton push, elle se branche.
+              {t(
+                "App native, React Native, Flutter ou Expo : si votre app sait obtenir un jeton push, elle se branche.",
+                "Native, React Native, Flutter or Expo: if your app can get a push token, it can connect.",
+              )}
             </p>
             <p className="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-900 px-3.5 py-1.5 text-[12px] font-semibold text-white">
-              <Check className="size-3.5 text-brand-300" /> Inclus en Pro et Business
+              <Check className="size-3.5 text-brand-300" /> {t("Inclus en Pro et Business", "Included in Pro and Business")}
             </p>
           </div>
         </div>
@@ -243,10 +274,10 @@ export function PushSection() {
               transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
             >
               <p className="flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.14em] text-slate-500 uppercase">
-                <Link2 className="size-3 text-brand-500" /> Lien profond
+                <Link2 className="size-3 text-brand-500" /> {t("Lien profond", "Deep link")}
               </p>
               <p className="mt-1.5 font-mono text-[10.5px] whitespace-nowrap text-slate-900">atelier-nord://panier</p>
-              <p className="mt-1 text-[11px] leading-snug text-slate-500">Ouvre directement le panier dans l'app.</p>
+              <p className="mt-1 text-[11px] leading-snug text-slate-500">{t("Ouvre directement le panier dans l'app.", "Opens the cart right in the app.")}</p>
             </motion.div>
             <motion.div
               aria-hidden
@@ -257,8 +288,8 @@ export function PushSection() {
               <p className="flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.14em] text-slate-500 uppercase">
                 <Users className="size-3 text-brand-500" /> Audience
               </p>
-              <p className="mt-1.5 text-[12px] font-semibold text-slate-900">Tag « client-vip »</p>
-              <p className="mt-1 text-[11px] leading-snug text-slate-500">Ou tous les utilisateurs de l'app, ou un segment.</p>
+              <p className="mt-1.5 text-[12px] font-semibold text-slate-900">{t("Tag « client-vip »", "Tag “client-vip”")}</p>
+              <p className="mt-1 text-[11px] leading-snug text-slate-500">{t("Ou tous les utilisateurs de l'app, ou un segment.", "Or all app users, or a segment.")}</p>
             </motion.div>
           </div>
         </div>
@@ -297,7 +328,7 @@ export function PushSection() {
 
 function OsToggle({ os, setOs, reduce }: { os: OS; setOs: (o: OS) => void; reduce: boolean }) {
   return (
-    <div role="group" aria-label="Aperçu" className="flex rounded-full bg-slate-100 p-1 ring-1 ring-slate-900/[0.06]">
+    <div role="group" aria-label={t("Aperçu", "Preview")} className="flex rounded-full bg-slate-100 p-1 ring-1 ring-slate-900/[0.06]">
       {(
         [
           ["ios", "iPhone"],
@@ -336,18 +367,18 @@ const WALL: Record<OS, string> = {
 
 function Phone({ os, shown, left, reduce }: { os: OS; shown: number; left: number; reduce: boolean }) {
   const ios = os === "ios";
-  const t = reduce ? { duration: 0 } : MORPH;
+  const tr = reduce ? { duration: 0 } : MORPH;
   const list = NOTIFS.slice(0, shown).reverse();
   return (
     <motion.div
       className="relative h-[560px] w-[272px] bg-slate-950 p-[9px] shadow-[0_50px_100px_-40px_rgba(7,23,51,0.75),inset_0_0_0_1.5px_rgba(255,255,255,0.08)] sm:h-[600px] sm:w-[292px]"
       initial={false}
       animate={{ borderRadius: ios ? 50 : 38 }}
-      transition={t}
+      transition={tr}
       role="img"
-      aria-label="Écran verrouillé d'un téléphone recevant des notifications de la boutique Atelier Nord"
+      aria-label={t("Écran verrouillé d'un téléphone recevant des notifications de la boutique Atelier Nord", "Phone lock screen receiving notifications from the Atelier Nord store")}
     >
-      <motion.div className="relative h-full w-full overflow-hidden" initial={false} animate={{ borderRadius: ios ? 42 : 30 }} transition={t}>
+      <motion.div className="relative h-full w-full overflow-hidden" initial={false} animate={{ borderRadius: ios ? 42 : 30 }} transition={tr}>
         {(["ios", "android"] as const).map((k) => (
           <motion.div
             key={k}
@@ -366,7 +397,7 @@ function Phone({ os, shown, left, reduce }: { os: OS; shown: number; left: numbe
             className="absolute top-[10px] left-1/2 -translate-x-1/2 bg-black"
             initial={false}
             animate={ios ? { width: 88, height: 26, borderRadius: 14 } : { width: 12, height: 12, borderRadius: 6, y: 4 }}
-            transition={t}
+            transition={tr}
           />
           <span className="flex items-center gap-1">
             <Signal className="size-3" strokeWidth={2.5} />
@@ -383,7 +414,7 @@ function Phone({ os, shown, left, reduce }: { os: OS; shown: number; left: numbe
             {ios ? (
               <motion.div key="ios" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: reduce ? 0 : 0.25 }}>
                 <Lock className="mx-auto size-3.5 text-white/80" strokeWidth={2.5} />
-                <p className="mt-2 text-[13px] font-semibold text-white/85">mardi 17 novembre</p>
+                <p className="mt-2 text-[13px] font-semibold text-white/85">{t("mardi 17 novembre", "Tuesday, November 17")}</p>
                 <p className="font-display text-[76px] leading-[0.95] font-semibold tracking-[-0.03em]">9:41</p>
               </motion.div>
             ) : (
@@ -393,7 +424,7 @@ function Phone({ os, shown, left, reduce }: { os: OS; shown: number; left: numbe
                   <br />
                   <span className="text-brand-200">41</span>
                 </p>
-                <p className="mt-2 text-[12px] font-medium text-white/80">mar. 17 nov.</p>
+                <p className="mt-2 text-[12px] font-medium text-white/80">{t("mar. 17 nov.", "Tue, Nov 17")}</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -446,7 +477,7 @@ function Phone({ os, shown, left, reduce }: { os: OS; shown: number; left: numbe
               </motion.div>
             )}
           </AnimatePresence>
-          <motion.span className="block h-[5px] rounded-full bg-white/85" initial={false} animate={{ width: ios ? 112 : 84, height: ios ? 5 : 4 }} transition={t} />
+          <motion.span className="block h-[5px] rounded-full bg-white/85" initial={false} animate={{ width: ios ? 112 : 84, height: ios ? 5 : 4 }} transition={tr} />
         </div>
       </motion.div>
     </motion.div>
@@ -474,7 +505,7 @@ function NotifBody({ n, os, left, reduce }: { n: (typeof NOTIFS)[number]; os: OS
       <n.icon className="size-4" strokeWidth={2} />
     </motion.span>
   );
-  const time = n.id === "cart" ? "il y a 2 min" : n.id === "flash" ? "il y a 1 min" : "maintenant";
+  const time = n.id === "cart" ? t("2 min", "2m ago") : n.id === "flash" ? t("1 min", "1m ago") : t("maintenant", "now");
 
   if (os === "ios") {
     return (
@@ -485,7 +516,7 @@ function NotifBody({ n, os, left, reduce }: { n: (typeof NOTIFS)[number]; os: OS
           <p className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-slate-800 tabular-nums">{body}</p>
         </motion.div>
         <div className="flex shrink-0 flex-col items-end gap-1.5 self-stretch">
-          <span className="text-[9.5px] whitespace-nowrap text-slate-600">{time.replace("il y a ", "")}</span>
+          <span className="text-[9.5px] whitespace-nowrap text-slate-600">{time}</span>
           {thumb}
         </div>
       </div>
@@ -497,7 +528,7 @@ function NotifBody({ n, os, left, reduce }: { n: (typeof NOTIFS)[number]; os: OS
         {icon}
         <span className="font-semibold text-slate-800">Atelier Nord</span>
         <span>·</span>
-        <span>{time.replace("il y a ", "")}</span>
+        <span>{time}</span>
         <ChevronDown className="ml-auto size-3.5" />
       </motion.div>
       <div className="mt-1.5 flex items-center gap-2.5">
@@ -524,9 +555,16 @@ function Scenario({ reduce }: { reduce: boolean }) {
 
   return (
     <div ref={ref} className="reveal flex min-w-0 flex-col rounded-[28px] bg-slate-50 p-6 ring-1 ring-slate-900/[0.06] sm:p-8">
-      <p className="eyebrow">Exemple de scénario</p>
+      <p className="eyebrow">{t("Exemple de scénario", "Example flow")}</p>
       <h3 className="display mt-3 text-[28px] leading-[0.95] sm:text-[32px]">
-        Push d'abord, <em className="text-brand-500">email ensuite.</em>
+        {t(
+          <>
+            Push d'abord, <em className="text-brand-500">email ensuite.</em>
+          </>,
+          <>
+            Push first, <em className="text-brand-500">email next.</em>
+          </>,
+        )}
       </h3>
 
       <ol className="relative mt-7 space-y-3">
@@ -562,7 +600,7 @@ function Scenario({ reduce }: { reduce: boolean }) {
               >
                 <p className="flex items-center gap-2 font-display text-[15px] font-bold">
                   {s.label}
-                  {push && <span className="rounded-full bg-brand-50 px-2 py-0.5 font-sans text-[10px] font-semibold text-brand-600">Nouveau</span>}
+                  {push && <span className="rounded-full bg-brand-50 px-2 py-0.5 font-sans text-[10px] font-semibold text-brand-600">{t("Nouveau", "New")}</span>}
                 </p>
                 <p className="truncate text-[12.5px] text-slate-500">{s.sub}</p>
               </div>
@@ -573,9 +611,9 @@ function Scenario({ reduce }: { reduce: boolean }) {
 
       <div className="mt-7 grid grid-cols-3 gap-2 border-t border-slate-900/[0.07] pt-6">
         {[
-          ["Envoyées", "1 240"],
-          ["Échecs", "12"],
-          ["Ouvertures", "318"],
+          [t("Envoyées", "Sent"), t("1 240", "1,240")],
+          [t("Échecs", "Failed"), "12"],
+          [t("Ouvertures", "Opens"), "318"],
         ].map(([k, v]) => (
           <div key={k} className="min-w-0 rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-900/[0.06]">
             <p className="truncate text-[11px] text-slate-500">{k}</p>
@@ -583,7 +621,12 @@ function Scenario({ reduce }: { reduce: boolean }) {
           </div>
         ))}
       </div>
-      <p className="mt-3 text-[12px] text-slate-500">Exemple de statistiques d'une notification. Les jetons invalides sont retirés tout seuls.</p>
+      <p className="mt-3 text-[12px] text-slate-500">
+        {t(
+          "Exemple de statistiques d'une notification. Les jetons invalides sont retirés tout seuls.",
+          "Sample stats for one notification. Invalid tokens are removed automatically.",
+        )}
+      </p>
     </div>
   );
 }
@@ -596,12 +639,22 @@ function CodeCard({ reduce }: { reduce: boolean }) {
   return (
     <div ref={ref} className="flex min-w-0 flex-col overflow-hidden rounded-[28px] bg-slate-950 text-white shadow-[0_40px_100px_-50px_rgba(20,92,255,0.8)] ring-1 ring-white/10">
       <div className="p-6 pb-0 sm:p-8 sm:pb-0">
-        <p className="eyebrow !text-brand-300">Branchez votre app</p>
+        <p className="eyebrow !text-brand-300">{t("Branchez votre app", "Connect your app")}</p>
         <h3 className="display mt-3 text-[28px] leading-[0.95] sm:text-[32px]">
-          Un appel, <em className="text-brand-400">et l'appareil est relié.</em>
+          {t(
+            <>
+              Un appel, <em className="text-brand-400">et l'appareil est relié.</em>
+            </>,
+            <>
+              One call, <em className="text-brand-400">and the device is linked.</em>
+            </>,
+          )}
         </h3>
         <p className="mt-3 max-w-md text-[14.5px] leading-relaxed text-white/65">
-          Votre app enregistre le jeton push avec une clé publique d'app, faite pour être intégrée à l'app. L'email relie l'appareil au contact existant.
+          {t(
+            "Votre app enregistre le jeton push avec une clé publique d'app, faite pour être intégrée à l'app. L'email relie l'appareil au contact existant.",
+            "Your app registers the push token with a public app key, designed to ship inside the app. The email links the device to the existing contact.",
+          )}
         </p>
       </div>
 
@@ -638,7 +691,7 @@ function CodeCard({ reduce }: { reduce: boolean }) {
         >
           <p className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
             <span className="rounded-md bg-emerald-400/15 px-1.5 py-0.5 font-semibold text-emerald-300">201 Created</span>
-            <span className="text-white/60">Appareil relié à camille@exemple.fr</span>
+            <span className="text-white/60">{t("Appareil relié à camille@exemple.fr", "Device linked to camille@exemple.fr")}</span>
           </p>
         </motion.div>
       </div>
@@ -647,19 +700,35 @@ function CodeCard({ reduce }: { reduce: boolean }) {
         <li className="flex items-start gap-2.5">
           <KeyRound className="mt-0.5 size-4 shrink-0 text-brand-400" strokeWidth={1.75} />
           <span>
-            Clé <code className="font-mono text-[12px] text-brand-300">msvapp_</code> publique dans l'app ; vos clés secrètes{" "}
-            <code className="font-mono text-[12px] text-brand-300">msv_</code> peuvent aussi enregistrer des appareils depuis votre back-office.
+            {t(
+              <>
+                Clé <code className="font-mono text-[12px] text-brand-300">msvapp_</code> publique dans l'app ; vos clés secrètes{" "}
+                <code className="font-mono text-[12px] text-brand-300">msv_</code> peuvent aussi enregistrer des appareils depuis votre back-office.
+              </>,
+              <>
+                Public <code className="font-mono text-[12px] text-brand-300">msvapp_</code> key in the app; your secret{" "}
+                <code className="font-mono text-[12px] text-brand-300">msv_</code> keys can also register devices from your back office.
+              </>,
+            )}
           </span>
         </li>
         <li className="flex items-start gap-2.5">
           <Check className="mt-0.5 size-4 shrink-0 text-brand-400" strokeWidth={1.75} />
-          <span>Firebase Cloud Messaging (Android et iOS), APNs et Expo.</span>
+          <span>{t("Firebase Cloud Messaging (Android et iOS), APNs et Expo.", "Firebase Cloud Messaging (Android and iOS), APNs and Expo.")}</span>
         </li>
         <li className="flex items-start gap-2.5">
           <Check className="mt-0.5 size-4 shrink-0 text-brand-400" strokeWidth={1.75} />
           <span>
-            SDK React Native / Expo prêt à intégrer : <code className="font-mono text-[12px] text-brand-300">Pingsell.identify</code> relie le client à sa connexion, et les
-            jetons invalides sont nettoyés tout seuls.
+            {t(
+              <>
+                SDK React Native / Expo prêt à intégrer : <code className="font-mono text-[12px] text-brand-300">Pingsell.identify</code> relie le client à sa connexion, et les
+                jetons invalides sont nettoyés tout seuls.
+              </>,
+              <>
+                Ready-to-use React Native / Expo SDK: <code className="font-mono text-[12px] text-brand-300">Pingsell.identify</code> ties the customer to their sign-in, and
+                invalid tokens are cleaned up automatically.
+              </>,
+            )}
           </span>
         </li>
       </ul>
@@ -693,34 +762,50 @@ function PermissionCard({ reduce }: { reduce: boolean }) {
     >
       <div className="min-w-0">
         <p className="eyebrow flex items-center gap-2">
-          Écran de pré-permission
-          <span className="rounded-full bg-brand-500 px-2 py-0.5 font-sans text-[10px] font-semibold tracking-normal text-white normal-case">Nouveau</span>
+          {t("Écran de pré-permission", "Pre-permission screen")}
+          <span className="rounded-full bg-brand-500 px-2 py-0.5 font-sans text-[10px] font-semibold tracking-normal text-white normal-case">{t("Nouveau", "New")}</span>
         </p>
         <h3 className="display mt-3 text-[28px] leading-[0.95] sm:text-[36px]">
-          Une seule chance de demander, <em className="text-brand-500">autant la saisir.</em>
+          {t(
+            <>
+              Une seule chance de demander, <em className="text-brand-500">autant la saisir.</em>
+            </>,
+            <>
+              One chance to ask, <em className="text-brand-500">so make it count.</em>
+            </>,
+          )}
         </h3>
         <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-slate-600">
-          La demande de notifications d'iOS et d'Android ne s'affiche qu'une fois. Pingsell la prépare avec votre propre écran, et ne l'ouvre que pour les clients
-          qui ont dit oui.
+          {t(
+            "La demande de notifications d'iOS et d'Android ne s'affiche qu'une fois. Pingsell la prépare avec votre propre écran, et ne l'ouvre que pour les clients qui ont dit oui.",
+            "iOS and Android only show the notification prompt once. Pingsell sets it up with your own screen, and only opens it for customers who said yes.",
+          )}
         </p>
         <ul className="mt-6 space-y-2.5 text-[14px] text-slate-700">
-          {[
-            "Titre, texte et boutons modifiés dans Pingsell, sans republier l'app",
-            "Affiché à partir du lancement de votre choix, par exemple le 3e",
-            "« Plus tard » reproposé après le nombre de jours que vous fixez",
-          ].map((t) => (
-            <li key={t} className="flex items-start gap-2.5">
+          {t(
+            [
+              "Titre, texte et boutons modifiés dans Pingsell, sans republier l'app",
+              "Affiché à partir du lancement de votre choix, par exemple le 3e",
+              "« Plus tard » reproposé après le nombre de jours que vous fixez",
+            ],
+            [
+              "Edit the title, copy and buttons in Pingsell, without republishing the app",
+              "Shown from the app launch of your choice, for example the 3rd",
+              "“Not now” offered again after the number of days you set",
+            ],
+          ).map((item) => (
+            <li key={item} className="flex items-start gap-2.5">
               <Check className="mt-0.5 size-4 shrink-0 text-brand-500" strokeWidth={2} />
-              <span>{t}</span>
+              <span>{item}</span>
             </li>
           ))}
         </ul>
 
         <div className="mt-8 grid max-w-md grid-cols-3 gap-2">
           {[
-            ["Affichages", num(shown)],
-            ["Acceptations", num(accepted)],
-            ["Taux d'opt-in", `${rate} %`],
+            [t("Affichages", "Views"), num(shown)],
+            [t("Acceptations", "Accepted"), num(accepted)],
+            [t("Taux d'opt-in", "Opt-in rate"), t(`${rate} %`, `${rate}%`)],
           ].map(([k, v], i) => (
             <div key={k} className={`min-w-0 rounded-xl px-3 py-2.5 ring-1 ${i === 2 ? "bg-slate-900 text-white ring-slate-900" : "bg-white ring-slate-900/[0.06]"}`}>
               <p className={`truncate text-[11px] ${i === 2 ? "text-white/60" : "text-slate-500"}`}>{k}</p>
@@ -728,7 +813,12 @@ function PermissionCard({ reduce }: { reduce: boolean }) {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-[12px] text-slate-500">Exemple de statistiques. Le refus dans la fenêtre système, lui, ne se rattrape pas.</p>
+        <p className="mt-3 text-[12px] text-slate-500">
+          {t(
+            "Exemple de statistiques. Le refus dans la fenêtre système, lui, ne se rattrape pas.",
+            "Sample stats. A “Don’t Allow” in the system prompt, on the other hand, can’t be undone.",
+          )}
+        </p>
       </div>
 
       <div className="flex flex-col items-center">
@@ -765,7 +855,10 @@ function PromptPhone({ phase, reduce }: { phase: number; reduce: boolean }) {
   return (
     <div
       role="img"
-      aria-label="Écran de l'app Atelier Nord proposant d'activer les notifications, avec les boutons Activer et Plus tard"
+      aria-label={t(
+        "Écran de l'app Atelier Nord proposant d'activer les notifications, avec les boutons Activer et Plus tard",
+        "Atelier Nord app screen offering to enable notifications, with Enable and Not now buttons",
+      )}
       className="relative h-[400px] w-[204px] rounded-[38px] bg-slate-950 p-[7px] shadow-[0_40px_80px_-40px_rgba(7,23,51,0.7),inset_0_0_0_1.5px_rgba(255,255,255,0.08)]"
     >
       <div className="relative h-full w-full overflow-hidden rounded-[31px] bg-[#f6f7fb]">
@@ -805,18 +898,18 @@ function PromptPhone({ phase, reduce }: { phase: number; reduce: boolean }) {
           <span className="mx-auto flex size-10 items-center justify-center rounded-full bg-brand-50 text-brand-500 ring-1 ring-brand-100">
             <BellRing className="size-[18px]" strokeWidth={1.9} />
           </span>
-          <p className="mt-2.5 font-display text-[13px] leading-tight font-bold text-slate-950">Ne ratez ni vos colis, ni nos ventes privées</p>
-          <p className="mt-1.5 text-[10.5px] leading-snug text-slate-500">Une notification quand votre commande part, et en avant-première pour les promos.</p>
+          <p className="mt-2.5 font-display text-[13px] leading-tight font-bold text-slate-950">{t("Ne ratez ni vos colis, ni nos ventes privées", "Never miss a delivery or a private sale")}</p>
+          <p className="mt-1.5 text-[10.5px] leading-snug text-slate-500">{t("Une notification quand votre commande part, et en avant-première pour les promos.", "Get notified when your order ships, and be first to hear about deals.")}</p>
           <motion.span
             className="relative mt-3.5 flex h-8 items-center justify-center rounded-full bg-brand-500 font-display text-[11.5px] font-bold text-white"
             initial={false}
             animate={phase === 1 ? { scale: [1, 0.92, 1] } : { scale: 1 }}
             transition={{ duration: 0.45, ease: EASE }}
           >
-            Activer
+            {t("Activer", "Enable")}
             {phase === 1 && !reduce && <span className="absolute inset-0 animate-ping rounded-full bg-brand-500/40" />}
           </motion.span>
-          <span className="mt-1.5 block text-[11px] font-semibold text-slate-500">Plus tard</span>
+          <span className="mt-1.5 block text-[11px] font-semibold text-slate-500">{t("Plus tard", "Not now")}</span>
         </motion.div>
 
         {/* System dialog */}
@@ -831,11 +924,11 @@ function PromptPhone({ phase, reduce }: { phase: number; reduce: boolean }) {
               transition={fade}
             >
               <p className="px-3 pt-3 pb-2.5 text-[10.5px] leading-snug font-semibold text-slate-950">
-                «{" "}Atelier Nord{" "}» souhaite vous envoyer des notifications
+                {t(<>«{" "}Atelier Nord{" "}» souhaite vous envoyer des notifications</>, <>“Atelier Nord” Would Like to Send You Notifications</>)}
               </p>
               <div className="grid grid-cols-2 border-t border-slate-900/10 text-[10.5px]">
-                <span className="border-r border-slate-900/10 py-2 text-[#0a6cff]">Refuser</span>
-                <span className="py-2 font-bold text-[#0a6cff]">Autoriser</span>
+                <span className="border-r border-slate-900/10 py-2 text-[#0a6cff]">{t("Refuser", "Don’t Allow")}</span>
+                <span className="py-2 font-bold text-[#0a6cff]">{t("Autoriser", "Allow")}</span>
               </div>
             </motion.div>
           )}
@@ -856,8 +949,8 @@ function PromptPhone({ phase, reduce }: { phase: number; reduce: boolean }) {
                 <Check className="size-3.5" strokeWidth={2.5} />
               </span>
               <span className="min-w-0">
-                <span className="block text-[10.5px] leading-tight font-bold text-slate-950">Notifications activées</span>
-                <span className="block truncate text-[9.5px] text-slate-500">Déclenche votre automatisation</span>
+                <span className="block text-[10.5px] leading-tight font-bold text-slate-950">{t("Notifications activées", "Notifications enabled")}</span>
+                <span className="block truncate text-[9.5px] text-slate-500">{t("Déclenche votre automatisation", "Triggers your automation")}</span>
               </span>
             </motion.div>
           )}

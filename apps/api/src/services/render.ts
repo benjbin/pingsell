@@ -3,6 +3,8 @@
  * and the open pixel. Pure functions — no database access.
  */
 
+import { currentLang, t } from '../i18n.js';
+
 export interface MergeContact {
   email: string;
   first_name?: string | null;
@@ -103,8 +105,11 @@ export function unsubscribeFooter(senderName: string): string {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
   <tr>
     <td align="center" style="padding:24px 16px 32px;font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#64748b;">
-      Vous recevez cet email car vous êtes inscrit(e) à la liste de ${escapeHtml(senderName)}.<br />
-      <a href="{{unsubscribe_url}}" style="color:#0E0E0C;text-decoration:underline;">Se désinscrire</a>
+      ${t(
+        `Vous recevez cet email car vous êtes inscrit(e) à la liste de ${escapeHtml(senderName)}.`,
+        `You’re receiving this email because you subscribed to ${escapeHtml(senderName)}’s list.`,
+      )}<br />
+      <a href="{{unsubscribe_url}}" style="color:#0E0E0C;text-decoration:underline;">${t('Se désinscrire', 'Unsubscribe')}</a>
     </td>
   </tr>
 </table>`;
@@ -114,7 +119,7 @@ export function unsubscribeFooter(senderName: string): string {
 export function ensureDocument(html: string): string {
   if (/<html[\s>]/i.test(html)) return html;
   return `<!DOCTYPE html>
-<html lang="fr">
+<html lang="${currentLang()}">
 <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /></head>
 <body style="margin:0;padding:0;background-color:#f8fafc;">
 ${html}

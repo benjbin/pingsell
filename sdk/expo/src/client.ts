@@ -2,6 +2,8 @@ import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { AppState, Linking, Platform } from "react-native";
 
+import { getLocale, setLocale, t, type PingsellLocale } from "./i18n";
+
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -34,6 +36,11 @@ export interface PingsellConfig {
   storage?: { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void> };
   /** Android channel name shown in the system settings (default: "Notifications"). */
   androidChannelName?: string;
+  /**
+   * Language of the SDK's built-in texts (notification centre, empty states, dates, error messages)
+   * and of the API answers (`Accept-Language`). Defaults to the device language (French or English).
+   */
+  locale?: PingsellLocale;
 }
 
 export interface PingsellNotification {
@@ -124,7 +131,10 @@ class PingsellClient {
   /** Call once, as early as possible (outside components, e.g. in App.tsx / _layout.tsx). */
   init(config: PingsellConfig): void {
     if (this.config) return;
-    if (!config.appKey?.startsWith("msvapp_")) throw new Error("Pingsell : clé d'application invalide (msvapp_…)");
+    setLocale(config.locale);
+    if (!config.appKey?.startsWith("msvapp_")) {
+      throw new Error(t("Pingsell : clé d'application invalide (msvapp_…)", "Pingsell: invalid app key (msvapp_…)"));
+    }
     this.config = { foreground: "system", syncBadge: true, tokenType: "expo", ...config, apiUrl: config.apiUrl.replace(/\/+$/, "") };
     void this.countLaunch(this.config);
 
@@ -163,6 +173,11 @@ class PingsellClient {
     }
   }
 
+  /** Language used by the SDK texts and sent to the API ("fr" | "en"). */
+  get locale(): PingsellLocale {
+    return getLocale();
+  }
+
   /** Current device push token (after `register`). */
   get deviceToken(): string | null {
     return this.token;
@@ -183,7 +198,7 @@ class PingsellClient {
         }));
       }
       if (status !== "granted") {
-        return { ok: false, reason: "permission_denied", message: "Notifications refusées dans les réglages du téléphone" };
+        return { ok: false, reason: "permission_denied", message: t("Notifications refusées dans les réglages du téléphone", "Notifications are turned off in the phone settings") };
       }
       const { token, provider } = await this.fetchToken(config);
       return await this.registerToken(token, { ...options, provider });
@@ -242,7 +257,7 @@ class PingsellClient {
     const current = await Notifications.getPermissionsAsync();
     if (current.status === "granted") return this.register(options);
     if (current.status === "denied" && !current.canAskAgain) {
-      return { ok: false, reason: "permission_denied", message: "Notifications refusées dans les réglages du téléphone" };
+      return { ok: false, reason: "permission_denied", message: t("Notifications refusées dans les réglages du téléphone", "Notifications are turned off in the phone settings") };
     }
 
     const prompt = await this.request<{ prompt: PromptSettings }>("GET", "/push/app/config").then((r) => r.prompt).catch(() => null);
@@ -250,7 +265,11 @@ class PingsellClient {
     let shown = false;
     if (prompt?.enabled && this.promptListeners.size) {
       if (!options.force && !(await this.promptDue(prompt))) {
-        return { ok: false, reason: "not_now", message: "Écran de pré-permission déjà proposé récemment" };
+        return {
+          ok: false,
+          reason: "not_now",
+          message: t("Écran de pré-permission déjà proposé récemment", "Pre-permission screen already shown recently"),
+        };
       }
       this.track("shown");
       shown = true;
@@ -263,7 +282,7 @@ class PingsellClient {
       if (!accepted) {
         this.track("declined");
         await this.store(config, "missive.prompt.declined_at", new Date().toISOString());
-        return { ok: false, reason: "declined", message: "Le client a choisi « Plus tard »" };
+        return { ok: false, reason: "declined", message: t("Le client a choisi « Plus tard »", "The customer chose “Not now”") };
       }
       this.track("accepted");
     }
@@ -417,15 +436,15 @@ class PingsellClient {
 
   private async fetchToken(config: PingsellConfig): Promise<{ token: string; provider: "expo" | "fcm" | "apns" }> {
     if (config.tokenType === "device") {
-      const t = await Notifications.getDevicePushTokenAsync();
-      return { token: String(t.data), provider: Platform.OS === "ios" ? "apns" : "fcm" };
+      const device = await Notifications.getDevicePushTokenAsync();
+      return { token: String(device.data), provider: Platform.OS === "ios" ? "apns" : "fcm" };
     }
     const projectId =
       config.projectId ??
       (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId ??
       Constants.easConfig?.projectId;
-    const t = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
-    return { token: t.data, provider: "expo" };
+    const expo = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+    return { token: expo.data, provider: "expo" };
   }
 
   private async syncBadge(unread: number): Promise<void> {
@@ -439,7 +458,14 @@ class PingsellClient {
   }
 
   private requireConfig(): PingsellConfig {
-    if (!this.config) throw new Error("Pingsell : appelez Pingsell.init({ appKey, apiUrl }) avant toute autre méthode");
+    if (!this.config) {
+      throw new Error(
+        t(
+          "Pingsell : appelez Pingsell.init({ appKey, apiUrl }) avant toute autre méthode",
+          "Pingsell: call Pingsell.init({ appKey, apiUrl }) before any other method",
+        ),
+      );
+    }
     return this.config;
   }
 
@@ -449,13 +475,14 @@ class PingsellClient {
       method,
       headers: {
         authorization: `Bearer ${config.appKey}`,
+        "accept-language": getLocale(),
         ...(this.token ? { "x-pingsell-device": this.token } : {}),
         ...(body ? { "content-type": "application/json" } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
     });
     const data = (await res.json().catch(() => ({}))) as T & { error?: string; message?: string };
-    if (!res.ok) throw new Error(data.message ?? data.error ?? `Pingsell : erreur ${res.status}`);
+    if (!res.ok) throw new Error(data.message ?? data.error ?? t(`Pingsell : erreur ${res.status}`, `Pingsell: error ${res.status}`));
     return data;
   }
 }

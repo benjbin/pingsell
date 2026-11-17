@@ -21,6 +21,7 @@ import { ConfirmModal } from "../ui/Overlay";
 import { CopyButton } from "../CopyButton";
 import { useToast } from "../ui/Toast";
 import { ImportContactsModal } from "../../pages/contacts/ImportContactsModal";
+import { t, LOCALE } from "../../lib/i18n";
 
 /* -------------------------------------------------------------------------- */
 /* Building blocks                                                            */
@@ -179,7 +180,12 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
         lastSync: r.integration?.last_sync_at ?? null,
         oauth: r.oauth_available,
       });
-      if (connected) onDone(`Boutique ${r.integration?.shop_domain ?? ""} connectée : clients et commandes synchronisés automatiquement`);
+      if (connected) onDone(
+          t(
+            `Boutique ${r.integration?.shop_domain ?? ""} connectée : clients et commandes synchronisés automatiquement`,
+            `Store ${r.integration?.shop_domain ?? ""} connected: customers and orders sync automatically`,
+          ),
+        );
     } catch {
       setStatus({ connected: false, error: false, shop: null, lastSync: null, oauth: false });
     }
@@ -214,7 +220,13 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
     setSyncing(true);
     try {
       const r = await api.integrations.shopify.sync();
-      toast.success("Synchronisation terminée", `${r.customers} clients et ${r.orders} commandes importés.`);
+      toast.success(
+        t("Synchronisation terminée", "Sync complete"),
+        t(
+          `${r.customers} clients et ${r.orders} commandes importés.`,
+          `${r.customers} customer${r.customers === 1 ? "" : "s"} and ${r.orders} order${r.orders === 1 ? "" : "s"} imported.`,
+        ),
+      );
       await load();
     } catch (err) {
       toast.error(err);
@@ -227,7 +239,7 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
     setDisconnecting(true);
     try {
       await api.integrations.shopify.disconnect();
-      toast.success("Boutique déconnectée");
+      toast.success(t("Boutique déconnectée", "Store disconnected"));
       setConfirm(false);
       onDone("");
       await load();
@@ -242,55 +254,62 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
     <>
       <GuideHead
         icon={ShoppingBag}
-        title="Connecter Shopify"
-        text="Vos clients, leurs commandes, les expéditions et les paniers abandonnés arrivent tout seuls dans Pingsell, et restent à jour en continu."
+        title={t("Connecter Shopify", "Connect Shopify")}
+        text={t("Vos clients, leurs commandes, les expéditions et les paniers abandonnés arrivent tout seuls dans Pingsell, et restent à jour en continu.", "Your customers, their orders, shipments and abandoned carts flow into Pingsell automatically and stay up to date.")}
         done={done || undefined}
       />
 
       {!status ? (
-        <Waiting>Vérification de votre boutique…</Waiting>
+        <Waiting>{t("Vérification de votre boutique…", "Checking your store…")}</Waiting>
       ) : status.connected ? (
         <div className="space-y-5">
           <dl className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Boutique</dt>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">{t("Boutique", "Store")}</dt>
               <dd className="mt-0.5 truncate text-sm font-semibold text-slate-900 dark:text-white">{status.shop}</dd>
             </div>
             <div className="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Dernière synchronisation</dt>
-              <dd className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-white">{status.lastSync ? formatDateTime(status.lastSync) : "En cours…"}</dd>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">{t("Dernière synchronisation", "Last sync")}</dt>
+              <dd className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-white">{status.lastSync ? formatDateTime(status.lastSync) : t("En cours…", "In progress…")}</dd>
             </div>
           </dl>
           {status.error && (
             <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
-              La dernière synchronisation a échoué. Vérifiez que l'application Pingsell est toujours installée dans Shopify, puis relancez.
+              {t("La dernière synchronisation a échoué. Vérifiez que l'application Pingsell est toujours installée dans Shopify, puis relancez.", "The last sync failed. Make sure the Pingsell app is still installed in Shopify, then try again.")}
             </p>
           )}
           <Hint>
-            Ce qui arrive automatiquement : <Kbd>nouveaux clients</Kbd>, <Kbd>commandes passées</Kbd>, <Kbd>commandes expédiées</Kbd> et <Kbd>paniers abandonnés</Kbd>. Chacun peut lancer une automatisation.
+            {t(
+              <>
+                Ce qui arrive automatiquement : <Kbd>nouveaux clients</Kbd>, <Kbd>commandes passées</Kbd>, <Kbd>commandes expédiées</Kbd> et <Kbd>paniers abandonnés</Kbd>. Chacun peut lancer une automatisation.
+              </>,
+              <>
+                What syncs automatically: <Kbd>new customers</Kbd>, <Kbd>orders placed</Kbd>, <Kbd>orders shipped</Kbd> and <Kbd>abandoned carts</Kbd>. Each one can trigger an automation.
+              </>,
+            )}
           </Hint>
           <div className="flex flex-wrap gap-2">
             <Button icon={RefreshCw} onClick={() => void sync()} loading={syncing}>
-              Synchroniser maintenant
+              {t("Synchroniser maintenant", "Sync now")}
             </Button>
             <Button variant="ghost" icon={Unplug} onClick={() => setConfirm(true)} className="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">
-              Déconnecter
+              {t("Déconnecter", "Disconnect")}
             </Button>
           </div>
         </div>
       ) : (
         <form onSubmit={(e) => void submit(e)}>
           <Steps>
-            <Step n={1} title="Indiquez l'adresse de votre boutique" last={status.oauth}>
-              <p>C'est l'adresse qui finit par .myshopify.com, visible dans Shopify en haut à gauche ou dans Paramètres › Domaines.</p>
-              <Field label="Adresse de la boutique" htmlFor="cg-shop">
+            <Step n={1} title={t("Indiquez l'adresse de votre boutique", "Enter your store address")} last={status.oauth}>
+              <p>{t("C'est l'adresse qui finit par .myshopify.com, visible dans Shopify en haut à gauche ou dans Paramètres › Domaines.", "It's the address ending in .myshopify.com, shown at the top left in Shopify or under Settings › Domains.")}</p>
+              <Field label={t("Adresse de la boutique", "Store address")} htmlFor="cg-shop">
                 <div className="flex items-center rounded-xl bg-white ring-1 ring-slate-900/15 focus-within:ring-2 focus-within:ring-brand-500 dark:bg-slate-950 dark:ring-white/15">
                   <input
                     id="cg-shop"
                     required
                     value={shop}
                     onChange={(e) => setShop(e.target.value.replace(/^https?:\/\//, "").replace(/\/.*$/, ""))}
-                    placeholder="ma-boutique"
+                    placeholder={t("ma-boutique", "my-store")}
                     className="h-11 min-w-0 flex-1 bg-transparent px-4 text-sm outline-none dark:text-white"
                     autoComplete="off"
                   />
@@ -299,43 +318,67 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
               </Field>
               {status.oauth && (
                 <>
-                  <p>Shopify vous demandera d'autoriser Pingsell à lire vos clients et vos commandes, puis vous ramènera ici.</p>
+                  <p>{t("Shopify vous demandera d'autoriser Pingsell à lire vos clients et vos commandes, puis vous ramènera ici.", "Shopify will ask you to allow Pingsell to read your customers and orders, then bring you back here.")}</p>
                   <Button type="submit" size="lg" icon={Link2} loading={busy}>
-                    Connecter en 1 clic
+                    {t("Connecter en 1 clic", "Connect in 1 click")}
                   </Button>
                 </>
               )}
             </Step>
             {!status.oauth && (
               <>
-                <Step n={2} title="Ouvrez votre application personnalisée dans Shopify">
+                <Step n={2} title={t("Ouvrez votre application personnalisée dans Shopify", "Open your custom app in Shopify")}>
                   <ol className="list-decimal space-y-1.5 pl-5">
                     <li>
-                      Dans l'admin Shopify, ouvrez <Kbd>Paramètres › Applications et canaux de vente</Kbd>, puis <Kbd>Développer des applications</Kbd>.
+                      {t(
+                        <>
+                          Dans l'admin Shopify, ouvrez <Kbd>Paramètres › Applications et canaux de vente</Kbd>, puis <Kbd>Développer des applications</Kbd>.
+                        </>,
+                        <>
+                          In the Shopify admin, open <Kbd>Settings › Apps and sales channels</Kbd>, then <Kbd>Develop apps</Kbd>.
+                        </>,
+                      )}
                     </li>
-                    <li>Ouvrez l'application personnalisée de votre boutique (ou celle créée pour Pingsell).</li>
+                    <li>{t("Ouvrez l'application personnalisée de votre boutique (ou celle créée pour Pingsell).", "Open your store's custom app (or the one created for Pingsell).")}</li>
                     <li>
-                      Dans <Kbd>Configuration › Admin API</Kbd>, vérifiez que <code>read_customers</code>, <code>read_orders</code> et <code>read_checkouts</code> sont cochés, puis
-                      enregistrez.
+                      {t(
+                        <>
+                          Dans <Kbd>Configuration › Admin API</Kbd>, vérifiez que <code>read_customers</code>, <code>read_orders</code> et <code>read_checkouts</code> sont cochés, puis
+                          enregistrez.
+                        </>,
+                        <>
+                          In <Kbd>Configuration › Admin API</Kbd>, make sure <code>read_customers</code>, <code>read_orders</code> and <code>read_checkouts</code> are checked, then save.
+                        </>,
+                      )}
                     </li>
                   </ol>
                   <Hint>
-                    Pingsell ne demande que la lecture : rien n'est modifié dans votre boutique. Depuis 2026, Shopify ne permet plus de créer de nouvelles applications depuis l'admin : si
-                    vous n'en avez pas, la connexion en 1 clic s'en charge à votre place.
+                    {t(
+                      "Pingsell ne demande que la lecture : rien n'est modifié dans votre boutique. Depuis 2026, Shopify ne permet plus de créer de nouvelles applications depuis l'admin : si vous n'en avez pas, la connexion en 1 clic s'en charge à votre place.",
+                      "Pingsell only asks for read access: nothing in your store is changed. Since 2026, Shopify no longer lets you create new apps from the admin. If you don't have one, 1-click connect handles it for you.",
+                    )}
                   </Hint>
                 </Step>
-                <Step n={3} title="Collez le jeton d'accès" last>
+                <Step n={3} title={t("Collez le jeton d'accès", "Paste the access token")} last>
                   <p>
-                    Toujours dans l'application, onglet <Kbd>Identifiants API</Kbd> : affichez le <Kbd>jeton d'accès Admin API</Kbd> (il commence par shpat_) et collez-le ici. Shopify ne le montre qu'une fois : s'il a déjà été révélé, désinstallez puis réinstallez
-                    l'application pour en obtenir un nouveau.
+                    {t(
+                      <>
+                        Toujours dans l'application, onglet <Kbd>Identifiants API</Kbd> : affichez le <Kbd>jeton d'accès Admin API</Kbd> (il commence par shpat_) et collez-le ici. Shopify ne le montre qu'une fois : s'il a déjà été révélé, désinstallez puis réinstallez
+                        l'application pour en obtenir un nouveau.
+                      </>,
+                      <>
+                        Still in the app, on the <Kbd>API credentials</Kbd> tab, reveal the <Kbd>Admin API access token</Kbd> (it starts with shpat_) and paste it here. Shopify only shows it once: if it was already revealed, uninstall and reinstall the app
+                        to get a new one.
+                      </>,
+                    )}
                   </p>
-                  <Field label="Jeton d'accès Admin API" htmlFor="cg-token">
+                  <Field label={t("Jeton d'accès Admin API", "Admin API access token")} htmlFor="cg-token">
                     <Input id="cg-token" type="password" required value={token} onChange={(e) => setToken(e.target.value)} placeholder="shpat_…" autoComplete="off" />
                   </Field>
                   <Button type="submit" size="lg" icon={Link2} loading={busy}>
-                    Connecter la boutique
+                    {t("Connecter la boutique", "Connect store")}
                   </Button>
-                  <p className="text-xs text-slate-500">La première synchronisation démarre aussitôt : vos clients et vos commandes passées sont importés.</p>
+                  <p className="text-xs text-slate-500">{t("La première synchronisation démarre aussitôt : vos clients et vos commandes passées sont importés.", "The first sync starts right away: your customers and past orders are imported.")}</p>
                 </Step>
               </>
             )}
@@ -349,9 +392,9 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
         onConfirm={disconnect}
         loading={disconnecting}
         danger
-        title="Déconnecter Shopify ?"
-        description="La synchronisation s'arrêtera. Les contacts déjà importés sont conservés."
-        confirmLabel="Déconnecter"
+        title={t("Déconnecter Shopify ?", "Disconnect Shopify?")}
+        description={t("La synchronisation s'arrêtera. Les contacts déjà importés sont conservés.", "Syncing will stop. Contacts already imported are kept.")}
+        confirmLabel={t("Déconnecter", "Disconnect")}
       />
     </>
   );
@@ -368,87 +411,87 @@ type Lang = "cURL" | "Node.js" | "PHP" | "Python";
 const KINDS: Record<ApiKind, { icon: LucideIcon; title: string; intro: string; events: EventId[]; label: string }> = {
   site: {
     icon: Code2,
-    title: "Brancher votre site web",
-    intro: "Site sur mesure, WordPress, Webflow avec un back-end… Deux ou trois appels suffisent : à l'inscription, à la commande et à l'expédition.",
+    title: t("Brancher votre site web", "Connect your website"),
+    intro: t("Site sur mesure, WordPress, Webflow avec un back-end… Deux ou trois appels suffisent : à l'inscription, à la commande et à l'expédition.", "Custom site, WordPress, Webflow with a back end… Two or three calls are all it takes: at sign-up, at checkout and at shipping."),
     events: ["contact", "order", "shipped"],
-    label: "Mon site web",
+    label: t("Mon site web", "My website"),
   },
   crm: {
     icon: Code2,
-    title: "Brancher votre CRM",
-    intro: "Quand une fiche client est créée ou qualifiée dans votre CRM, elle arrive dans Pingsell avec ses tags, et vos scénarios démarrent.",
+    title: t("Brancher votre CRM", "Connect your CRM"),
+    intro: t("Quand une fiche client est créée ou qualifiée dans votre CRM, elle arrive dans Pingsell avec ses tags, et vos scénarios démarrent.", "When a customer record is created or qualified in your CRM, it lands in Pingsell with its tags, and your workflows kick in."),
     events: ["contact", "tag"],
-    label: "Mon CRM",
+    label: t("Mon CRM", "My CRM"),
   },
   pos: {
     icon: Code2,
-    title: "Brancher votre caisse",
-    intro: "À chaque ticket où le client laisse son email, Pingsell reçoit la vente : remerciement, fidélité et relances partent tout seuls.",
+    title: t("Brancher votre caisse", "Connect your POS"),
+    intro: t("À chaque ticket où le client laisse son email, Pingsell reçoit la vente : remerciement, fidélité et relances partent tout seuls.", "Whenever a customer leaves their email at checkout, Pingsell gets the sale: thank-yous, loyalty and follow-ups go out on their own."),
     events: ["order", "contact"],
-    label: "Ma caisse",
+    label: t("Ma caisse", "My POS"),
   },
   backoffice: {
     icon: Code2,
-    title: "Brancher votre back-office",
-    intro: "ERP, outil de gestion des commandes ou logistique : envoyez les commandes et leur expédition, Pingsell prévient le client par email ou par notification.",
+    title: t("Brancher votre back-office", "Connect your back office"),
+    intro: t("ERP, outil de gestion des commandes ou logistique : envoyez les commandes et leur expédition, Pingsell prévient le client par email ou par notification.", "ERP, order management or logistics tool: send orders and their shipping, and Pingsell notifies the customer by email or push notification."),
     events: ["order", "shipped", "contact"],
-    label: "Mon back-office",
+    label: t("Mon back-office", "My back office"),
   },
   other: {
     icon: Code2,
-    title: "Brancher n'importe quel outil",
-    intro: "Tout ce qui sait faire un appel web peut alimenter Pingsell, dans n'importe quel langage.",
+    title: t("Brancher n'importe quel outil", "Connect any tool"),
+    intro: t("Tout ce qui sait faire un appel web peut alimenter Pingsell, dans n'importe quel langage.", "Anything that can make a web request can feed Pingsell, in any language."),
     events: ["contact", "order", "shipped", "tag"],
-    label: "Mon outil",
+    label: t("Mon outil", "My tool"),
   },
 };
 
 const EVENTS: Record<EventId, { label: string; path: string; body: Record<string, unknown>; effect: string }> = {
   contact: {
-    label: "Nouveau client",
+    label: t("Nouveau client", "New customer"),
     path: "/contacts",
     body: { email: "camille@exemple.fr", first_name: "Camille", last_name: "Martin", tags: ["newsletter"] },
-    effect: "Crée le contact (ou le met à jour s'il existe déjà) et lance l'automatisation « Nouveau contact ».",
+    effect: t("Crée le contact (ou le met à jour s'il existe déjà) et lance l'automatisation « Nouveau contact ».", "Creates the contact (or updates it if it already exists) and starts the “New contact” automation."),
   },
   order: {
-    label: "Commande passée",
+    label: t("Commande passée", "Order placed"),
     path: "/orders",
     body: { email: "camille@exemple.fr", first_name: "Camille", order_id: "CMD-1042", total: 59.9, currency: "EUR" },
-    effect: "Ajoute la commande à la fiche (total dépensé, nombre de commandes) et lance « Commande passée ». Le même order_id envoyé deux fois n'est compté qu'une fois.",
+    effect: t("Ajoute la commande à la fiche (total dépensé, nombre de commandes) et lance « Commande passée ». Le même order_id envoyé deux fois n'est compté qu'une fois.", "Adds the order to the contact (total spent, order count) and starts “Order placed”. The same order_id sent twice is only counted once."),
   },
   shipped: {
-    label: "Commande expédiée",
+    label: t("Commande expédiée", "Order shipped"),
     path: "/orders",
     body: { email: "camille@exemple.fr", order_id: "CMD-1042", status: "fulfilled", carrier: "Colissimo", tracking_number: "6A12345678901", tracking_url: "https://suivi.exemple.fr/6A12345678901" },
-    effect: "Lance « Commande expédiée » pour un client déjà connu (envoyez d'abord la commande). C'est un message transactionnel : il atteint aussi les clients désabonnés du marketing. Le même envoi répété n'est compté qu'une fois.",
+    effect: t("Lance « Commande expédiée » pour un client déjà connu (envoyez d'abord la commande). C'est un message transactionnel : il atteint aussi les clients désabonnés du marketing. Le même envoi répété n'est compté qu'une fois.", "Starts “Order shipped” for a known customer (send the order first). It's a transactional message, so it also reaches customers who unsubscribed from marketing. A repeated send is only counted once."),
   },
   tag: {
-    label: "Ajouter un tag",
+    label: t("Ajouter un tag", "Add a tag"),
     path: "/contacts",
     body: { email: "camille@exemple.fr", tags: ["vip"] },
-    effect: "Ajoute le tag sans effacer les autres et lance l'automatisation « Tag ajouté » correspondante.",
+    effect: t("Ajoute le tag sans effacer les autres et lance l'automatisation « Tag ajouté » correspondante.", "Adds the tag without removing the others and starts the matching “Tag added” automation."),
   },
 };
 
 /** Where to place the call, in the words of each kind of tool. */
 const WHERE: Record<ApiKind, Partial<Record<EventId, string>>> = {
   site: {
-    contact: "Dans le code qui traite votre formulaire d'inscription ou de newsletter, juste après l'enregistrement.",
-    order: "Sur la page de confirmation de paiement, ou mieux dans le webhook de votre prestataire de paiement (Stripe, PayPal…).",
-    shipped: "Là où vous passez la commande en « expédiée », par exemple quand l'étiquette transporteur est créée.",
+    contact: t("Dans le code qui traite votre formulaire d'inscription ou de newsletter, juste après l'enregistrement.", "In the code that handles your sign-up or newsletter form, right after saving."),
+    order: t("Sur la page de confirmation de paiement, ou mieux dans le webhook de votre prestataire de paiement (Stripe, PayPal…).", "On the payment confirmation page, or better, in your payment provider's webhook (Stripe, PayPal…)."),
+    shipped: t("Là où vous passez la commande en « expédiée », par exemple quand l'étiquette transporteur est créée.", "Wherever you mark the order as “shipped”, for example when the shipping label is created."),
   },
   crm: {
-    contact: "Dans le webhook ou l'automatisation de votre CRM qui se déclenche à la création d'une fiche.",
-    tag: "Quand une fiche change d'étape ou de statut (client, VIP, à relancer) : envoyez l'étape comme tag.",
+    contact: t("Dans le webhook ou l'automatisation de votre CRM qui se déclenche à la création d'une fiche.", "In the CRM webhook or automation that fires when a record is created."),
+    tag: t("Quand une fiche change d'étape ou de statut (client, VIP, à relancer) : envoyez l'étape comme tag.", "When a record changes stage or status (customer, VIP, follow up): send the stage as a tag."),
   },
   pos: {
-    order: "À la validation du ticket, uniquement si le client a donné son email (ou via l'export quotidien de votre logiciel de caisse).",
-    contact: "Quand un client crée sa carte de fidélité en boutique.",
+    order: t("À la validation du ticket, uniquement si le client a donné son email (ou via l'export quotidien de votre logiciel de caisse).", "When the sale is completed, only if the customer gave their email (or through your POS software's daily export)."),
+    contact: t("Quand un client crée sa carte de fidélité en boutique.", "When a customer signs up for a loyalty card in store."),
   },
   backoffice: {
-    order: "Quand une commande est créée dans votre outil, quel que soit le canal de vente.",
-    shipped: "Quand le statut passe à « expédiée » : ajoutez le numéro de suivi, il sera disponible dans le message.",
-    contact: "Quand un nouveau client est créé dans votre base.",
+    order: t("Quand une commande est créée dans votre outil, quel que soit le canal de vente.", "When an order is created in your tool, whatever the sales channel."),
+    shipped: t("Quand le statut passe à « expédiée » : ajoutez le numéro de suivi, il sera disponible dans le message.", "When the status changes to “shipped”: add the tracking number and it will be available in the message."),
+    contact: t("Quand un nouveau client est créé dans votre base.", "When a new customer is created in your database."),
   },
   other: {},
 };
@@ -535,7 +578,7 @@ export function ApiGuide({
   });
   useEffect(() => {
     if (!received) return;
-    onDone("Premier appel reçu de votre outil. Vérifiez le contact dans Contacts : c'est branché !");
+    onDone(t("Premier appel reçu de votre outil. Vérifiez le contact dans Contacts : c'est branché !", "First call received from your tool. Check the contact in Contacts: you're connected!"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [received]);
 
@@ -567,12 +610,12 @@ export function ApiGuide({
     <>
       <GuideHead icon={meta.icon} title={meta.title} text={meta.intro} done={done || undefined} />
       <Steps>
-        <Step n={1} title="Créez la clé secrète de votre outil" done={!!key}>
+        <Step n={1} title={t("Créez la clé secrète de votre outil", "Create your tool's secret key")} done={!!key}>
           {!key ? (
             <>
-              <p>Elle identifie votre compte. Gardez-la côté serveur : jamais dans une page web ni dans une app mobile.</p>
+              <p>{t("Elle identifie votre compte. Gardez-la côté serveur : jamais dans une page web ni dans une app mobile.", "It identifies your account. Keep it on the server, never in a web page or mobile app.")}</p>
               <Button icon={KeyRound} loading={busy} onClick={() => void generate()}>
-                Générer ma clé API
+                {t("Générer ma clé API", "Generate my API key")}
               </Button>
             </>
           ) : (
@@ -582,48 +625,66 @@ export function ApiGuide({
                 <code className="min-w-0 flex-1 truncate font-mono text-xs text-slate-900 dark:text-white">{key.key}</code>
                 <CopyButton text={key.key} />
               </div>
-              <p className="text-xs text-slate-500">Copiez-la maintenant : elle ne sera plus affichée en entier. Vous gérez vos clés dans Paramètres.</p>
+              <p className="text-xs text-slate-500">{t("Copiez-la maintenant : elle ne sera plus affichée en entier. Vous gérez vos clés dans Paramètres.", "Copy it now: it won't be shown in full again. You manage your keys in Settings.")}</p>
             </>
           )}
         </Step>
 
-        <Step n={2} title="Choisissez ce que votre outil envoie">
-          <Tabs label="Événement" value={event} onChange={setEvent} options={meta.events.map((id) => ({ id, label: EVENTS[id].label }))} />
+        <Step n={2} title={t("Choisissez ce que votre outil envoie", "Choose what your tool sends")}>
+          <Tabs label={t("Événement", "Event")} value={event} onChange={setEvent} options={meta.events.map((id) => ({ id, label: EVENTS[id].label }))} />
           <p>{ev.effect}</p>
           {where && (
             <Hint>
-              <span className="font-semibold text-slate-900 dark:text-white">Où placer l'appel : </span>
+              <span className="font-semibold text-slate-900 dark:text-white">{t("Où placer l'appel : ", "Where to make the call: ")}</span>
               {where}
             </Hint>
           )}
         </Step>
 
-        <Step n={3} title="Copiez le code dans votre outil">
-          <Tabs label="Langage" value={lang} onChange={setLang} options={["cURL", "Node.js", "PHP", "Python"] as const} />
-          <Code code={snippet(lang, key?.key ?? "VOTRE_CLE_API", ev.path, ev.body)} />
+        <Step n={3} title={t("Copiez le code dans votre outil", "Copy the code into your tool")}>
+          <Tabs label={t("Langage", "Language")} value={lang} onChange={setLang} options={["cURL", "Node.js", "PHP", "Python"] as const} />
+          <Code code={snippet(lang, key?.key ?? t("VOTRE_CLE_API", "YOUR_API_KEY"), ev.path, ev.body)} />
           <p className="text-xs text-slate-500">
-            Seul <code>email</code> est obligatoire{ev.path === "/orders" ? ", avec order_id pour les commandes" : ""}. Un autre langage (Java, C#, Ruby, Go…) ? C'est le même appel web : POST en JSON avec la clé dans l'en-tête Authorization.
+            {t(
+              <>
+                Seul <code>email</code> est obligatoire{ev.path === "/orders" ? ", avec order_id pour les commandes" : ""}. Un autre langage (Java, C#, Ruby, Go…) ? C'est le même appel web : POST en JSON avec la clé dans l'en-tête Authorization.
+              </>,
+              <>
+                Only <code>email</code> is required{ev.path === "/orders" ? ", plus order_id for orders" : ""}. Another language (Java, C#, Ruby, Go…)? It's the same web request: a JSON POST with the key in the Authorization header.
+              </>,
+            )}
           </p>
         </Step>
 
-        <Step n={4} title="Faites un essai" done={!!done} last>
+        <Step n={4} title={t("Faites un essai", "Run a test")} done={!!done} last>
           {done ? (
-            <p>Tout fonctionne. Activez maintenant un scénario dans Automatisations pour que les messages partent tout seuls.</p>
+            <p>{t("Tout fonctionne. Activez maintenant un scénario dans Automatisations pour que les messages partent tout seuls.", "Everything works. Now turn on a workflow in Automations so messages go out on their own.")}</p>
           ) : key ? (
-            <Waiting>Lancez le code une fois (ou la commande cURL dans un terminal) : on vous confirme ici dès que Pingsell reçoit l'appel.</Waiting>
+            <Waiting>{t("Lancez le code une fois (ou la commande cURL dans un terminal) : on vous confirme ici dès que Pingsell reçoit l'appel.", "Run the code once (or the cURL command in a terminal) and we'll confirm here as soon as Pingsell receives the call.")}</Waiting>
           ) : (
-            <p>Générez la clé à l'étape 1 : on détectera votre premier appel en direct, ici.</p>
+            <p>{t("Générez la clé à l'étape 1 : on détectera votre premier appel en direct, ici.", "Generate the key in step 1 and we'll detect your first call live, right here.")}</p>
           )}
         </Step>
       </Steps>
 
       {onUseFile && (
         <p className="mt-7 border-t border-slate-900/10 pt-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
-          Pas de développeur sous la main ? Exportez vos clients depuis votre outil et{" "}
-          <button type="button" onClick={onUseFile} className="font-semibold text-brand-500 hover:text-brand-600">
-            importez le fichier
-          </button>{" "}
-          : c'est prêt en une minute.
+          {t(
+            <>
+              Pas de développeur sous la main ? Exportez vos clients depuis votre outil et{" "}
+              <button type="button" onClick={onUseFile} className="font-semibold text-brand-500 hover:text-brand-600">
+                importez le fichier
+              </button>{" "}
+              : c'est prêt en une minute.
+            </>,
+            <>
+              No developer on hand? Export your customers from your tool and{" "}
+              <button type="button" onClick={onUseFile} className="font-semibold text-brand-500 hover:text-brand-600">
+                import the file
+              </button>
+              . You'll be ready in a minute.
+            </>,
+          )}
         </p>
       )}
     </>
@@ -657,7 +718,7 @@ export function AppGuide({ done, onDone }: GuideProps) {
     return baseline.current !== null && c.devices.total > baseline.current;
   });
   useEffect(() => {
-    if (received) onDone("Nouveau téléphone enregistré : vous pouvez lui envoyer des notifications");
+    if (received) onDone(t("Nouveau téléphone enregistré : vous pouvez lui envoyer des notifications", "New phone registered: you can now send it notifications"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [received]);
 
@@ -667,13 +728,13 @@ export function AppGuide({ done, onDone }: GuideProps) {
     <>
       <GuideHead
         icon={Smartphone}
-        title="Brancher votre app mobile"
-        text="Notifications sur l'écran verrouillé, centre de notifications dans l'app et écran de permission : tout est déjà construit, il suffit de le brancher."
+        title={t("Brancher votre app mobile", "Connect your mobile app")}
+        text={t("Notifications sur l'écran verrouillé, centre de notifications dans l'app et écran de permission : tout est déjà construit, il suffit de le brancher.", "Lock-screen notifications, an in-app notification center and a pre-permission screen: it's all built, you just plug it in.")}
         done={done || undefined}
       />
       <div className="mb-6">
         <Tabs
-          label="Technologie de l'app"
+          label={t("Technologie de l'app", "App technology")}
           value={stack}
           onChange={setStack}
           options={[
@@ -685,11 +746,11 @@ export function AppGuide({ done, onDone }: GuideProps) {
 
       {stack === "expo" ? (
         <Steps>
-          <Step n={1} title="Installez le kit Pingsell">
+          <Step n={1} title={t("Installez le kit Pingsell", "Install the Pingsell SDK")}>
             <Code code="npx expo install @pingsell/expo-push expo-notifications" />
           </Step>
-          <Step n={2} title="Initialisez-le au démarrage de l'app">
-            <p>Votre clé d'application est déjà remplie. Elle est publique : elle peut rester dans l'app.</p>
+          <Step n={2} title={t("Initialisez-le au démarrage de l'app", "Initialize it when the app starts")}>
+            <p>{t("Votre clé d'application est déjà remplie. Elle est publique : elle peut rester dans l'app.", "Your app key is already filled in. It's public, so it can live in the app.")}</p>
             <Code
               code={`// App.tsx
 import { Pingsell, PingsellPermissionPrompt } from "@pingsell/expo-push";
@@ -697,65 +758,70 @@ import { Pingsell, PingsellPermissionPrompt } from "@pingsell/expo-push";
 Pingsell.init({ appKey: "${k}", apiUrl: "${API_URL}" });`}
             />
           </Step>
-          <Step n={3} title="Reliez le téléphone au client, puis demandez la permission">
-            <p>À la connexion du client, pour que ses notifications et ses automatisations le suivent :</p>
+          <Step n={3} title={t("Reliez le téléphone au client, puis demandez la permission", "Link the phone to the customer, then ask for permission")}>
+            <p>{t("À la connexion du client, pour que ses notifications et ses automatisations le suivent :", "When the customer signs in, so their notifications and automations follow them:")}</p>
             <Code
               code={`await Pingsell.identify({ email: user.email });
 await Pingsell.requestPermission();
 
-// Une seule fois, à la racine de l'app :
+// ${t("Une seule fois, à la racine de l'app :", "Once, at the root of the app:")}
 <PingsellPermissionPrompt />`}
             />
             <Hint>
-              Pingsell affiche d'abord un écran à vos couleurs (réglable dans Notifications push) avant la fenêtre du système : bien plus de clients disent oui.
+              {t("Pingsell affiche d'abord un écran à vos couleurs (réglable dans Notifications push) avant la fenêtre du système : bien plus de clients disent oui.", "Pingsell first shows a pre-permission screen in your brand colors (configurable in Push notifications) before the system prompt, so far more customers say yes.")}
             </Hint>
           </Step>
-          <Step n={4} title="Option : le centre de notifications">
+          <Step n={4} title={t("Option : le centre de notifications", "Optional: the notification center")}>
             <Code code={`import { PingsellInbox } from "@pingsell/expo-push";\n\n<PingsellInbox />`} />
           </Step>
-          <Step n={5} title="Testez sur un vrai téléphone" done={!!done} last>
+          <Step n={5} title={t("Testez sur un vrai téléphone", "Test on a real phone")} done={!!done} last>
             {done ? (
-              <p>Envoyez-lui une notification de test depuis Notifications push.</p>
+              <p>{t("Envoyez-lui une notification de test depuis Notifications push.", "Send it a test notification from Push notifications.")}</p>
             ) : appKey ? (
-              <Waiting>Lancez l'app sur un téléphone et acceptez les notifications : on vous confirme ici dès qu'il est enregistré.</Waiting>
+              <Waiting>{t("Lancez l'app sur un téléphone et acceptez les notifications : on vous confirme ici dès qu'il est enregistré.", "Open the app on a phone and allow notifications. We'll confirm here as soon as it's registered.")}</Waiting>
             ) : failed ? (
-              <p className="text-red-600 dark:text-red-400">Impossible de charger votre clé d'application. Rechargez la page.</p>
+              <p className="text-red-600 dark:text-red-400">{t("Impossible de charger votre clé d'application. Rechargez la page.", "Couldn't load your app key. Reload the page.")}</p>
             ) : (
-              <Waiting>Chargement de votre clé d'application…</Waiting>
+              <Waiting>{t("Chargement de votre clé d'application…", "Loading your app key…")}</Waiting>
             )}
           </Step>
         </Steps>
       ) : (
         <Steps>
-          <Step n={1} title="Récupérez le jeton de notification">
-            <p>Comme d'habitude sur chaque plateforme : APNs sur iOS, Firebase Cloud Messaging sur Android ou Flutter.</p>
+          <Step n={1} title={t("Récupérez le jeton de notification", "Get the push token")}>
+            <p>{t("Comme d'habitude sur chaque plateforme : APNs sur iOS, Firebase Cloud Messaging sur Android ou Flutter.", "As usual on each platform: APNs on iOS, Firebase Cloud Messaging on Android or Flutter.")}</p>
           </Step>
-          <Step n={2} title="Enregistrez le téléphone chez Pingsell">
-            <p>Un appel web, avec votre clé d'application et l'email du client connecté :</p>
+          <Step n={2} title={t("Enregistrez le téléphone chez Pingsell", "Register the phone with Pingsell")}>
+            <p>{t("Un appel web, avec votre clé d'application et l'email du client connecté :", "One web request, with your app key and the signed-in customer's email:")}</p>
             <Code
               code={`POST ${API_URL}/api/v1/push/app/devices
 Authorization: Bearer ${k}
 Content-Type: application/json
 
 {
-  "token": "<jeton APNs ou FCM>",
+  "token": "${t("<jeton APNs ou FCM>", "<APNs or FCM token>")}",
   "platform": "ios",
   "email": "camille@exemple.fr"
 }`}
             />
-            <p className="text-xs text-slate-500">platform vaut ios ou android. Une app iOS qui passe par Firebase ajoute "provider": "fcm".</p>
+            <p className="text-xs text-slate-500">{t("platform vaut ios ou android. Une app iOS qui passe par Firebase ajoute \"provider\": \"fcm\".", "platform is ios or android. An iOS app that uses Firebase adds \"provider\": \"fcm\".")}</p>
           </Step>
-          <Step n={3} title="Testez sur un vrai téléphone" done={!!done} last>
-            {done ? <p>Envoyez-lui une notification de test depuis Notifications push.</p> : <Waiting>On vous confirme ici dès que le premier téléphone est enregistré.</Waiting>}
+          <Step n={3} title={t("Testez sur un vrai téléphone", "Test on a real phone")} done={!!done} last>
+            {done ? <p>{t("Envoyez-lui une notification de test depuis Notifications push.", "Send it a test notification from Push notifications.")}</p> : <Waiting>{t("On vous confirme ici dès que le premier téléphone est enregistré.", "We'll confirm here as soon as the first phone is registered.")}</Waiting>}
           </Step>
         </Steps>
       )}
 
       <p className="mt-7 border-t border-slate-900/10 pt-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
-        {devices ? `${devices.toLocaleString("fr-FR")} appareil(s) déjà enregistré(s). ` : ""}
-        Clés iOS et Android, écran de permission et tests :{" "}
+        {devices
+          ? t(
+              `${devices.toLocaleString(LOCALE)} appareil(s) déjà enregistré(s). `,
+              `${devices.toLocaleString(LOCALE)} device${devices === 1 ? "" : "s"} already registered. `,
+            )
+          : ""}
+        {t("Clés iOS et Android, écran de permission et tests :", "iOS and Android keys, pre-permission screen and testing:")}{" "}
         <Link to="/notifications" className="font-semibold text-brand-500 hover:text-brand-600">
-          Notifications push
+          {t("Notifications push", "Push notifications")}
         </Link>
         .
       </p>
@@ -768,12 +834,12 @@ Content-Type: application/json
 /* -------------------------------------------------------------------------- */
 
 const EXPORTS = [
-  { id: "mailchimp", label: "Mailchimp", how: "Audience › All contacts › Export Audience, puis téléchargez le fichier CSV." },
-  { id: "brevo", label: "Brevo", how: "Contacts › cochez tous les contacts › Exporter, au format CSV." },
-  { id: "klaviyo", label: "Klaviyo", how: "Audience › Lists & Segments › ouvrez la liste › Manage list › Export list to CSV." },
-  { id: "excel", label: "Excel", how: "Fichier › Enregistrer sous › CSV UTF-8 (délimité par des virgules). Ou copiez directement les cellules." },
-  { id: "sheets", label: "Google Sheets", how: "Fichier › Télécharger › Valeurs séparées par des virgules (.csv)." },
-  { id: "other", label: "Autre outil", how: "Cherchez « Exporter » dans la liste de vos contacts ou clients : presque tous les outils proposent un export CSV ou Excel." },
+  { id: "mailchimp", label: "Mailchimp", how: t("Audience › All contacts › Export Audience, puis téléchargez le fichier CSV.", "Audience › All contacts › Export Audience, then download the CSV file.") },
+  { id: "brevo", label: "Brevo", how: t("Contacts › cochez tous les contacts › Exporter, au format CSV.", "Contacts › select all contacts › Export, as CSV.") },
+  { id: "klaviyo", label: "Klaviyo", how: t("Audience › Lists & Segments › ouvrez la liste › Manage list › Export list to CSV.", "Audience › Lists & Segments › open the list › Manage list › Export list to CSV.") },
+  { id: "excel", label: "Excel", how: t("Fichier › Enregistrer sous › CSV UTF-8 (délimité par des virgules). Ou copiez directement les cellules.", "File › Save As › CSV UTF-8 (Comma delimited). Or just copy the cells.") },
+  { id: "sheets", label: "Google Sheets", how: t("Fichier › Télécharger › Valeurs séparées par des virgules (.csv).", "File › Download › Comma-separated values (.csv).") },
+  { id: "other", label: t("Autre outil", "Other tool"), how: t("Cherchez « Exporter » dans la liste de vos contacts ou clients : presque tous les outils proposent un export CSV ou Excel.", "Look for “Export” in your contact or customer list: almost every tool offers a CSV or Excel export.") },
 ] as const;
 
 export function FileGuide({ done, onDone }: GuideProps) {
@@ -783,32 +849,40 @@ export function FileGuide({ done, onDone }: GuideProps) {
     <>
       <GuideHead
         icon={FileSpreadsheet}
-        title="Importer un fichier de contacts"
-        text="Vous changez d'outil ou vos clients sont dans un tableur ? Importez-les en une minute, sans perdre les tags."
+        title={t("Importer un fichier de contacts", "Import a contact file")}
+        text={t("Vous changez d'outil ou vos clients sont dans un tableur ? Importez-les en une minute, sans perdre les tags.", "Switching tools, or keeping customers in a spreadsheet? Import them in a minute, tags included.")}
         done={done || undefined}
       />
       <Steps>
-        <Step n={1} title="Exportez vos contacts">
-          <Tabs label="Outil d'origine" value={from} onChange={setFrom} options={EXPORTS.map((e) => ({ id: e.id, label: e.label }))} />
+        <Step n={1} title={t("Exportez vos contacts", "Export your contacts")}>
+          <Tabs label={t("Outil d'origine", "Source tool")} value={from} onChange={setFrom} options={EXPORTS.map((e) => ({ id: e.id, label: e.label }))} />
           <Hint>{EXPORTS.find((e) => e.id === from)!.how}</Hint>
         </Step>
-        <Step n={2} title="Vérifiez les colonnes">
+        <Step n={2} title={t("Vérifiez les colonnes", "Check the columns")}>
           <p>
-            Seule la colonne <Kbd>email</Kbd> est obligatoire. Pingsell reconnaît aussi <code>first_name</code>, <code>last_name</code>, <code>phone</code>, <code>status</code> et{" "}
-            <code>tags</code> (séparés par des points-virgules).
+            {t(
+              <>
+                Seule la colonne <Kbd>email</Kbd> est obligatoire. Pingsell reconnaît aussi <code>first_name</code>, <code>last_name</code>, <code>phone</code>, <code>status</code> et{" "}
+                <code>tags</code> (séparés par des points-virgules).
+              </>,
+              <>
+                Only the <Kbd>email</Kbd> column is required. Pingsell also recognizes <code>first_name</code>, <code>last_name</code>, <code>phone</code>, <code>status</code> and{" "}
+                <code>tags</code> (separated by semicolons).
+              </>,
+            )}
           </p>
           <Code code={`email,first_name,last_name,tags\ncamille@exemple.fr,Camille,Martin,vip;newsletter`} />
-          <p className="text-xs text-slate-500">Les contacts déjà présents sont mis à jour, jamais dupliqués.</p>
+          <p className="text-xs text-slate-500">{t("Les contacts déjà présents sont mis à jour, jamais dupliqués.", "Existing contacts are updated, never duplicated.")}</p>
         </Step>
-        <Step n={3} title="Importez le fichier" done={!!done} last>
+        <Step n={3} title={t("Importez le fichier", "Import the file")} done={!!done} last>
           <button
             type="button"
             onClick={() => setOpen(true)}
             className="flex w-full flex-col items-center gap-2 rounded-[22px] border-2 border-dashed border-slate-300 px-6 py-8 text-center transition hover:border-brand-500 hover:bg-brand-50/40 dark:border-slate-700"
           >
             <Upload className="size-6 text-brand-500" />
-            <span className="font-display text-base font-bold text-slate-900 dark:text-white">{done ? "Importer un autre fichier" : "Choisir mon fichier"}</span>
-            <span className="text-xs text-slate-500">CSV, ou copier-coller depuis Excel</span>
+            <span className="font-display text-base font-bold text-slate-900 dark:text-white">{done ? t("Importer un autre fichier", "Import another file") : t("Choisir mon fichier", "Choose my file")}</span>
+            <span className="text-xs text-slate-500">{t("CSV, ou copier-coller depuis Excel", "CSV, or copy and paste from Excel")}</span>
           </button>
         </Step>
       </Steps>
@@ -817,8 +891,13 @@ export function FileGuide({ done, onDone }: GuideProps) {
         onClose={() => setOpen(false)}
         onImported={(r) => {
           setOpen(false);
-          const n = (x: number) => x.toLocaleString("fr-FR");
-          onDone(`Import terminé : ${n(r.created)} contact${r.created > 1 ? "s" : ""} ajouté${r.created > 1 ? "s" : ""}, ${n(r.updated)} mis à jour`);
+          const n = (x: number) => x.toLocaleString(LOCALE);
+          onDone(
+            t(
+              `Import terminé : ${n(r.created)} contact${r.created > 1 ? "s" : ""} ajouté${r.created > 1 ? "s" : ""}, ${n(r.updated)} mis à jour`,
+              `Import complete: ${n(r.created)} contact${r.created === 1 ? "" : "s"} added, ${n(r.updated)} updated`,
+            ),
+          );
         }}
       />
     </>

@@ -5,6 +5,7 @@ import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, ErrorState, InfoRow, LoadingState, Screen, SectionTitle } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatNumber } from '@/lib/format';
+import { t } from '@/lib/i18n';
 import { radius, spacing, useColors } from '@/lib/theme';
 import { useApiQuery } from '@/lib/useApi';
 
@@ -18,10 +19,14 @@ export default function SettingsScreen() {
       void signOut();
       return;
     }
-    Alert.alert('Se déconnecter', 'Voulez-vous vraiment vous déconnecter de Pingsell ?', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Se déconnecter', style: 'destructive', onPress: () => void signOut() },
-    ]);
+    Alert.alert(
+      t('Se déconnecter', 'Sign out'),
+      t('Voulez-vous vraiment vous déconnecter de Pingsell ?', 'Are you sure you want to sign out of Pingsell?'),
+      [
+        { text: t('Annuler', 'Cancel'), style: 'cancel' },
+        { text: t('Se déconnecter', 'Sign out'), style: 'destructive', onPress: () => void signOut() },
+      ],
+    );
   }
 
   if (loading && !data) return <LoadingState />;
@@ -30,7 +35,7 @@ export default function SettingsScreen() {
       <View style={{ flex: 1, backgroundColor: c.background }}>
         <ErrorState message={error} onRetry={refresh} />
         <View style={{ padding: spacing.lg }}>
-          <Button label="Se déconnecter" variant="danger" icon="log-out-outline" onPress={confirmLogout} />
+          <Button label={t('Se déconnecter', 'Sign out')} variant="danger" icon="log-out-outline" onPress={confirmLogout} />
         </View>
       </View>
     );
@@ -51,29 +56,32 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
-      <SectionTitle>Compte</SectionTitle>
+      <SectionTitle>{t('Compte', 'Account')}</SectionTitle>
       <Card style={styles.list}>
-        <InfoRow label="Nom" value={account.name} />
+        <InfoRow label={t('Nom', 'Name')} value={account.name} />
         <InfoRow label="Email" value={account.email} />
-        <InfoRow label="Membre depuis" value={formatDate(account.created_at)} last />
+        <InfoRow label={t('Membre depuis', 'Member since')} value={formatDate(account.created_at)} last />
       </Card>
 
-      <SectionTitle>Utilisation</SectionTitle>
+      <SectionTitle>{t('Utilisation', 'Usage')}</SectionTitle>
       <Card style={styles.usage}>
-        <UsageTile icon="send-outline" label="Emails envoyés ce mois" value={formatNumber(usage.emails_sent_month)} />
+        <UsageTile icon="send-outline" label={t('Emails envoyés ce mois', 'Emails sent this month')} value={formatNumber(usage.emails_sent_month)} />
         <UsageTile icon="people-outline" label="Contacts" value={formatNumber(usage.contacts)} />
       </Card>
       <Text style={[styles.note, { color: c.textSubtle }]}>
-        La facturation Pingsell est basée sur le volume d’emails envoyés.
+        {t(
+          'La facturation Pingsell est basée sur le volume d’emails envoyés.',
+          'Pingsell billing is based on the number of emails sent.',
+        )}
       </Text>
 
-      <SectionTitle>Application</SectionTitle>
+      <SectionTitle>{t('Application', 'App')}</SectionTitle>
       <Card style={styles.list}>
-        <InfoRow label="Serveur API" value={apiUrl} />
+        <InfoRow label={t('Serveur API', 'API server')} value={apiUrl} />
         <InfoRow label="Version" value={Constants.expoConfig?.version ?? '1.0.0'} last />
       </Card>
 
-      <Button label="Se déconnecter" variant="danger" icon="log-out-outline" onPress={confirmLogout} />
+      <Button label={t('Se déconnecter', 'Sign out')} variant="danger" icon="log-out-outline" onPress={confirmLogout} />
     </Screen>
   );
 }

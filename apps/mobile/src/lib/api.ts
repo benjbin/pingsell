@@ -11,6 +11,7 @@ import type {
   Segment,
   StatsOverview,
 } from './types';
+import { LANG, t } from './i18n';
 
 export const DEFAULT_API_URL = 'http://localhost:4000';
 const API_PREFIX = '/api/v1';
@@ -71,7 +72,7 @@ export class ApiClient {
     options: { body?: unknown; query?: Query } = {},
   ): Promise<T> {
     const url = `${this.baseUrl}${API_PREFIX}${path}${buildQuery(options.query)}`;
-    const headers: Record<string, string> = { Accept: 'application/json' };
+    const headers: Record<string, string> = { Accept: 'application/json', 'Accept-Language': LANG };
     if (options.body !== undefined) headers['Content-Type'] = 'application/json';
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
 
@@ -87,7 +88,10 @@ export class ApiClient {
       });
     } catch {
       throw new ApiError(
-        `Impossible de joindre l'API (${this.baseUrl}). Vérifiez l'adresse et que le serveur est démarré.`,
+        t(
+          `Impossible de joindre l'API (${this.baseUrl}). Vérifiez l'adresse et que le serveur est démarré.`,
+          `Can't reach the API (${this.baseUrl}). Check the address and make sure the server is running.`,
+        ),
         0,
       );
     } finally {
@@ -109,7 +113,7 @@ export class ApiClient {
       const message =
         payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
           ? payload.error
-          : `Erreur ${response.status}`;
+          : t(`Erreur ${response.status}`, `Error ${response.status}`);
       throw new ApiError(message, response.status);
     }
     return payload as T;

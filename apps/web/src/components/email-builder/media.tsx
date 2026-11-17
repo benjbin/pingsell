@@ -7,6 +7,7 @@ import { useAsync } from "../../lib/useAsync";
 import { useToast } from "../ui/Toast";
 import { Modal } from "../ui/Overlay";
 import { Input } from "../ui/primitives";
+import { t } from "../../lib/i18n";
 
 export const DND_ASSET = "application/x-pingsell-asset";
 const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
@@ -15,7 +16,7 @@ function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(new Error("Lecture du fichier impossible"));
+    r.onerror = () => reject(new Error(t("Lecture du fichier impossible", "Couldn't read the file")));
     r.readAsDataURL(file);
   });
 }
@@ -32,8 +33,8 @@ async function dimensions(file: File): Promise<{ width?: number; height?: number
 }
 
 export async function uploadImage(file: File): Promise<Asset> {
-  if (!ACCEPT.split(",").includes(file.type)) throw new Error("Format non pris en charge : PNG, JPG, GIF ou WebP");
-  if (file.size > 8 * 1024 * 1024) throw new Error("Image trop lourde (8 Mo maximum)");
+  if (!ACCEPT.split(",").includes(file.type)) throw new Error(t("Format non pris en charge : PNG, JPG, GIF ou WebP", "Unsupported format: PNG, JPG, GIF or WebP"));
+  if (file.size > 8 * 1024 * 1024) throw new Error(t("Image trop lourde (8 Mo maximum)", "Image too large (8 MB max)"));
   const [data, dims] = await Promise.all([readAsDataUrl(file), dimensions(file)]);
   return api.assets.upload({ filename: file.name, data, ...dims });
 }
@@ -60,7 +61,7 @@ export function useUploader(onUploaded: (asset: Asset) => void) {
 }
 
 function formatSize(bytes: number): string {
-  return bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} Mo` : `${Math.max(1, Math.round(bytes / 1024))} Ko`;
+  return bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} ${t("Mo", "MB")}` : `${Math.max(1, Math.round(bytes / 1024))} ${t("Ko", "KB")}`;
 }
 
 /** Grid of uploaded images, with upload dropzone. Used in the side panel and the picker modal. */
@@ -101,8 +102,8 @@ export function MediaLibrary({ onPick, compact }: { onPick: (asset: Asset) => vo
         )}
       >
         {busy ? <Loader2 className="size-5 animate-spin text-brand-500" /> : <Upload className="size-5 text-brand-500" strokeWidth={1.75} />}
-        <span className="font-display text-sm font-semibold text-slate-900 dark:text-white">{busy ? "Import en cours…" : "Importer des images"}</span>
-        <span className="text-xs text-slate-500">Glissez-déposez ou cliquez · PNG, JPG, GIF, WebP · 8 Mo max</span>
+        <span className="font-display text-sm font-semibold text-slate-900 dark:text-white">{busy ? t("Import en cours…", "Uploading…") : t("Importer des images", "Upload images")}</span>
+        <span className="text-xs text-slate-500">{t("Glissez-déposez ou cliquez · PNG, JPG, GIF, WebP · 8 Mo max", "Drag and drop or click · PNG, JPG, GIF, WebP · 8 MB max")}</span>
       </button>
       <input ref={input} type="file" accept={ACCEPT} multiple hidden onChange={(e) => e.target.files && void upload(e.target.files).then(() => (e.target.value = ""))} />
 
@@ -113,7 +114,7 @@ export function MediaLibrary({ onPick, compact }: { onPick: (asset: Asset) => vo
           ))}
         </div>
       ) : (assets.data ?? []).length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-500">Aucune image pour l'instant.</p>
+        <p className="py-6 text-center text-sm text-slate-500">{t("Aucune image pour l'instant.", "No images yet.")}</p>
       ) : (
         <div className={cx("grid gap-2", compact ? "grid-cols-2" : "grid-cols-3 sm:grid-cols-4")}>
           {(assets.data ?? []).map((a) => (
@@ -135,7 +136,7 @@ export function MediaLibrary({ onPick, compact }: { onPick: (asset: Asset) => vo
                 type="button"
                 onClick={() => void remove(a)}
                 className="absolute top-1.5 right-1.5 hidden rounded-full bg-slate-900/80 p-1 text-white group-hover:block hover:bg-red-600"
-                aria-label={`Supprimer ${a.filename}`}
+                aria-label={t(`Supprimer ${a.filename}`, `Delete ${a.filename}`)}
               >
                 <Trash2 className="size-3" />
               </button>
@@ -148,7 +149,7 @@ export function MediaLibrary({ onPick, compact }: { onPick: (asset: Asset) => vo
 }
 
 /** Image slot in the inspector: preview, upload, library, URL. */
-export function ImageField({ value, onChange, label = "Image" }: { value: string; onChange: (url: string) => void; label?: string }) {
+export function ImageField({ value, onChange, label = t("Image", "Image") }: { value: string; onChange: (url: string) => void; label?: string }) {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const { upload, busy } = useUploader((a) => onChange(a.url));
@@ -173,7 +174,7 @@ export function ImageField({ value, onChange, label = "Image" }: { value: string
               type="button"
               onClick={() => onChange("")}
               className="absolute top-2 right-2 rounded-full bg-slate-900/80 p-1 text-white hover:bg-red-600"
-              aria-label="Retirer l'image"
+              aria-label={t("Retirer l'image", "Remove image")}
             >
               <X className="size-3.5" />
             </button>
@@ -181,7 +182,7 @@ export function ImageField({ value, onChange, label = "Image" }: { value: string
         ) : (
           <div className="flex h-24 flex-col items-center justify-center gap-1 text-xs text-slate-500">
             {busy ? <Loader2 className="size-5 animate-spin text-brand-500" /> : <ImagePlus className="size-5" strokeWidth={1.5} />}
-            {busy ? "Import…" : "Déposez une image ici"}
+            {busy ? t("Import…", "Uploading…") : t("Déposez une image ici", "Drop an image here")}
           </div>
         )}
       </div>
@@ -191,19 +192,19 @@ export function ImageField({ value, onChange, label = "Image" }: { value: string
           onClick={() => input.current?.click()}
           className="flex items-center justify-center gap-1.5 rounded-full py-2 font-display text-xs font-semibold text-slate-900 ring-1 ring-slate-900/15 hover:ring-slate-900/40 dark:text-white dark:ring-white/15"
         >
-          <Upload className="size-3.5" /> Importer
+          <Upload className="size-3.5" /> {t("Importer", "Upload")}
         </button>
         <button
           type="button"
           onClick={() => setLibraryOpen(true)}
           className="flex items-center justify-center gap-1.5 rounded-full py-2 font-display text-xs font-semibold text-slate-900 ring-1 ring-slate-900/15 hover:ring-slate-900/40 dark:text-white dark:ring-white/15"
         >
-          <Images className="size-3.5" /> Médiathèque
+          <Images className="size-3.5" /> {t("Médiathèque", "Media library")}
         </button>
       </div>
       <input ref={input} type="file" accept={ACCEPT} hidden onChange={(e) => e.target.files && void upload(e.target.files).then(() => (e.target.value = ""))} />
-      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="ou collez une URL https://…" className="mt-2 h-9 text-xs" />
-      <Modal open={libraryOpen} onClose={() => setLibraryOpen(false)} size="lg" title="Médiathèque" description="Cliquez sur une image pour l'utiliser.">
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={t("ou collez une URL https://…", "or paste a URL https://…")} className="mt-2 h-9 text-xs" />
+      <Modal open={libraryOpen} onClose={() => setLibraryOpen(false)} size="lg" title={t("Médiathèque", "Media library")} description={t("Cliquez sur une image pour l'utiliser.", "Click an image to use it.")}>
         <MediaLibrary
           onPick={(a) => {
             onChange(a.url);

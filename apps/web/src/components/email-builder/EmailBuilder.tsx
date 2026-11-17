@@ -41,6 +41,7 @@ import type { Asset } from "../../lib/types";
 import { Button, Segmented } from "../ui/primitives";
 import { Modal } from "../ui/Overlay";
 import { api } from "../../lib/api";
+import { t } from "../../lib/i18n";
 import { useToast } from "../ui/Toast";
 import { BlockInspector, ThemeInspector } from "./inspector";
 import { DND_ASSET, useUploader } from "./media";
@@ -73,10 +74,10 @@ type Tab = "blocks" | "layers" | "media" | "templates";
 type Device = "desktop" | "mobile";
 
 const TABS: Array<{ key: Tab; label: string; icon: LucideIcon }> = [
-  { key: "blocks", label: "Blocs", icon: Plus },
-  { key: "layers", label: "Calques", icon: Layers },
-  { key: "media", label: "Médias", icon: Images },
-  { key: "templates", label: "Modèles", icon: LayoutTemplate },
+  { key: "blocks", label: t("Blocs", "Blocks"), icon: Plus },
+  { key: "layers", label: t("Calques", "Layers"), icon: Layers },
+  { key: "media", label: t("Médias", "Media"), icon: Images },
+  { key: "templates", label: t("Modèles", "Templates"), icon: LayoutTemplate },
 ];
 
 export interface EmailBuilderProps {
@@ -139,13 +140,13 @@ function useHistory(design: Design, onChange: (d: Design) => void) {
 
   const commit = useCallback(
     (next: Design, key?: string) => {
-      const t = Date.now();
+      const now = Date.now();
       // Coalesce rapid edits of the same control (typing, sliders) into one undo step.
-      if (!(key && last.current.key === key && t - last.current.at < 900)) {
+      if (!(key && last.current.key === key && now - last.current.at < 900)) {
         past.current.push(current.current);
         if (past.current.length > 100) past.current.shift();
       }
-      last.current = { key, at: t };
+      last.current = { key, at: now };
       future.current = [];
       onChange(next);
       bump((n) => n + 1);
@@ -244,7 +245,7 @@ export function EmailBuilder(props: EmailBuilderProps) {
     try {
       await api.brandKit.save(JSON.stringify(next));
       setKit(next);
-      toast.success("Style de marque enregistré", "Il s'appliquera à vos prochains emails.");
+      toast.success(t("Style de marque enregistré", "Brand style saved"), t("Il s'appliquera à vos prochains emails.", "It will apply to your next emails."));
     } catch (err) {
       toast.error(err);
     } finally {
@@ -417,8 +418,8 @@ export function EmailBuilder(props: EmailBuilderProps) {
           type="button"
           onClick={props.onClose}
           className="flex size-10 items-center justify-center rounded-full ring-1 ring-slate-900/15 transition hover:bg-slate-900 hover:text-white dark:ring-white/15 dark:hover:bg-white dark:hover:text-slate-900"
-          aria-label="Fermer l'éditeur"
-          title="Fermer l'éditeur"
+          aria-label={t("Fermer l'éditeur", "Close editor")}
+          title={t("Fermer l'éditeur", "Close editor")}
         >
           <ArrowLeft className="size-4" />
         </button>
@@ -427,15 +428,15 @@ export function EmailBuilder(props: EmailBuilderProps) {
           <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
             {props.saving ? (
               <>
-                <Loader2 className="size-3 animate-spin" /> Enregistrement…
+                <Loader2 className="size-3 animate-spin" /> {t("Enregistrement…", "Saving…")}
               </>
             ) : props.dirty ? (
               <>
-                <span className="size-1.5 rounded-full bg-amber-500" /> Modifications non enregistrées
+                <span className="size-1.5 rounded-full bg-amber-500" /> {t("Modifications non enregistrées", "Unsaved changes")}
               </>
             ) : (
               <>
-                <Check className="size-3 text-emerald-500" /> Tout est enregistré
+                <Check className="size-3 text-emerald-500" /> {t("Tout est enregistré", "All changes saved")}
               </>
             )}
           </p>
@@ -443,31 +444,31 @@ export function EmailBuilder(props: EmailBuilderProps) {
 
         <div className="mx-auto hidden items-center gap-2 md:flex">
           <div className="flex items-center rounded-full bg-slate-100 p-1 dark:bg-white/5">
-            <IconBtn icon={Undo2} label="Annuler (⌘Z)" onClick={undo} disabled={!canUndo || disabled} />
-            <IconBtn icon={Redo2} label="Rétablir (⇧⌘Z)" onClick={redo} disabled={!canRedo || disabled} />
+            <IconBtn icon={Undo2} label={t("Annuler (⌘Z)", "Undo (⌘Z)")} onClick={undo} disabled={!canUndo || disabled} />
+            <IconBtn icon={Redo2} label={t("Rétablir (⇧⌘Z)", "Redo (⇧⌘Z)")} onClick={redo} disabled={!canRedo || disabled} />
           </div>
           <Segmented
             value={device}
             onChange={setDevice}
             options={[
-              { value: "desktop", label: "Ordinateur", icon: Monitor },
+              { value: "desktop", label: t("Ordinateur", "Desktop"), icon: Monitor },
               { value: "mobile", label: "Mobile", icon: Smartphone },
             ]}
           />
-          <IconBtn icon={Keyboard} label="Raccourcis clavier (?)" onClick={() => setShortcutsOpen(true)} />
+          <IconBtn icon={Keyboard} label={t("Raccourcis clavier (?)", "Keyboard shortcuts (?)")} onClick={() => setShortcutsOpen(true)} />
         </div>
 
         <div className="ml-auto flex items-center gap-2 md:ml-0">
           <Button variant="secondary" size="sm" icon={Eye} onClick={props.onPreview} className="hidden sm:inline-flex">
-            Aperçu
+            {t("Aperçu", "Preview")}
           </Button>
           {!disabled && (
             <>
               <Button variant="secondary" size="sm" icon={FlaskConical} onClick={props.onTest} className="hidden sm:inline-flex">
-                Tester
+                {t("Tester", "Test")}
               </Button>
               <Button size="sm" icon={Save} onClick={props.onSave} loading={props.saving}>
-                Enregistrer
+                {t("Enregistrer", "Save")}
               </Button>
             </>
           )}
@@ -477,18 +478,18 @@ export function EmailBuilder(props: EmailBuilderProps) {
       <div className="flex min-h-0 flex-1">
         {/* Rail */}
         <nav className="flex w-[76px] shrink-0 flex-col items-center gap-1 bg-slate-900 py-3">
-          {TABS.map((t) => (
+          {TABS.map((tb) => (
             <button
-              key={t.key}
+              key={tb.key}
               type="button"
-              onClick={() => setTab((cur) => (cur === t.key ? null : t.key))}
+              onClick={() => setTab((cur) => (cur === tb.key ? null : tb.key))}
               className={cx(
                 "flex w-[62px] flex-col items-center gap-1 rounded-2xl py-2.5 font-display text-[10.5px] font-semibold transition",
-                tab === t.key ? "bg-brand-500 text-white" : "text-white/55 hover:bg-white/[0.06] hover:text-white",
+                tab === tb.key ? "bg-brand-500 text-white" : "text-white/55 hover:bg-white/[0.06] hover:text-white",
               )}
             >
-              <t.icon className="size-[18px]" strokeWidth={1.75} />
-              {t.label}
+              <tb.icon className="size-[18px]" strokeWidth={1.75} />
+              {tb.label}
             </button>
           ))}
           <div className="flex-1" />
@@ -499,7 +500,7 @@ export function EmailBuilder(props: EmailBuilderProps) {
               "flex w-[62px] flex-col items-center gap-1 rounded-2xl py-2.5 font-display text-[10.5px] font-semibold transition",
               !selected ? "text-white" : "text-white/55 hover:bg-white/[0.06] hover:text-white",
             )}
-            title="Style global de l'email"
+            title={t("Style global de l'email", "Global email style")}
           >
             <Palette className="size-[18px]" strokeWidth={1.75} />
             Style
@@ -509,7 +510,7 @@ export function EmailBuilder(props: EmailBuilderProps) {
         {/* Side panel */}
         {tab && (
           <aside className="w-[300px] shrink-0 overflow-y-auto border-r border-slate-900/10 bg-white max-lg:absolute max-lg:inset-y-16 max-lg:left-[76px] max-lg:z-30 max-lg:shadow-2xl dark:border-white/10 dark:bg-slate-900">
-            {tab === "blocks" && <BlocksPanel onInsert={(t) => insert(t)} disabled={disabled} />}
+            {tab === "blocks" && <BlocksPanel onInsert={(type) => insert(type)} disabled={disabled} />}
             {tab === "layers" && (
               <LayersPanel blocks={design.blocks} selectedId={selectedId} onSelect={setSelectedId} onMove={move} onRemove={remove} disabled={disabled} />
             )}
@@ -571,7 +572,7 @@ export function EmailBuilder(props: EmailBuilderProps) {
               >
                 {design.blocks.length === 0 && (
                   <div className={cx("px-8 py-24 text-center text-sm", dropIndex === 0 ? "text-brand-500" : "text-slate-400")}>
-                    Glissez un bloc ou une image ici, ou choisissez un modèle.
+                    {t("Glissez un bloc ou une image ici, ou choisissez un modèle.", "Drag a block or image here, or pick a template.")}
                   </div>
                 )}
                 {design.blocks.map((block, index) => (
@@ -605,8 +606,8 @@ export function EmailBuilder(props: EmailBuilderProps) {
                     insertMenu={
                       insertAt === index + 1 ? (
                         <QuickInsert
-                          onPick={(t) => {
-                            insert(t, index + 1);
+                          onPick={(type) => {
+                            insert(type, index + 1);
                             setInsertAt(null);
                           }}
                         />
@@ -620,7 +621,7 @@ export function EmailBuilder(props: EmailBuilderProps) {
             </div>
             {uploading && (
               <p className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-500">
-                <Loader2 className="size-4 animate-spin" /> Import de l'image…
+                <Loader2 className="size-4 animate-spin" /> {t("Import de l'image…", "Uploading image…")}
               </p>
             )}
           </div>
@@ -640,18 +641,18 @@ export function EmailBuilder(props: EmailBuilderProps) {
                 <p className="flex-1 font-display text-sm font-extrabold tracking-tight text-slate-900 uppercase dark:text-white">{LABELS[selected.type]}</p>
                 {!disabled && (
                   <>
-                    <IconBtn icon={Copy} label="Dupliquer (⌘D)" onClick={() => duplicate(selected.id)} />
-                    <IconBtn icon={Trash2} label="Supprimer (Suppr)" onClick={() => remove(selected.id)} danger />
+                    <IconBtn icon={Copy} label={t("Dupliquer (⌘D)", "Duplicate (⌘D)")} onClick={() => duplicate(selected.id)} />
+                    <IconBtn icon={Trash2} label={t("Supprimer (Suppr)", "Delete (Del)")} onClick={() => remove(selected.id)} danger />
                   </>
                 )}
-                <IconBtn icon={X} label="Désélectionner (Échap)" onClick={() => setSelectedId(null)} />
+                <IconBtn icon={X} label={t("Désélectionner (Échap)", "Deselect (Esc)")} onClick={() => setSelectedId(null)} />
               </>
             ) : (
               <>
                 <span className="flex size-8 items-center justify-center rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-900">
                   <Palette className="size-4" strokeWidth={1.75} />
                 </span>
-                <p className="font-display text-sm font-extrabold tracking-tight text-slate-900 uppercase dark:text-white">Style global</p>
+                <p className="font-display text-sm font-extrabold tracking-tight text-slate-900 uppercase dark:text-white">{t("Style global", "Global style")}</p>
               </>
             )}
           </div>
@@ -667,13 +668,21 @@ export function EmailBuilder(props: EmailBuilderProps) {
                     <div className="flex items-start gap-2.5">
                       <BadgeCheck className="mt-0.5 size-4 shrink-0 text-brand-500" />
                       <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                        <span className="font-semibold text-slate-900 dark:text-white">Style de marque.</span>{" "}
-                        {kit ? "Vos couleurs, polices, logo et pied de page sont appliqués aux nouveaux emails." : "Enregistrez ce style (couleurs, polices, logo, réseaux, pied de page) pour le retrouver dans chaque nouvel email."}
+                        <span className="font-semibold text-slate-900 dark:text-white">{t("Style de marque.", "Brand style.")}</span>{" "}
+                        {kit
+                          ? t(
+                              "Vos couleurs, polices, logo et pied de page sont appliqués aux nouveaux emails.",
+                              "Your colors, fonts, logo and footer are applied to new emails.",
+                            )
+                          : t(
+                              "Enregistrez ce style (couleurs, polices, logo, réseaux, pied de page) pour le retrouver dans chaque nouvel email.",
+                              "Save this style (colors, fonts, logo, socials, footer) to reuse it in every new email.",
+                            )}
                       </p>
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" variant="secondary" icon={BadgeCheck} loading={kitSaving} onClick={() => void saveBrandKit()} className="flex-1">
-                        {kit ? "Mettre à jour" : "Enregistrer"}
+                        {kit ? t("Mettre à jour", "Update") : t("Enregistrer", "Save")}
                       </Button>
                       {kit && (
                         <Button
@@ -682,11 +691,11 @@ export function EmailBuilder(props: EmailBuilderProps) {
                           icon={Sparkles}
                           onClick={() => {
                             commit(applyBrandKit(designRef.current, kit));
-                            toast.success("Style de marque appliqué");
+                            toast.success(t("Style de marque appliqué", "Brand style applied"));
                           }}
                           className="flex-1"
                         >
-                          Appliquer
+                          {t("Appliquer", "Apply")}
                         </Button>
                       )}
                     </div>
@@ -698,17 +707,17 @@ export function EmailBuilder(props: EmailBuilderProps) {
         </aside>
       </div>
 
-      <Modal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} size="sm" title="Raccourcis clavier">
+      <Modal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} size="sm" title={t("Raccourcis clavier", "Keyboard shortcuts")}>
         <dl className="divide-y divide-slate-900/[0.07] text-sm dark:divide-white/10">
           {[
-            ["⌘ S", "Enregistrer"],
-            ["⌘ Z  /  ⇧ ⌘ Z", "Annuler / rétablir"],
-            ["↑  ↓", "Bloc précédent / suivant"],
-            ["⌥ ↑  /  ⌥ ↓", "Monter / descendre le bloc"],
-            ["⌘ D", "Dupliquer le bloc"],
-            ["Suppr", "Supprimer le bloc"],
-            ["Échap", "Désélectionner"],
-            ["⌘ B  /  ⌘ I  /  ⌘ U", "Gras / italique / souligné (dans un texte)"],
+            ["⌘ S", t("Enregistrer", "Save")],
+            ["⌘ Z  /  ⇧ ⌘ Z", t("Annuler / rétablir", "Undo / redo")],
+            ["↑  ↓", t("Bloc précédent / suivant", "Previous / next block")],
+            ["⌥ ↑  /  ⌥ ↓", t("Monter / descendre le bloc", "Move block up / down")],
+            ["⌘ D", t("Dupliquer le bloc", "Duplicate block")],
+            [t("Suppr", "Del"), t("Supprimer le bloc", "Delete block")],
+            [t("Échap", "Esc"), t("Désélectionner", "Deselect")],
+            ["⌘ B  /  ⌘ I  /  ⌘ U", t("Gras / italique / souligné (dans un texte)", "Bold / italic / underline (in text)")],
           ].map(([k, v]) => (
             <div key={k} className="flex items-center justify-between py-2.5">
               <dt className="text-slate-600 dark:text-slate-300">{v}</dt>
@@ -735,30 +744,30 @@ function Envelope(props: EmailBuilderProps & { width: number }) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{props.fromName || props.brand}</p>
-          <p className="text-[11px] text-slate-500">Aperçu dans la boîte de réception</p>
+          <p className="text-[11px] text-slate-500">{t("Aperçu dans la boîte de réception", "Inbox preview")}</p>
         </div>
       </div>
       <label className="flex items-center gap-3 border-b border-slate-900/[0.07] px-4 py-2.5 dark:border-white/[0.07]">
-        <span className="w-24 shrink-0 font-display text-[11px] font-bold tracking-wider text-slate-500 uppercase">Objet</span>
+        <span className="w-24 shrink-0 font-display text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("Objet", "Subject")}</span>
         <input
           value={props.subject}
           onChange={(e) => props.onSubjectChange(e.target.value)}
           disabled={props.disabled}
-          placeholder="L'objet de votre email *"
+          placeholder={t("L'objet de votre email *", "Your email subject *")}
           className="min-w-0 flex-1 bg-transparent text-[15px] font-semibold text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 dark:text-white"
         />
-        <span className={cx("shrink-0 font-mono text-[11px] tabular-nums", len > 60 ? "text-amber-600" : "text-slate-400")} title="Moins de 50 caractères pour un objet lisible sur mobile">
+        <span className={cx("shrink-0 font-mono text-[11px] tabular-nums", len > 60 ? "text-amber-600" : "text-slate-400")} title={t("Moins de 50 caractères pour un objet lisible sur mobile", "Under 50 characters keeps the subject readable on mobile")}>
           {len}
         </span>
         <MergeTagMenu onPick={(tag) => props.onSubjectChange(`${props.subject}${props.subject && !props.subject.endsWith(" ") ? " " : ""}${tag}`)} disabled={props.disabled} />
       </label>
       <label className="flex items-center gap-3 px-4 py-2.5">
-        <span className="w-24 shrink-0 font-display text-[11px] font-bold tracking-wider text-slate-500 uppercase">Pré-en-tête</span>
+        <span className="w-24 shrink-0 font-display text-[11px] font-bold tracking-wider text-slate-500 uppercase">{t("Pré-en-tête", "Preheader")}</span>
         <input
           value={props.preheader}
           onChange={(e) => props.onPreheaderChange(e.target.value)}
           disabled={props.disabled}
-          placeholder="Texte affiché après l'objet"
+          placeholder={t("Texte affiché après l'objet", "Text shown after the subject")}
           className="min-w-0 flex-1 bg-transparent text-sm text-slate-600 outline-none placeholder:text-slate-400 dark:text-slate-300"
         />
       </label>
@@ -779,9 +788,9 @@ function MergeTagMenu({ onPick, disabled }: { onPick: (tag: string) => void; dis
           setOpen((o) => !o);
         }}
         className="flex items-center gap-1 rounded-full px-2 py-1 font-display text-[11px] font-semibold text-brand-500 ring-1 ring-brand-500/30 hover:bg-brand-50 dark:hover:bg-brand-900/30"
-        title="Insérer une variable de personnalisation"
+        title={t("Insérer une variable de personnalisation", "Insert a personalization variable")}
       >
-        <UserRound className="size-3" /> Variable
+        <UserRound className="size-3" /> {t("Variable", "Variable")}
       </button>
       {open && (
         <div className="absolute top-full right-0 z-40 mt-1 w-44 rounded-xl bg-white p-1 shadow-xl ring-1 ring-slate-900/10 dark:bg-slate-800 dark:ring-white/10">
@@ -841,7 +850,7 @@ function CanvasBlock(props: {
   useEffect(() => {
     const root = ref.current;
     if (!root || disabled) return;
-    const fieldOf = (t: EventTarget | null) => (t instanceof HTMLElement ? t.closest<HTMLElement>("[data-edit]") : null);
+    const fieldOf = (target: EventTarget | null) => (target instanceof HTMLElement ? target.closest<HTMLElement>("[data-edit]") : null);
     const onFocusIn = (e: FocusEvent) => {
       const el = fieldOf(e.target);
       if (el) setRichFocus(el.dataset.rich === "1");
@@ -909,7 +918,7 @@ function CanvasBlock(props: {
       />
       {hidden && (
         <span className="absolute top-2 left-1/2 z-20 -translate-x-1/2 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950">
-          Masqué sur {device === "mobile" ? "mobile" : "ordinateur"}
+          {device === "mobile" ? t("Masqué sur mobile", "Hidden on mobile") : t("Masqué sur ordinateur", "Hidden on desktop")}
         </span>
       )}
 
@@ -936,7 +945,7 @@ function CanvasBlock(props: {
               selected ? "opacity-100" : "opacity-0 group-hover/block:opacity-100",
               richFocus && "hidden",
             )}
-            title="Glisser pour déplacer"
+            title={t("Glisser pour déplacer", "Drag to move")}
           >
             <GripVertical className="size-3" /> {LABELS[block.type]}
           </span>
@@ -946,10 +955,10 @@ function CanvasBlock(props: {
               selected && !richFocus ? "opacity-100" : "pointer-events-none opacity-0",
             )}
           >
-            <ToolBtn label="Monter (⌥↑)" disabled={props.isFirst} onClick={props.onUp} icon={ArrowUp} />
-            <ToolBtn label="Descendre (⌥↓)" disabled={props.isLast} onClick={props.onDown} icon={ArrowDown} />
-            <ToolBtn label="Dupliquer (⌘D)" onClick={props.onDuplicate} icon={Copy} />
-            <ToolBtn label="Supprimer" onClick={props.onRemove} icon={Trash2} danger />
+            <ToolBtn label={t("Monter (⌥↑)", "Move up (⌥↑)")} disabled={props.isFirst} onClick={props.onUp} icon={ArrowUp} />
+            <ToolBtn label={t("Descendre (⌥↓)", "Move down (⌥↓)")} disabled={props.isLast} onClick={props.onDown} icon={ArrowDown} />
+            <ToolBtn label={t("Dupliquer (⌘D)", "Duplicate (⌘D)")} onClick={props.onDuplicate} icon={Copy} />
+            <ToolBtn label={t("Supprimer", "Delete")} onClick={props.onRemove} icon={Trash2} danger />
           </div>
           {/* Insert between blocks */}
           <button
@@ -962,8 +971,8 @@ function CanvasBlock(props: {
               "absolute -bottom-3.5 left-1/2 z-30 flex size-7 -translate-x-1/2 items-center justify-center rounded-full bg-brand-500 text-white shadow-lg ring-4 ring-white transition hover:scale-110",
               props.insertMenu ? "opacity-100" : "opacity-0 group-hover/block:opacity-100",
             )}
-            aria-label="Insérer un bloc ici"
-            title="Insérer un bloc ici"
+            aria-label={t("Insérer un bloc ici", "Insert a block here")}
+            title={t("Insérer un bloc ici", "Insert a block here")}
           >
             <Plus className={cx("size-4 transition", !!props.insertMenu && "rotate-45")} />
           </button>
@@ -975,7 +984,7 @@ function CanvasBlock(props: {
   );
 }
 
-function QuickInsert({ onPick }: { onPick: (t: BlockType) => void }) {
+function QuickInsert({ onPick }: { onPick: (type: BlockType) => void }) {
   return (
     <div
       onClick={(e) => e.stopPropagation()}
@@ -1082,11 +1091,11 @@ function RichToolbar({ root, theme, onCommitted }: { root: React.RefObject<HTMLD
   const swatches = [...new Set([theme.text, theme.body || theme.text, theme.accent, "#FFFFFF", "#000000", "#E11D48", "#F59E0B", "#10B981", "#145CFF", "#7C3AED"].map((c) => c.toUpperCase()))];
   const highlights = ["#FEF08A", "#BBF7D0", "#BFDBFE", "#FBCFE8", "#FED7AA", theme.accent.toUpperCase()];
   const sizes = [
-    { label: "Petit", value: "13px" },
-    { label: "Normal", value: "" },
-    { label: "Grand", value: "20px" },
-    { label: "Très grand", value: "26px" },
-    { label: "Énorme", value: "36px" },
+    { label: t("Petit", "Small"), value: "13px" },
+    { label: t("Normal", "Normal"), value: "" },
+    { label: t("Grand", "Large"), value: "20px" },
+    { label: t("Très grand", "Extra large"), value: "26px" },
+    { label: t("Énorme", "Huge"), value: "36px" },
   ];
 
   function insertTag(tag: string, label: string) {
@@ -1134,21 +1143,21 @@ function RichToolbar({ root, theme, onCommitted }: { root: React.RefObject<HTMLD
         </form>
       ) : (
         <>
-          <RtBtn icon={Bold} label="Gras (⌘B)" onMouseDown={keep} onClick={() => run("bold")} />
-          <RtBtn icon={Italic} label="Italique (⌘I)" onMouseDown={keep} onClick={() => run("italic")} />
-          <RtBtn icon={Underline} label="Souligné (⌘U)" onMouseDown={keep} onClick={() => run("underline")} />
-          <RtBtn icon={Strikethrough} label="Barré" onMouseDown={keep} onClick={() => run("strikeThrough")} />
+          <RtBtn icon={Bold} label={t("Gras (⌘B)", "Bold (⌘B)")} onMouseDown={keep} onClick={() => run("bold")} />
+          <RtBtn icon={Italic} label={t("Italique (⌘I)", "Italic (⌘I)")} onMouseDown={keep} onClick={() => run("italic")} />
+          <RtBtn icon={Underline} label={t("Souligné (⌘U)", "Underline (⌘U)")} onMouseDown={keep} onClick={() => run("underline")} />
+          <RtBtn icon={Strikethrough} label={t("Barré", "Strikethrough")} onMouseDown={keep} onClick={() => run("strikeThrough")} />
           <span className="mx-1 h-4 w-px bg-white/20" />
           <div className="relative">
-            <RtBtn icon={Baseline} label="Couleur du texte" onMouseDown={keep} onClick={() => (remember(), setPop(pop === "color" ? null : "color"))} />
+            <RtBtn icon={Baseline} label={t("Couleur du texte", "Text color")} onMouseDown={keep} onClick={() => (remember(), setPop(pop === "color" ? null : "color"))} />
             {pop === "color" && (
-              <ColorPop swatches={swatches} onPick={(c) => wrapStyle("color", c)} onClear={() => wrapStyle("color", "")} clearLabel="Couleur par défaut" />
+              <ColorPop swatches={swatches} onPick={(c) => wrapStyle("color", c)} onClear={() => wrapStyle("color", "")} clearLabel={t("Couleur par défaut", "Default color")} />
             )}
           </div>
           <div className="relative">
-            <RtBtn icon={Highlighter} label="Surligner" onMouseDown={keep} onClick={() => (remember(), setPop(pop === "highlight" ? null : "highlight"))} />
+            <RtBtn icon={Highlighter} label={t("Surligner", "Highlight")} onMouseDown={keep} onClick={() => (remember(), setPop(pop === "highlight" ? null : "highlight"))} />
             {pop === "highlight" && (
-              <ColorPop swatches={highlights} onPick={(c) => wrapStyle("backgroundColor", c)} onClear={() => wrapStyle("backgroundColor", "")} clearLabel="Sans surlignage" />
+              <ColorPop swatches={highlights} onPick={(c) => wrapStyle("backgroundColor", c)} onClear={() => wrapStyle("backgroundColor", "")} clearLabel={t("Sans surlignage", "No highlight")} />
             )}
           </div>
           <div className="relative">
@@ -1157,7 +1166,7 @@ function RichToolbar({ root, theme, onCommitted }: { root: React.RefObject<HTMLD
               onMouseDown={keep}
               onClick={() => (remember(), setPop(pop === "size" ? null : "size"))}
               className="rounded-full px-2 py-1 font-display text-[11px] font-bold hover:bg-white/15"
-              title="Taille du texte"
+              title={t("Taille du texte", "Text size")}
             >
               Aa
             </button>
@@ -1179,9 +1188,9 @@ function RichToolbar({ root, theme, onCommitted }: { root: React.RefObject<HTMLD
             )}
           </div>
           <span className="mx-1 h-4 w-px bg-white/20" />
-          <RtBtn icon={Link2} label="Lien" onMouseDown={keep} onClick={startLink} />
-          <RtBtn icon={Link2Off} label="Retirer le lien" onMouseDown={keep} onClick={() => run("unlink")} />
-          <RtBtn icon={RemoveFormatting} label="Effacer la mise en forme" onMouseDown={keep} onClick={() => run("removeFormat")} />
+          <RtBtn icon={Link2} label={t("Lien", "Link")} onMouseDown={keep} onClick={startLink} />
+          <RtBtn icon={Link2Off} label={t("Retirer le lien", "Remove link")} onMouseDown={keep} onClick={() => run("unlink")} />
+          <RtBtn icon={RemoveFormatting} label={t("Effacer la mise en forme", "Clear formatting")} onMouseDown={keep} onClick={() => run("removeFormat")} />
           <span className="mx-1 h-4 w-px bg-white/20" />
           <div className="relative">
             <button
@@ -1190,7 +1199,7 @@ function RichToolbar({ root, theme, onCommitted }: { root: React.RefObject<HTMLD
               onClick={() => setTagsOpen((o) => !o)}
               className="flex items-center gap-1 rounded-full px-2.5 py-1.5 font-display text-[11px] font-semibold hover:bg-white/15"
             >
-              <UserRound className="size-3.5" /> Variable
+              <UserRound className="size-3.5" /> {t("Variable", "Variable")}
             </button>
             {tagsOpen && (
               <div className="absolute top-full left-0 mt-1.5 w-36 rounded-xl bg-white p-1 text-slate-800 shadow-xl ring-1 ring-slate-900/10">
@@ -1238,7 +1247,7 @@ function ColorPop({ swatches, onPick, onClear, clearLabel }: { swatches: string[
         {swatches.map((c) => (
           <button key={c} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(c)} className="size-6 rounded-full ring-1 ring-slate-900/15 transition hover:scale-110" style={{ background: c }} title={c} aria-label={c} />
         ))}
-        <label className="relative flex size-6 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-[conic-gradient(red,yellow,lime,cyan,blue,magenta,red)] ring-1 ring-slate-900/15" title="Couleur personnalisée">
+        <label className="relative flex size-6 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-[conic-gradient(red,yellow,lime,cyan,blue,magenta,red)] ring-1 ring-slate-900/15" title={t("Couleur personnalisée", "Custom color")}>
           <input ref={input} type="color" className="absolute inset-0 cursor-pointer opacity-0" />
         </label>
       </div>

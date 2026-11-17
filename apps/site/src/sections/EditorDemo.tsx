@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { AnimatePresence, motion, useInView, useReducedMotion, type Transition, type Variants } from "motion/react";
 import { ArrowRight, Check, Eye, Monitor, MousePointer2, MousePointerClick, RotateCcw, ShoppingBag, Smartphone } from "lucide-react";
 import { BLOCKS, PRICING, SIGNUP_URL } from "../content";
+import { LOCALE, t } from "../i18n";
 import { EmailPreview } from "./c-email";
 import { COLORS, FONTS, INITIAL, STEPS, THEMES, TYPES, alpha, byId, stepKey, tint, type DemoState, type Step } from "./c-tokens";
 
@@ -200,44 +201,50 @@ export function EditorDemo() {
               {!reduce && <span className="absolute inset-0 animate-ping rounded-full opacity-60" style={{ background: color.hex }} />}
               <span className="relative size-2 rounded-full transition-colors duration-500" style={{ background: color.hex }} />
             </span>
-            L'éditeur · essayez-le
+            {t("L'éditeur · essayez-le", "The editor · try it")}
           </motion.p>
           <h2 className="display mt-5 text-[46px] leading-[0.88] sm:text-[68px] lg:text-[68px] xl:text-[76px]">
             <motion.span variants={item} className="block">
-              Des emails
+              {t("Des emails", "Emails that")}
             </motion.span>
             <motion.span variants={item} className="block">
-              à votre
+              {t("à votre", "look like")}
             </motion.span>
             <motion.span variants={item} className="block">
               <motion.em initial={false} animate={{ color: color.hex }} transition={{ duration: reduce ? 0 : 0.6 }}>
-                image.
+                {t("image.", "you.")}
               </motion.em>
             </motion.span>
           </h2>
           <motion.p variants={item} className="mt-6 max-w-md text-[16px] leading-relaxed text-slate-600 sm:text-[17px]">
-            Couleurs, typographies, {BLOCKS.length} blocs : chaque email prend l'allure de votre boutique.{" "}
-            <span className="font-semibold text-slate-900">Essayez ici même, l'aperçu réagit en direct.</span>
+            {t(
+              <>Couleurs, typographies, {BLOCKS.length} blocs : chaque email prend l'allure de votre boutique.</>,
+              <>Colors, fonts, {BLOCKS.length} blocks: every email looks like your store.</>,
+            )}{" "}
+            <span className="font-semibold text-slate-900">{t("Essayez ici même, l'aperçu réagit en direct.", "Try it right here, the preview updates live.")}</span>
           </motion.p>
           <motion.div variants={item} className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
             <a
               href={SIGNUP_URL}
               className={`group inline-flex h-12 items-center justify-center gap-2 rounded-full bg-brand-500 px-6 font-display text-sm font-semibold text-white shadow-[0_10px_30px_-10px_rgba(20,92,255,0.7)] transition hover:bg-brand-600 ${focusRing}`}
             >
-              Commencer gratuitement
+              {t("Commencer gratuitement", "Start for free")}
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
             </a>
             <a
               href="#tarifs"
               className={`inline-flex h-12 items-center justify-center rounded-full bg-white/60 px-6 font-display text-sm font-semibold text-slate-900 ring-1 ring-slate-900/15 transition hover:ring-slate-900/40 ${focusRing}`}
             >
-              Voir les tarifs
+              {t("Voir les tarifs", "See pricing")}
             </a>
           </motion.div>
           <motion.ul variants={item} className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
-            {[`${PRICING.freeEmails.toLocaleString("fr-FR")} emails offerts / mois`, "Sans carte bancaire"].map((t) => (
-              <li key={t} className="flex items-center gap-1.5">
-                <Check className="size-4 text-brand-500" /> {t}
+            {[
+              t(`${PRICING.freeEmails.toLocaleString(LOCALE)} emails offerts / mois`, `${PRICING.freeEmails.toLocaleString(LOCALE)} free emails / month`),
+              t("Sans carte bancaire", "No credit card"),
+            ].map((label) => (
+              <li key={label} className="flex items-center gap-1.5">
+                <Check className="size-4 text-brand-500" /> {label}
               </li>
             ))}
           </motion.ul>
@@ -257,32 +264,32 @@ export function EditorDemo() {
           >
             {/* Toolbar: email type + device */}
             <div className="flex items-center gap-2 border-b border-slate-900/[0.07] p-2.5 sm:gap-3 sm:p-3">
-              <div role="group" aria-label="Type d'email" className="grid min-w-0 flex-1 grid-cols-3 rounded-full bg-slate-100 p-1 sm:flex sm:flex-none">
-                {TYPES.map((t) => {
-                  const active = s.type === t.id;
+              <div role="group" aria-label={t("Type d'email", "Email type")} className="grid min-w-0 flex-1 grid-cols-3 rounded-full bg-slate-100 p-1 sm:flex sm:flex-none">
+                {TYPES.map((ty) => {
+                  const active = s.type === ty.id;
                   return (
                     <button
-                      key={t.id}
+                      key={ty.id}
                       type="button"
-                      ref={register(stepKey({ group: "type", value: t.id }))}
+                      ref={register(stepKey({ group: "type", value: ty.id }))}
                       aria-pressed={active}
-                      onClick={() => pick({ group: "type", value: t.id })}
+                      onClick={() => pick({ group: "type", value: ty.id })}
                       className={`${chip(active)} h-8 min-w-0 px-2 text-[11.5px] font-semibold sm:px-3.5 sm:text-xs`}
                     >
                       {active && <Pill id="c-type" spring={spring} className="inset-0 rounded-full bg-slate-900 shadow-sm" />}
                       <span className="relative truncate">
-                        <span className="sm:hidden">{t.short}</span>
-                        <span className="hidden sm:inline">{t.label}</span>
+                        <span className="sm:hidden">{ty.short}</span>
+                        <span className="hidden sm:inline">{ty.label}</span>
                       </span>
                     </button>
                   );
                 })}
               </div>
-              <div role="group" aria-label="Largeur de l'aperçu" className="ml-auto flex shrink-0 rounded-full bg-slate-100 p-1">
+              <div role="group" aria-label={t("Largeur de l'aperçu", "Preview width")} className="ml-auto flex shrink-0 rounded-full bg-slate-100 p-1">
                 {(
                   [
-                    ["ordinateur", Monitor, "Aperçu ordinateur"],
-                    ["mobile", Smartphone, "Aperçu mobile"],
+                    ["ordinateur", Monitor, t("Aperçu ordinateur", "Desktop preview")],
+                    ["mobile", Smartphone, t("Aperçu mobile", "Mobile preview")],
                   ] as const
                 ).map(([d, Icon, label]) => {
                   const active = s.device === d;
@@ -321,7 +328,10 @@ export function EditorDemo() {
                 />
                 <div className="relative h-full" aria-live={auto ? "off" : "polite"}>
                   <span className="sr-only">
-                    Aperçu : email {byId(TYPES, s.type).label}, couleur {color.label}, typographie {font.label}, thème {theme.label}, format {s.device}.
+                    {t(
+                      `Aperçu : email ${byId(TYPES, s.type).label}, couleur ${color.label}, typographie ${font.label}, thème ${theme.label}, format ${s.device}.`,
+                      `Preview: ${byId(TYPES, s.type).label} email, ${color.label} color, ${font.label} font, ${theme.label} theme, ${s.device === "mobile" ? "mobile" : "desktop"} layout.`,
+                    )}
                   </span>
                   <div aria-hidden className="h-full">
                     <EmailPreview s={s} reduce={reduce} />
@@ -331,7 +341,7 @@ export function EditorDemo() {
 
               {/* Inspector */}
               <div className="grid gap-5 border-t border-slate-900/[0.07] p-4 sm:grid-cols-[auto_1fr] sm:gap-x-6 lg:block lg:space-y-5 lg:border-t-0 lg:border-l">
-                <Group label="Couleur" value={color.label}>
+                <Group label={t("Couleur", "Color")} value={color.label}>
                   <div className="flex flex-wrap gap-2.5 lg:gap-2">
                     {COLORS.map((c) => {
                       const active = s.color === c.id;
@@ -341,7 +351,7 @@ export function EditorDemo() {
                           type="button"
                           ref={register(stepKey({ group: "color", value: c.id }))}
                           aria-pressed={active}
-                          aria-label={`Couleur ${c.label}`}
+                          aria-label={t(`Couleur ${c.label}`, `Color ${c.label}`)}
                           title={c.label}
                           onClick={() => pick({ group: "color", value: c.id })}
                           className={`relative size-8 rounded-full transition-transform hover:scale-110 lg:size-[26px] ${focusRing}`}
@@ -354,7 +364,7 @@ export function EditorDemo() {
                   </div>
                 </Group>
 
-                <Group label="Typographie" value={font.label}>
+                <Group label={t("Typographie", "Font")} value={font.label}>
                   <div className="grid grid-cols-4 gap-1.5 lg:grid-cols-2">
                     {FONTS.map((f) => {
                       const active = s.font === f.id;
@@ -385,24 +395,24 @@ export function EditorDemo() {
                 </Group>
 
                 <div className="sm:col-span-2 lg:col-span-1">
-                  <Group label="Thème" value={theme.label}>
+                  <Group label={t("Thème", "Theme")} value={theme.label}>
                     <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-1">
-                      {THEMES.map((t) => {
-                        const active = s.theme === t.id;
+                      {THEMES.map((th) => {
+                        const active = s.theme === th.id;
                         return (
                           <button
-                            key={t.id}
+                            key={th.id}
                             type="button"
-                            ref={register(stepKey({ group: "theme", value: t.id }))}
+                            ref={register(stepKey({ group: "theme", value: th.id }))}
                             aria-pressed={active}
-                            onClick={() => pick({ group: "theme", value: t.id })}
+                            onClick={() => pick({ group: "theme", value: th.id })}
                             className={`relative flex h-9 items-center justify-center gap-2 rounded-xl px-2.5 text-[12px] font-semibold ring-1 transition-colors lg:justify-start ${focusRing} ${
                               active ? "text-white ring-transparent" : "text-slate-700 ring-slate-900/10 hover:ring-slate-900/30"
                             }`}
                           >
                             {active && <Pill id="c-theme" spring={spring} className="inset-0 rounded-xl bg-slate-900" />}
-                            <span className="relative size-3.5 shrink-0 rounded-full ring-1 ring-slate-900/20" style={{ background: t.swatch }} aria-hidden />
-                            <span className="relative">{t.label}</span>
+                            <span className="relative size-3.5 shrink-0 rounded-full ring-1 ring-slate-900/20" style={{ background: th.swatch }} aria-hidden />
+                            <span className="relative">{th.label}</span>
                           </button>
                         );
                       })}
@@ -422,7 +432,8 @@ export function EditorDemo() {
                       <span className="relative size-2 rounded-full bg-brand-500" />
                     </span>
                     <span className="truncate">
-                      Démo en cours<span className="hidden sm:inline"> · touchez un réglage pour prendre la main</span>
+                      {t("Démo en cours", "Demo running")}
+                      <span className="hidden sm:inline">{t(" · touchez un réglage pour prendre la main", " · tap any setting to take over")}</span>
                     </span>
                   </motion.p>
                 ) : (
@@ -435,8 +446,8 @@ export function EditorDemo() {
                   >
                     <Check className="size-3.5 shrink-0 text-brand-500" />
                     <span className="truncate">
-                      <span className="sm:hidden">Votre style, réutilisé partout.</span>
-                      <span className="hidden sm:inline">Dans Pingsell, votre style est enregistré une fois pour toutes vos campagnes.</span>
+                      <span className="sm:hidden">{t("Votre style, réutilisé partout.", "Your style, reused everywhere.")}</span>
+                      <span className="hidden sm:inline">{t("Dans Pingsell, votre style est enregistré une fois pour toutes vos campagnes.", "In Pingsell, your style is saved once for all your campaigns.")}</span>
                     </span>
                   </motion.p>
                 )}
@@ -450,7 +461,7 @@ export function EditorDemo() {
                   }}
                   className={`ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold text-slate-700 ring-1 ring-slate-900/10 transition hover:text-slate-900 hover:ring-slate-900/30 ${focusRing}`}
                 >
-                  <RotateCcw className="size-3.5" /> Rejouer
+                  <RotateCcw className="size-3.5" /> {t("Rejouer", "Replay")}
                 </button>
               )}
             </div>
@@ -489,10 +500,10 @@ export function EditorDemo() {
           </div>
 
           {/* Product UI: what Pingsell tracks once the email is sent */}
-          <ul aria-label="Suivi après l'envoi" className="relative z-20 -mt-6 hidden justify-center gap-3 sm:flex">
-            <ResultChip icon={Eye} label="Ouvertures" delay={1.1} reduce={reduce} color={color.hex} beat={beat} />
-            <ResultChip icon={MousePointerClick} label="Clics" delay={1.25} reduce={reduce} color={color.hex} beat={beat} />
-            <ResultChip icon={ShoppingBag} label="CA généré" delay={1.4} reduce={reduce} color={color.hex} beat={beat} />
+          <ul aria-label={t("Suivi après l'envoi", "Post-send tracking")} className="relative z-20 -mt-6 hidden justify-center gap-3 sm:flex">
+            <ResultChip icon={Eye} label={t("Ouvertures", "Opens")} delay={1.1} reduce={reduce} color={color.hex} beat={beat} />
+            <ResultChip icon={MousePointerClick} label={t("Clics", "Clicks")} delay={1.25} reduce={reduce} color={color.hex} beat={beat} />
+            <ResultChip icon={ShoppingBag} label={t("CA généré", "Revenue generated")} delay={1.4} reduce={reduce} color={color.hex} beat={beat} />
           </ul>
         </motion.div>
       </div>

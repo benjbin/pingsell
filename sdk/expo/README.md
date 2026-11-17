@@ -24,6 +24,26 @@ await Pingsell.logout(); // à la déconnexion
 
 Démo complète : `examples/expo-shop`.
 
+## Langue (`locale`)
+
+Les textes intégrés au SDK (centre de notifications, états vides, « Tout marquer comme lu », dates relatives,
+libellés d'accessibilité, messages d'erreur de `register` / `requestPermission`) existent en français et en anglais.
+Par défaut, le SDK suit la langue de l'appareil (`Intl.DateTimeFormat().resolvedOptions().locale` : français si elle
+commence par `fr`, anglais sinon). Pour l'imposer :
+
+```tsx
+Pingsell.init({ appKey: "msvapp_…", apiUrl: "https://api.votre-domaine.fr", locale: "en" }); // "fr" | "en"
+
+Pingsell.locale; // langue utilisée par le SDK
+
+<PingsellInbox locale="fr" />            // surcharge pour un composant
+<PingsellBadge locale="fr"><BellIcon /></PingsellBadge>
+```
+
+- Les textes passés explicitement en props (`title`, `emptyText`) restent prioritaires sur les traductions.
+- Chaque requête envoie l'en-tête `Accept-Language` avec cette langue, pour que l'API réponde dans la même langue
+  (messages d'erreur ; textes de l'écran de pré-permission s'ils sont disponibles dans cette langue côté Pingsell).
+
 ## Écran de pré-permission
 
 iOS ne laisse demander les notifications qu'une seule fois. Rendez `<PingsellPermissionPrompt />` à la racine,

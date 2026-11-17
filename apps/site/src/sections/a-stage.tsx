@@ -13,6 +13,7 @@ import {
   Timer,
   Type,
 } from "lucide-react";
+import { t, LOCALE } from "../i18n";
 
 /* ------------------------------------------------------------------ */
 /* Timeline                                                            */
@@ -26,14 +27,14 @@ const W = 520;
 const H = 460;
 
 const PALETTE = [
-  { label: "Titre", icon: Type },
-  { label: "Bannière", icon: ImageIcon },
-  { label: "Texte", icon: TextAlignStart },
-  { label: "Code promo", icon: Ticket },
-  { label: "Compte à rebours", icon: Timer },
-  { label: "Bouton", icon: MousePointerClick },
-  { label: "Produit", icon: ShoppingBag },
-  { label: "Galerie", icon: LayoutGrid },
+  { label: t("Titre", "Heading"), icon: Type },
+  { label: t("Bannière", "Banner"), icon: ImageIcon },
+  { label: t("Texte", "Text"), icon: TextAlignStart },
+  { label: t("Code promo", "Promo code"), icon: Ticket },
+  { label: t("Compte à rebours", "Countdown"), icon: Timer },
+  { label: t("Bouton", "Button"), icon: MousePointerClick },
+  { label: t("Produit", "Product"), icon: ShoppingBag },
+  { label: t("Galerie", "Gallery"), icon: LayoutGrid },
 ];
 const itemTop = (idx: number) => 80 + idx * 36;
 
@@ -98,8 +99,8 @@ export function useHeroTimeline(active: boolean) {
   const [step, setStep] = useState(0);
   useEffect(() => {
     if (!active) return;
-    const t = window.setTimeout(() => setStep((s) => (s + 1) % STEPS.length), STEPS[step].d);
-    return () => window.clearTimeout(t);
+    const tid = window.setTimeout(() => setStep((s) => (s + 1) % STEPS.length), STEPS[step].d);
+    return () => window.clearTimeout(tid);
   }, [step, active]);
   return step;
 }
@@ -149,7 +150,10 @@ export function EditorStage({ step, reduce, onInView }: { step: number; reduce: 
       ref={boxRef}
       className="relative aspect-[520/460] w-full"
       role="img"
-      aria-label="Démonstration de l'éditeur Pingsell : des blocs sont glissés dans un email, l'email prend les couleurs de la marque, puis il est envoyé et les premiers résultats apparaissent."
+      aria-label={t(
+        "Démonstration de l'éditeur Pingsell : des blocs sont glissés dans un email, l'email prend les couleurs de la marque, puis il est envoyé et les premiers résultats apparaissent.",
+        "Pingsell editor demo: blocks are dragged into an email, the email takes on the brand colors, then it is sent and the first results come in.",
+      )}
     >
       <div aria-hidden className="absolute top-0 left-0 origin-top-left" style={{ width: W, height: H, transform: `scale(${scale})` }}>
         {/* Window */}
@@ -158,7 +162,7 @@ export function EditorStage({ step, reduce, onInView }: { step: number; reduce: 
 
           {/* Palette */}
           <div className="absolute top-12 bottom-0 left-0 w-32 border-r border-slate-900/[0.07] bg-white">
-            <p className="absolute top-[14px] left-3 font-display text-[9px] font-bold tracking-[0.2em] text-slate-400 uppercase">Blocs</p>
+            <p className="absolute top-[14px] left-3 font-display text-[9px] font-bold tracking-[0.2em] text-slate-400 uppercase">{t("Blocs", "Blocks")}</p>
             {PALETTE.map((p, idx) => {
               const active = (cur.k === "go" || cur.k === "grab" || cur.k === "carry") && DRAG_FROM[cur.i ?? -1] === idx;
               return (
@@ -241,7 +245,7 @@ export function EditorStage({ step, reduce, onInView }: { step: number; reduce: 
                 <span className="flex size-6 items-center justify-center rounded-full bg-emerald-400 text-slate-900">
                   <Check className="size-3.5" strokeWidth={3} />
                 </span>
-                Envoyée à 8 412 contacts
+                {t("Envoyée à 8 412 contacts", "Sent to 8,412 contacts")}
               </motion.div>
             )}
           </AnimatePresence>
@@ -250,11 +254,11 @@ export function EditorStage({ step, reduce, onInView }: { step: number; reduce: 
           {/* Static extras for reduced motion */}
           {reduce && (
             <>
-              <Notif left={10} top={302} w={196} icon={Eye} label="Ouvertures" tone="light">
-                <Counter to={46.2} decimals={1} suffix=" %" play={false} final />
+              <Notif left={10} top={302} w={196} icon={Eye} label={t("Ouvertures", "Opens")} tone="light">
+                <Counter to={46.2} decimals={1} suffix={t(" %", "%")} play={false} final />
               </Notif>
-              <Notif left={10} top={376} w={206} icon={ShoppingBag} label="Commande · votre boutique" tone="dark">
-                <Counter to={1240} prefix="+" suffix=" €" play={false} final />
+              <Notif left={10} top={376} w={206} icon={ShoppingBag} label={t("Commande · votre boutique", "Order · your store")} tone="dark">
+                <Counter to={1240} prefix={t("+", "+€")} suffix={t(" €", "")} play={false} final />
               </Notif>
             </>
           )}
@@ -279,8 +283,8 @@ function TopBar({ pressed, sent, pressKey }: { pressed: boolean; sent: boolean; 
         <span className="size-2.5 rounded-full bg-slate-200" />
         <span className="size-2.5 rounded-full bg-slate-200" />
       </span>
-      <span className="font-display text-[11px] font-extrabold tracking-tight text-slate-900 uppercase">Soldes d'hiver</span>
-      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-500">Brouillon</span>
+      <span className="font-display text-[11px] font-extrabold tracking-tight text-slate-900 uppercase">{t("Soldes d'hiver", "Winter sale")}</span>
+      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-500">{t("Brouillon", "Draft")}</span>
       <motion.span
         className="relative ml-auto flex h-7 w-[82px] items-center justify-center"
         animate={{ scale: pressed ? 0.9 : 1 }}
@@ -298,10 +302,10 @@ function TopBar({ pressed, sent, pressKey }: { pressed: boolean; sent: boolean; 
         )}
         <span className="relative grid font-display text-[10px] font-semibold text-white">
           <motion.span className="col-start-1 row-start-1 flex items-center gap-1" initial={false} animate={{ opacity: sent ? 0 : 1, y: sent ? -6 : 0 }}>
-            <Send className="size-3" strokeWidth={2.2} /> Envoyer
+            <Send className="size-3" strokeWidth={2.2} /> {t("Envoyer", "Send")}
           </motion.span>
           <motion.span className="col-start-1 row-start-1 flex items-center gap-1" initial={false} animate={{ opacity: sent ? 1 : 0, y: sent ? 0 : 6 }}>
-            <Check className="size-3" strokeWidth={2.6} /> Envoyée
+            <Check className="size-3" strokeWidth={2.6} /> {t("Envoyée", "Sent")}
           </motion.span>
         </span>
       </motion.span>
@@ -325,7 +329,7 @@ function Slot({ top, h, filled, target, animated, children }: { top: number; h: 
         animate={{ opacity: target && !filled ? 1 : 0 }}
         transition={{ duration: 0.2 }}
       >
-        Déposer ici
+        {t("Déposer ici", "Drop here")}
       </motion.div>
       <AnimatePresence>
         {filled && (
@@ -355,7 +359,7 @@ function Tint({ brand, neutral, branded, className = "" }: { brand: boolean; neu
   );
 }
 
-const TITLE = ["-30 % sur", "tout l'hiver"];
+const TITLE = t(["-30 % sur", "tout l'hiver"], ["30% off", "all winter"]);
 
 function Banner({ brand, animated, typing }: { brand: boolean; animated: boolean; typing: boolean }) {
   let n = 0;
@@ -387,7 +391,14 @@ function BodyText() {
   return (
     <p className="absolute inset-x-4 inset-y-1.5 flex items-center text-[10px] leading-relaxed text-slate-600">
       <span>
-        Bonjour <span className="rounded bg-brand-500/10 px-1 font-semibold text-brand-500">Prénom</span>, nos pièces d'hiver passent en soldes jusqu'à dimanche.
+        {t(
+          <>
+            Bonjour <span className="rounded bg-brand-500/10 px-1 font-semibold text-brand-500">Prénom</span>, nos pièces d'hiver passent en soldes jusqu'à dimanche.
+          </>,
+          <>
+            Hi <span className="rounded bg-brand-500/10 px-1 font-semibold text-brand-500">First name</span>, our winter pieces are on sale until Sunday.
+          </>,
+        )}
       </span>
     </p>
   );
@@ -398,7 +409,7 @@ function Promo({ brand }: { brand: boolean }) {
     <div className="absolute inset-x-4 inset-y-2 flex flex-col items-center justify-center rounded-lg">
       <span className="absolute inset-0 rounded-lg border-[1.5px] border-dashed border-slate-300" />
       <motion.span className="absolute inset-0 rounded-lg border-[1.5px] border-dashed" style={{ borderColor: BRAND, background: `${BRAND}0d` }} initial={false} animate={{ opacity: brand ? 1 : 0 }} transition={{ duration: 0.6 }} />
-      <p className="relative text-[7.5px] tracking-[0.2em] text-slate-400 uppercase">Votre code</p>
+      <p className="relative text-[7.5px] tracking-[0.2em] text-slate-400 uppercase">{t("Votre code", "Your code")}</p>
       <p className="relative font-mono text-[15px] font-bold tracking-[0.14em] text-slate-900">HIVER30</p>
     </div>
   );
@@ -411,7 +422,7 @@ function Countdown({ brand }: { brand: boolean }) {
         <span key={i} className="relative w-11 overflow-hidden rounded-md py-1.5 text-center">
           <Tint brand={brand} neutral="#eef2f8" branded={`${BRAND}1f`} />
           <span className="relative block font-display text-[14px] leading-none font-extrabold text-slate-900">{v}</span>
-          <span className="relative text-[6.5px] tracking-wider text-slate-500 uppercase">{["jours", "heures", "min"][i]}</span>
+          <span className="relative text-[6.5px] tracking-wider text-slate-500 uppercase">{t(["jours", "heures", "min"], ["days", "hours", "min"])[i]}</span>
         </span>
       ))}
     </div>
@@ -423,7 +434,7 @@ function CtaButton({ brand }: { brand: boolean }) {
     <div className="absolute inset-0 flex items-center justify-center">
       <span className="relative overflow-hidden rounded-full px-6 py-2.5 text-[10.5px] font-bold text-white">
         <Tint brand={brand} neutral="#2e3f63" branded={BRAND} />
-        <span className="relative">J'en profite</span>
+        <span className="relative">{t("J'en profite", "Shop now")}</span>
       </span>
     </div>
   );
@@ -441,7 +452,7 @@ function ColourPopover({ picked }: { picked: boolean }) {
       exit={{ opacity: 0, y: 6, scale: 0.98, transition: { duration: 0.2 } }}
       transition={SPRING}
     >
-      <p className="font-display text-[8.5px] font-bold tracking-[0.18em] text-slate-900 uppercase">Couleur de marque</p>
+      <p className="font-display text-[8.5px] font-bold tracking-[0.18em] text-slate-900 uppercase">{t("Couleur de marque", "Brand color")}</p>
       <div className="relative mt-2.5 flex gap-2">
         {SWATCHES.map((c) => (
           <span key={c} className="size-[22px] rounded-full ring-1 ring-slate-900/10" style={{ background: c }} />
@@ -539,7 +550,7 @@ function Cursor({ step, stepIdx }: { step: Step; stepIdx: number }) {
 
 function Counter({ to, decimals = 0, prefix = "", suffix = "", delay = 0, play, final = false }: { to: number; decimals?: number; prefix?: string; suffix?: string; delay?: number; play: boolean; final?: boolean }) {
   const mv = useMotionValue(final ? to : 0);
-  const text = useTransform(mv, (v) => prefix + v.toLocaleString("fr-FR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + suffix);
+  const text = useTransform(mv, (v) => prefix + v.toLocaleString(LOCALE, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + suffix);
   useEffect(() => {
     if (!play) return;
     const c = animate(mv, to, { duration: 1.3, delay, ease: [0.16, 1, 0.3, 1] });
@@ -599,15 +610,15 @@ function Results() {
   const bars = [30, 55, 42, 78, 64, 90, 70];
   return (
     <>
-      <Notif left={142} top={160} w={196} icon={Eye} label="Ouvertures" tone="light" animated delay={0.05}>
-        <Counter to={46.2} decimals={1} suffix=" %" delay={0.15} play />
+      <Notif left={142} top={160} w={196} icon={Eye} label={t("Ouvertures", "Opens")} tone="light" animated delay={0.05}>
+        <Counter to={46.2} decimals={1} suffix={t(" %", "%")} delay={0.15} play />
       </Notif>
       <Notif
         left={300}
         top={238}
         w={200}
         icon={MousePointerClick}
-        label="Clics sur « J'en profite »"
+        label={t("Clics sur « J'en profite »", "Clicks on “Shop now”")}
         tone="light"
         animated
         delay={0.45}
@@ -626,10 +637,10 @@ function Results() {
           </div>
         }
       >
-        <Counter to={7.9} decimals={1} suffix=" %" delay={0.55} play />
+        <Counter to={7.9} decimals={1} suffix={t(" %", "%")} delay={0.55} play />
       </Notif>
-      <Notif left={150} top={334} w={232} icon={ShoppingBag} label="Nouvelles commandes · votre site" tone="dark" animated delay={0.9}>
-        <Counter to={1240} prefix="+" suffix=" €" delay={1} play />
+      <Notif left={150} top={334} w={232} icon={ShoppingBag} label={t("Nouvelles commandes · votre site", "New orders · your site")} tone="dark" animated delay={0.9}>
+        <Counter to={1240} prefix={t("+", "+€")} suffix={t(" €", "")} delay={1} play />
       </Notif>
     </>
   );

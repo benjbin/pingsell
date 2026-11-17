@@ -21,6 +21,7 @@ import {
   Tag,
 } from "lucide-react";
 import { BLOCKS, FAQ, LOGIN_URL, PLANS, PRICING, SIGNUP_URL, VOLUMES } from "./content";
+import { LANG, LANGS, LOCALE, setLang, t } from "./i18n";
 
 const PRO_FROM = PLANS.find((p) => p.id === "pro")?.prices?.[VOLUMES[0]] ?? 0;
 import { BrandMock, FlowMock, PhoneMock, ReportMock } from "./Mocks";
@@ -35,11 +36,11 @@ import { PricingSection } from "./sections/PricingSection";
 import { MagneticLink, useFinePointer } from "./sections/motion-kit";
 
 const NAV = [
-  ["Fonctionnalités", "#fonctionnalites"],
-  ["Éditeur", "#editeur"],
+  [t("Fonctionnalités", "Features"), "#fonctionnalites"],
+  [t("Éditeur", "Editor"), "#editeur"],
   ["Push", "#push"],
-  ["Intégrations", "#adapte"],
-  ["Tarifs", "#tarifs"],
+  [t("Intégrations", "Integrations"), "#adapte"],
+  [t("Tarifs", "Pricing"), "#tarifs"],
   ["FAQ", "#faq"],
 ] as const;
 
@@ -67,13 +68,13 @@ function useReveal() {
 
 function Logo({ light = false }: { light?: boolean }) {
   return (
-    <a href="#top" className="flex items-center" aria-label="Pingsell, retour en haut">
+    <a href="#top" className="flex items-center" aria-label={t("Pingsell, retour en haut", "Pingsell, back to top")}>
       <PingsellLogo tone={light ? "light" : "dark"} className="h-8 w-auto" />
     </a>
   );
 }
 
-function CTA({ children = "Essai gratuit", dark = false, className = "" }: { children?: React.ReactNode; dark?: boolean; className?: string }) {
+function CTA({ children = t("Essai gratuit", "Free trial"), dark = false, className = "" }: { children?: React.ReactNode; dark?: boolean; className?: string }) {
   const fine = useFinePointer();
   const reduce = useReducedMotion() ?? false;
   return (
@@ -157,7 +158,7 @@ function Header() {
       >
         <Logo />
 
-        <nav className="mx-auto hidden items-center lg:flex" onMouseLeave={() => setHovered(null)} aria-label="Navigation principale">
+        <nav className="mx-auto hidden items-center lg:flex" onMouseLeave={() => setHovered(null)} aria-label={t("Navigation principale", "Main navigation")}>
           {NAV.map(([label, href]) => {
             const id = href.slice(1);
             const isActive = active === id;
@@ -190,15 +191,16 @@ function Header() {
             href={LOGIN_URL}
             className="rounded-full px-4 py-2 text-[14px] font-semibold text-slate-900 transition-colors hover:bg-slate-900/[0.05]"
           >
-            Se connecter
+            {t("Se connecter", "Log in")}
           </a>
+          <LangSwitch />
           <CTA className="h-10 px-5" />
         </div>
 
         <button
           className="ml-auto flex size-10 items-center justify-center rounded-full text-slate-900 transition hover:bg-slate-900/[0.05] sm:ml-0 lg:hidden"
           onClick={() => setOpen((o) => !o)}
-          aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
+          aria-label={open ? t("Fermer le menu", "Close menu") : t("Ouvrir le menu", "Open menu")}
           aria-expanded={open}
         >
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
@@ -212,7 +214,7 @@ function Header() {
           transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
           className="mx-auto mt-2 max-w-5xl origin-top rounded-[28px] bg-white/95 p-3 shadow-[0_24px_60px_-20px_rgba(11,33,74,0.45)] ring-1 ring-slate-900/[0.07] backdrop-blur-xl lg:hidden"
         >
-          <nav aria-label="Navigation principale">
+          <nav aria-label={t("Navigation principale", "Main navigation")}>
             {NAV.map(([label, href], i) => (
               <a
                 key={href}
@@ -231,12 +233,39 @@ function Header() {
           <div className="mt-2 grid gap-2 border-t border-slate-900/[0.06] p-2 pt-4 sm:hidden">
             <CTA className="w-full" />
             <a href={LOGIN_URL} className="flex h-12 items-center justify-center rounded-full font-display text-sm font-semibold text-slate-900 ring-1 ring-slate-900/15">
-              Se connecter
+              {t("Se connecter", "Log in")}
             </a>
+          </div>
+          <div className="mt-2 flex items-center justify-between border-t border-slate-900/[0.06] px-4 pt-3 pb-1">
+            <span className="text-[13px] font-medium text-slate-500">{t("Langue", "Language")}</span>
+            <LangSwitch />
           </div>
         </motion.div>
       )}
     </header>
+  );
+}
+
+/** FR / EN switch: a small segmented pill matching the floating header. Switching reloads the page. */
+function LangSwitch() {
+  return (
+    <div role="group" aria-label={t("Langue", "Language")} className="flex items-center rounded-full bg-slate-900/[0.05] p-0.5 ring-1 ring-slate-900/[0.06]">
+      {LANGS.map((l) => (
+        <button
+          key={l}
+          type="button"
+          onClick={() => setLang(l)}
+          aria-pressed={LANG === l}
+          lang={l}
+          title={l === "fr" ? "Français" : "English"}
+          className={`rounded-full px-2.5 py-1 font-display text-[11px] font-bold tracking-[0.08em] uppercase transition-colors ${
+            LANG === l ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          {l}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -255,25 +284,37 @@ function Pillars() {
     {
       icon: Palette,
       n: "01",
-      title: "Créer",
-      text: `Un éditeur glisser-déposer avec ${BLOCKS.length} blocs, vos couleurs, vos polices et l'aperçu mobile. Vos emails ressemblent à votre marque, pas à un modèle.`,
+      title: t("Créer", "Create"),
+      text: t(
+        `Un éditeur glisser-déposer avec ${BLOCKS.length} blocs, vos couleurs, vos polices et l'aperçu mobile. Vos emails ressemblent à votre marque, pas à un modèle.`,
+        `A drag-and-drop editor with ${BLOCKS.length} blocks, your colors, your fonts and a mobile preview. Your emails look like your brand, not a template.`,
+      ),
     },
     {
       icon: Target,
       n: "02",
-      title: "Cibler",
-      text: "Segmentez par tags, statut, achats ou date d'inscription. Branchez votre site : vos clients et leurs commandes arrivent tout seuls.",
+      title: t("Cibler", "Target"),
+      text: t(
+        "Segmentez par tags, statut, achats ou date d'inscription. Branchez votre site : vos clients et leurs commandes arrivent tout seuls.",
+        "Segment by tags, status, purchases or signup date. Connect your website and your customers and their orders flow in on their own.",
+      ),
     },
     {
       icon: Workflow,
       n: "03",
-      title: "Automatiser",
-      text: "Bienvenue, remerciement après achat, relance de panier abandonné : des scénarios qui travaillent pendant que vous dormez.",
+      title: t("Automatiser", "Automate"),
+      text: t(
+        "Bienvenue, remerciement après achat, relance de panier abandonné : des scénarios qui travaillent pendant que vous dormez.",
+        "Welcome, post-purchase thank-you, abandoned cart follow-up: flows that work while you sleep.",
+      ),
     },
   ];
   return (
     <section id="fonctionnalites" className="mx-auto max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
-      <SectionHead eyebrow="Fonctionnalités" title={<>Tout pour vendre <em className="text-brand-500">par email.</em></>} />
+      <SectionHead
+        eyebrow={t("Fonctionnalités", "Features")}
+        title={t(<>Tout pour vendre <em className="text-brand-500">par email.</em></>, <>Everything you need to sell <em className="text-brand-500">by email.</em></>)}
+      />
       <div className="mt-14 grid gap-5 md:grid-cols-3">
         {items.map((it, i) => (
           <div key={it.n} className="reveal rounded-[22px] bg-slate-100 p-7" style={{ transitionDelay: `${i * 80}ms` }}>
@@ -294,27 +335,58 @@ function Pillars() {
 
 function Personalisation() {
   const points = [
-    [Palette, "Style de marque", "Enregistrez couleurs, polices et boutons une fois ; chaque nouvelle campagne part de votre style."],
-    [Type, "Vos propres polices", "Choisissez dans Google Fonts ou importez vos fichiers de police, avec une police de secours pour les messageries qui ne les chargent pas."],
-    [Eye, "Aperçu ordinateur et mobile", "Vérifiez le rendu sur les deux formats et envoyez-vous un test avant de programmer."],
-    [Zap, "Personnalisation bloc par bloc", "Chaque bloc a ses réglages : marges, fond, couleurs, police, taille du texte, alignement."],
+    [
+      Palette,
+      t("Style de marque", "Brand style"),
+      t(
+        "Enregistrez couleurs, polices et boutons une fois ; chaque nouvelle campagne part de votre style.",
+        "Save your colors, fonts and buttons once; every new campaign starts from your style.",
+      ),
+    ],
+    [
+      Type,
+      t("Vos propres polices", "Your own fonts"),
+      t(
+        "Choisissez dans Google Fonts ou importez vos fichiers de police, avec une police de secours pour les messageries qui ne les chargent pas.",
+        "Pick from Google Fonts or upload your own font files, with a fallback font for email clients that don't load them.",
+      ),
+    ],
+    [
+      Eye,
+      t("Aperçu ordinateur et mobile", "Desktop and mobile preview"),
+      t(
+        "Vérifiez le rendu sur les deux formats et envoyez-vous un test avant de programmer.",
+        "Check how it looks on both and send yourself a test before scheduling.",
+      ),
+    ],
+    [
+      Zap,
+      t("Personnalisation bloc par bloc", "Block-by-block customization"),
+      t(
+        "Chaque bloc a ses réglages : marges, fond, couleurs, police, taille du texte, alignement.",
+        "Every block has its own settings: spacing, background, colors, font, text size, alignment.",
+      ),
+    ],
   ] as const;
   return (
     <section className="overflow-hidden bg-slate-950 py-24 text-white lg:py-32">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <SectionHead
           light
-          eyebrow="Personnalisation"
-          title={<>Réglé <em className="text-brand-400">au pixel près.</em></>}
-          text="Pas besoin de graphiste ni de code. Glissez vos blocs, écrivez directement dans l'email, changez tout ce que vous voulez."
+          eyebrow={t("Personnalisation", "Customization")}
+          title={t(<>Réglé <em className="text-brand-400">au pixel près.</em></>, <>Tuned <em className="text-brand-400">down to the pixel.</em></>)}
+          text={t(
+            "Pas besoin de graphiste ni de code. Glissez vos blocs, écrivez directement dans l'email, changez tout ce que vous voulez.",
+            "No designer or code needed. Drag in your blocks, type right into the email, change anything you like.",
+          )}
         />
       </div>
       <div className="mx-auto mt-16 grid max-w-6xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-2">
         <div className="grid gap-8 sm:grid-cols-2">
-          {points.map(([Icon, t, d]) => (
-            <div key={t} className="reveal">
+          {points.map(([Icon, title, d]) => (
+            <div key={title} className="reveal">
               <Icon className="size-5 text-brand-400" strokeWidth={1.75} />
-              <h3 className="mt-3 font-display text-lg font-bold">{t}</h3>
+              <h3 className="mt-3 font-display text-lg font-bold">{title}</h3>
               <p className="mt-1.5 text-[15px] leading-relaxed text-white/60">{d}</p>
             </div>
           ))}
@@ -329,28 +401,34 @@ function Personalisation() {
 
 function Boutique() {
   const flows = [
-    [Heart, "Bienvenue", "à l'inscription"],
-    [Gift, "Merci pour votre commande", "après un achat"],
-    [ShoppingCart, "Panier abandonné", "relance en 2 temps"],
-    [Tag, "Tag ajouté", "à n'importe quel contact"],
+    [Heart, t("Bienvenue", "Welcome"), t("à l'inscription", "on signup")],
+    [Gift, t("Merci pour votre commande", "Thanks for your order"), t("après un achat", "after a purchase")],
+    [ShoppingCart, t("Panier abandonné", "Abandoned cart"), t("relance en 2 temps", "2-step follow-up")],
+    [Tag, t("Tag ajouté", "Tag added"), t("à n'importe quel contact", "to any contact")],
   ] as const;
   return (
     <section id="boutique" className="mx-auto max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
       <div className="grid items-center gap-14 lg:grid-cols-2">
         <div>
           <SectionHead
-            eyebrow="Votre site & automatisations"
-            title={<>Branchez votre site, <em className="text-brand-500">sans y passer la semaine.</em></>}
-            text="Vos clients et leurs commandes se synchronisent. Déclenchez les bons emails au bon moment, et suivez le chiffre d'affaires généré directement dans vos rapports."
+            eyebrow={t("Votre site & automatisations", "Your website & automations")}
+            title={t(
+              <>Branchez votre site, <em className="text-brand-500">sans y passer la semaine.</em></>,
+              <>Connect your website <em className="text-brand-500">without losing a week.</em></>,
+            )}
+            text={t(
+              "Vos clients et leurs commandes se synchronisent. Déclenchez les bons emails au bon moment, et suivez le chiffre d'affaires généré directement dans vos rapports.",
+              "Your customers and their orders sync automatically. Trigger the right emails at the right time, and track revenue generated right in your reports.",
+            )}
           />
           <div className="mt-10 grid gap-3 sm:grid-cols-2">
-            {flows.map(([Icon, t, d]) => (
-              <div key={t} className="reveal flex items-center gap-3 rounded-2xl bg-slate-100 p-4">
+            {flows.map(([Icon, title, d]) => (
+              <div key={title} className="reveal flex items-center gap-3 rounded-2xl bg-slate-100 p-4">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-brand-500">
                   <Icon className="size-4" strokeWidth={1.75} />
                 </span>
                 <div>
-                  <p className="font-display text-sm font-bold">{t}</p>
+                  <p className="font-display text-sm font-bold">{title}</p>
                   <p className="text-xs text-slate-500">{d}</p>
                 </div>
               </div>
@@ -358,7 +436,10 @@ function Boutique() {
           </div>
           <p className="reveal mt-6 flex items-start gap-2 text-sm text-slate-500">
             <Code2 className="mt-0.5 size-4 shrink-0 text-brand-500" />
-            Site sur mesure, plateforme e-commerce ou back-office maison : l'API Pingsell ajoute vos contacts et déclenche vos scénarios.
+            {t(
+              "Site sur mesure, plateforme e-commerce ou back-office maison : l'API Pingsell ajoute vos contacts et déclenche vos scénarios.",
+              "Custom site, e-commerce platform or in-house back office: the Pingsell API adds your contacts and triggers your flows.",
+            )}
           </p>
         </div>
         <div className="reveal rounded-[28px] bg-[radial-gradient(#c3cddf_1px,transparent_1px)] bg-slate-50 bg-[size:16px_16px] p-6 ring-1 ring-slate-900/[0.06] sm:p-10">
@@ -378,14 +459,21 @@ function Reports() {
         </div>
         <div className="order-1 lg:order-2">
           <SectionHead
-            eyebrow="Rapports"
-            title={<>Sachez ce qui <em className="text-brand-500">rapporte.</em></>}
-            text="Ouvertures, clics, désinscriptions, et le chiffre d'affaires de votre boutique sur votre tableau de bord. Vous voyez quelles campagnes marchent, et vous refaites celles-là."
+            eyebrow={t("Rapports", "Reports")}
+            title={t(<>Sachez ce qui <em className="text-brand-500">rapporte.</em></>, <>Know what <em className="text-brand-500">pays off.</em></>)}
+            text={t(
+              "Ouvertures, clics, désinscriptions, et le chiffre d'affaires de votre boutique sur votre tableau de bord. Vous voyez quelles campagnes marchent, et vous refaites celles-là.",
+              "Opens, clicks, unsubscribes and your store's revenue, all on your dashboard. See which campaigns work, and do more of those.",
+            )}
           />
           <ul className="reveal mt-8 space-y-3">
-            {["Statistiques par campagne et par lien", "Désinscriptions prises en compte immédiatement", "Tableau de bord du mois en un coup d'œil"].map((t) => (
-              <li key={t} className="flex items-center gap-2.5 text-[15px] text-slate-700">
-                <BarChart3 className="size-4 text-brand-500" /> {t}
+            {[
+              t("Statistiques par campagne et par lien", "Stats per campaign and per link"),
+              t("Désinscriptions prises en compte immédiatement", "Unsubscribes applied instantly"),
+              t("Tableau de bord du mois en un coup d'œil", "Your month's dashboard at a glance"),
+            ].map((item) => (
+              <li key={item} className="flex items-center gap-2.5 text-[15px] text-slate-700">
+                <BarChart3 className="size-4 text-brand-500" /> {item}
               </li>
             ))}
           </ul>
@@ -402,18 +490,30 @@ function TeamMobile() {
         <div className="reveal flex flex-col rounded-[28px] bg-slate-900 p-8 text-white sm:p-10">
           <Users className="size-6 text-brand-400" strokeWidth={1.75} />
           <h3 className="display mt-6 text-[34px] leading-[0.92] sm:text-[42px]">
-            À plusieurs,
-            <br />
-            <em className="text-brand-400">en toute sécurité.</em>
+            {t(
+              <>
+                À plusieurs,
+                <br />
+                <em className="text-brand-400">en toute sécurité.</em>
+              </>,
+              <>
+                Work as a team,
+                <br />
+                <em className="text-brand-400">safely.</em>
+              </>,
+            )}
           </h3>
           <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-white/65">
-            Invitez un associé, un freelance ou votre agence : jusqu'à 3 utilisateurs en Pro, sans limite en Business. Chacun a son accès, vous choisissez son rôle.
+            {t(
+              "Invitez un associé, un freelance ou votre agence : jusqu'à 3 utilisateurs en Pro, sans limite en Business. Chacun a son accès, vous choisissez son rôle.",
+              "Invite a partner, a freelancer or your agency: up to 3 users on Pro, unlimited on Business. Everyone gets their own login, and you pick their role.",
+            )}
           </p>
           <div className="mt-auto space-y-2 pt-10">
             {[
-              ["Propriétaire", "Tout, y compris l'équipe"],
-              ["Administrateur", "Campagnes, contacts, réglages et équipe"],
-              ["Éditeur", "Campagnes, contacts et automatisations"],
+              [t("Propriétaire", "Owner"), t("Tout, y compris l'équipe", "Everything, including the team")],
+              [t("Administrateur", "Admin"), t("Campagnes, contacts, réglages et équipe", "Campaigns, contacts, settings and team")],
+              [t("Éditeur", "Editor"), t("Campagnes, contacts et automatisations", "Campaigns, contacts and automations")],
             ].map(([r, d]) => (
               <div key={r} className="flex items-center justify-between gap-4 rounded-xl bg-white/[0.06] px-4 py-3 ring-1 ring-white/10">
                 <span className="font-display text-sm font-bold">{r}</span>
@@ -426,12 +526,24 @@ function TeamMobile() {
           <div>
             <Smartphone className="size-6 text-white/80" strokeWidth={1.75} />
             <h3 className="display mt-6 text-[34px] leading-[0.92] sm:text-[42px]">
-              Votre boutique
-              <br />
-              dans la poche.
+              {t(
+                <>
+                  Votre boutique
+                  <br />
+                  dans la poche.
+                </>,
+                <>
+                  Your store
+                  <br />
+                  in your pocket.
+                </>,
+              )}
             </h3>
             <p className="mt-4 max-w-xs text-[15px] leading-relaxed text-white/80">
-              L'app Pingsell sur iOS et Android : vos chiffres du mois, vos campagnes et vos contacts, où que vous soyez.
+              {t(
+                "L'app Pingsell sur iOS et Android : vos chiffres du mois, vos campagnes et vos contacts, où que vous soyez.",
+                "The Pingsell app for iOS and Android: your monthly numbers, campaigns and contacts, wherever you are.",
+              )}
             </p>
           </div>
           <PhoneMock />
@@ -443,21 +555,33 @@ function TeamMobile() {
 
 function Why() {
   const rows = [
-    ["Facturation", "Au nombre de contacts, même inactifs", "Aux emails réellement envoyés"],
-    ["Formule gratuite", "Très limitée, sans vraie personnalisation", "Éditeur complet, vos polices et la connexion à votre site inclus"],
-    ["Automatisations", "Réservées aux formules les plus chères", `Incluses dès ${PRO_FROM} € par mois`],
-    ["Équipe", "Chaque utilisateur en plus est payant", "3 utilisateurs en Pro, illimités en Business"],
-    ["Personnalisation", "Modèles figés, polices limitées", "Vos couleurs, vos polices, bloc par bloc"],
-    ["E-commerce", "Intégrations à configurer", "Votre site branché sans code ou par API"],
+    [t("Facturation", "Billing"), t("Au nombre de contacts, même inactifs", "By number of contacts, even inactive ones"), t("Aux emails réellement envoyés", "By emails actually sent")],
+    [
+      t("Formule gratuite", "Free plan"),
+      t("Très limitée, sans vraie personnalisation", "Very limited, no real customization"),
+      t("Éditeur complet, vos polices et la connexion à votre site inclus", "Full editor, your fonts and website connection included"),
+    ],
+    [
+      t("Automatisations", "Automations"),
+      t("Réservées aux formules les plus chères", "Locked to the priciest plans"),
+      t(`Incluses dès ${PRO_FROM.toLocaleString(LOCALE)} € par mois`, `Included from €${PRO_FROM.toLocaleString(LOCALE)} per month`),
+    ],
+    [t("Équipe", "Team"), t("Chaque utilisateur en plus est payant", "Every extra user costs more"), t("3 utilisateurs en Pro, illimités en Business", "3 users on Pro, unlimited on Business")],
+    [t("Personnalisation", "Customization"), t("Modèles figés, polices limitées", "Rigid templates, limited fonts"), t("Vos couleurs, vos polices, bloc par bloc", "Your colors, your fonts, block by block")],
+    ["E-commerce", t("Intégrations à configurer", "Integrations to set up"), t("Votre site branché sans code ou par API", "Your website connected with no code or via API")],
   ];
   return (
     <section className="bg-slate-50 py-24 lg:py-32">
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
-        <SectionHead center eyebrow="Pourquoi Pingsell" title={<>Pensé pour <em className="text-brand-500">les boutiques.</em></>} />
+        <SectionHead
+          center
+          eyebrow={t("Pourquoi Pingsell", "Why Pingsell")}
+          title={t(<>Pensé pour <em className="text-brand-500">les boutiques.</em></>, <>Built for <em className="text-brand-500">online stores.</em></>)}
+        />
         <div className="reveal mt-12 overflow-hidden rounded-[22px] bg-white ring-1 ring-slate-900/[0.08]">
           <div className="grid grid-cols-[1fr_1fr] gap-px bg-slate-900/[0.06] text-sm sm:grid-cols-[0.8fr_1fr_1fr]">
             <div className="hidden bg-white p-4 sm:block" />
-            <div className="bg-white p-4 font-display text-xs font-bold tracking-wider text-slate-400 uppercase">Outils classiques</div>
+            <div className="bg-white p-4 font-display text-xs font-bold tracking-wider text-slate-400 uppercase">{t("Outils classiques", "Typical tools")}</div>
             <div className="bg-brand-500 p-4 font-display text-xs font-bold tracking-wider text-white uppercase">Pingsell</div>
             {rows.map(([k, a, b]) => (
               <div key={k} className="contents">
@@ -479,7 +603,7 @@ function Faq() {
   return (
     <section id="faq" className="bg-slate-50 py-24 lg:py-32">
       <div className="mx-auto grid max-w-6xl gap-12 px-4 sm:px-6 lg:grid-cols-[0.8fr_1.2fr]">
-        <SectionHead eyebrow="FAQ" title={<>Vos <em className="text-brand-500">questions.</em></>} />
+        <SectionHead eyebrow="FAQ" title={t(<>Vos <em className="text-brand-500">questions.</em></>, <>Your <em className="text-brand-500">questions.</em></>)} />
         <div className="reveal divide-y divide-slate-900/10 border-y border-slate-900/10">
           {FAQ.map((f) => (
             <details key={f.q} className="group py-5">
@@ -505,17 +629,29 @@ function FinalCTA() {
         <div className="pointer-events-none absolute -top-32 left-1/2 size-[520px] -translate-x-1/2 rounded-full bg-brand-500/40 blur-[120px]" />
         <div className="relative">
           <h2 className="display text-[44px] leading-[0.9] sm:text-[72px]">
-            Votre prochaine
-            <br />
-            <em className="text-brand-400">campagne</em> commence ici.
+            {t(
+              <>
+                Votre prochaine
+                <br />
+                <em className="text-brand-400">campagne</em> commence ici.
+              </>,
+              <>
+                Your next
+                <br />
+                <em className="text-brand-400">campaign</em> starts here.
+              </>,
+            )}
           </h2>
           <p className="mx-auto mt-6 max-w-md text-[17px] text-white/70">
-            Créez votre compte en une minute. {PRICING.freeEmails.toLocaleString("fr-FR")} emails offerts chaque mois, sans carte bancaire.
+            {t(
+              `Créez votre compte en une minute. ${PRICING.freeEmails.toLocaleString(LOCALE)} emails offerts chaque mois, sans carte bancaire.`,
+              `Create your account in a minute. ${PRICING.freeEmails.toLocaleString(LOCALE)} free emails every month, no credit card required.`,
+            )}
           </p>
           <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
-            <CTA>Commencer gratuitement</CTA>
+            <CTA>{t("Commencer gratuitement", "Start for free")}</CTA>
             <a href={LOGIN_URL} className="inline-flex h-12 items-center justify-center rounded-full px-6 font-display text-sm font-semibold text-white ring-1 ring-white/20 hover:ring-white/50">
-              J'ai déjà un compte
+              {t("J'ai déjà un compte", "I already have an account")}
             </a>
           </div>
         </div>
@@ -526,28 +662,28 @@ function FinalCTA() {
 
 const FOOTER_COLUMNS: Array<{ title: string; links: Array<[string, string]> }> = [
   {
-    title: "Produit",
+    title: t("Produit", "Product"),
     links: [
-      ["Fonctionnalités", "#fonctionnalites"],
-      ["Éditeur d'emails", "#editeur"],
-      ["Notifications push", "#push"],
-      ["Tarifs", "#tarifs"],
+      [t("Fonctionnalités", "Features"), "#fonctionnalites"],
+      [t("Éditeur d'emails", "Email editor"), "#editeur"],
+      [t("Notifications push", "Push notifications"), "#push"],
+      [t("Tarifs", "Pricing"), "#tarifs"],
     ],
   },
   {
-    title: "Intégrations",
+    title: t("Intégrations", "Integrations"),
     links: [
-      ["Votre site", "#boutique"],
-      ["Toutes vos sources", "#adapte"],
+      [t("Votre site", "Your website"), "#boutique"],
+      [t("Toutes vos sources", "All your sources"), "#adapte"],
       ["API & SDK", "#integration"],
     ],
   },
   {
-    title: "Compte",
+    title: t("Compte", "Account"),
     links: [
-      ["Créer un compte", SIGNUP_URL],
-      ["Se connecter", LOGIN_URL],
-      ["Questions fréquentes", "#faq"],
+      [t("Créer un compte", "Create an account"), SIGNUP_URL],
+      [t("Se connecter", "Log in"), LOGIN_URL],
+      [t("Questions fréquentes", "FAQ"), "#faq"],
     ],
   },
 ];
@@ -560,16 +696,28 @@ function Footer() {
           <div>
             <Logo />
             <p className="mt-5 font-display text-2xl leading-tight font-bold tracking-[-0.02em] text-slate-900">
-              Chaque notif,
-              <br />
-              <span className="text-brand-500">une vente.</span>
+              {t(
+                <>
+                  Chaque notif,
+                  <br />
+                  <span className="text-brand-500">une vente.</span>
+                </>,
+                <>
+                  Every ping,
+                  <br />
+                  <span className="text-brand-500">a sale.</span>
+                </>,
+              )}
             </p>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-slate-500">
-              Emails, notifications push et automatisations pour les e-commerçants. Chaque message, son chiffre d'affaires.
+              {t(
+                "Emails, notifications push et automatisations pour les e-commerçants. Chaque message, son chiffre d'affaires.",
+                "Emails, push notifications and automations for online merchants. Every message, its revenue.",
+              )}
             </p>
           </div>
 
-          <nav aria-label="Pied de page" className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-3">
+          <nav aria-label={t("Pied de page", "Footer")} className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-3">
             {FOOTER_COLUMNS.map((col) => (
               <div key={col.title}>
                 <p className="font-display text-[11px] font-semibold tracking-[0.2em] text-slate-400 uppercase">{col.title}</p>
@@ -588,9 +736,9 @@ function Footer() {
         </div>
 
         <div className="mt-16 flex flex-col gap-3 border-t border-slate-900/[0.07] py-6 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} Pingsell. Conçu en France.</p>
+          <p>© {new Date().getFullYear()} Pingsell. {t("Conçu en France.", "Designed in France.")}</p>
           <a href="#top" className="inline-flex items-center gap-1.5 transition-colors hover:text-slate-900">
-            Retour en haut
+            {t("Retour en haut", "Back to top")}
             <ArrowRight className="size-3.5 -rotate-90" />
           </a>
         </div>

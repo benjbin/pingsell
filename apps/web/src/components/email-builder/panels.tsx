@@ -43,6 +43,7 @@ import { useToast } from "../ui/Toast";
 import { Button, Input } from "../ui/primitives";
 import { ConfirmModal } from "../ui/Overlay";
 import { MediaLibrary } from "./media";
+import { t } from "../../lib/i18n";
 import { BLOCK_LIBRARY, PRESETS, blockSummary, parseDesign, serializeDesign, type Block, type BlockCategory, type BlockType, type Design, type Preset } from "./model";
 
 export const ICONS: Record<BlockType, LucideIcon> = {
@@ -104,7 +105,7 @@ export function BlocksPanel({ onInsert, disabled }: { onInsert: (type: BlockType
   }, []);
   return (
     <>
-      <PanelTitle title="Blocs" subtitle="Glissez un bloc dans l'email, ou cliquez pour l'ajouter sous la sélection." />
+      <PanelTitle title={t("Blocs", "Blocks")} subtitle={t("Glissez un bloc dans l'email, ou cliquez pour l'ajouter sous la sélection.", "Drag a block into the email, or click to add it below the selection.")} />
       <div className="space-y-6 px-5 pb-6">
         {groups.map(([cat, items]) => (
           <div key={cat}>
@@ -160,7 +161,7 @@ export function LayersPanel({
   const [over, setOver] = useState<number | null>(null);
   return (
     <>
-      <PanelTitle title="Calques" subtitle={`${blocks.length} blocs · glissez pour réordonner`} />
+      <PanelTitle title={t("Calques", "Layers")} subtitle={t(`${blocks.length} blocs · glissez pour réordonner`, `${blocks.length} ${blocks.length === 1 ? "block" : "blocks"} · drag to reorder`)} />
       <ol className="space-y-1 px-3 pb-6">
         {blocks.map((b, i) => {
           const Icon = ICONS[b.type];
@@ -197,7 +198,7 @@ export function LayersPanel({
                 <span className="block font-display text-[13px] font-semibold">{LABELS[b.type]}</span>
                 <span className={cx("block truncate text-[11px]", b.id === selectedId ? "text-white/70" : "text-slate-500")}>{blockSummary(b) || "—"}</span>
               </span>
-              {(b.style?.hideMobile || b.style?.hideDesktop) && <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800">{b.style.hideMobile ? "Ordi" : "Mobile"}</span>}
+              {(b.style?.hideMobile || b.style?.hideDesktop) && <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800">{b.style.hideMobile ? t("Ordi", "Desktop") : t("Mobile", "Mobile")}</span>}
               {!disabled && (
                 <button
                   type="button"
@@ -206,7 +207,7 @@ export function LayersPanel({
                     onRemove(b.id);
                   }}
                   className="hidden rounded-full p-1 group-hover:block hover:bg-red-500 hover:text-white"
-                  aria-label={`Supprimer ${LABELS[b.type]}`}
+                  aria-label={t(`Supprimer ${LABELS[b.type]}`, `Delete ${LABELS[b.type]}`)}
                 >
                   <Trash2 className="size-3.5" />
                 </button>
@@ -224,7 +225,7 @@ export function LayersPanel({
 export function MediaPanel({ onPick }: { onPick: (asset: Asset) => void }) {
   return (
     <>
-      <PanelTitle title="Médias" subtitle="Cliquez pour placer l'image dans le bloc sélectionné, ou glissez-la dans l'email." />
+      <PanelTitle title={t("Médias", "Media")} subtitle={t("Cliquez pour placer l'image dans le bloc sélectionné, ou glissez-la dans l'email.", "Click to place the image in the selected block, or drag it into the email.")} />
       <div className="px-5 pb-6">
         <MediaLibrary onPick={onPick} compact />
       </div>
@@ -235,13 +236,13 @@ export function MediaPanel({ onPick }: { onPick: (asset: Asset) => void }) {
 // --- Templates ----------------------------------------------------------------------------
 
 function MiniPreview({ design }: { design: Design }) {
-  const t = design.theme;
+  const th = design.theme;
   return (
-    <span className="flex h-20 flex-col justify-end gap-1 p-2.5" style={{ background: t.background }}>
-      <span className="flex flex-col gap-1 rounded-md p-2" style={{ background: t.surface }}>
-        <span className="h-1.5 w-10 rounded-full" style={{ background: t.text, opacity: 0.85 }} />
-        <span className="h-1 w-14 rounded-full" style={{ background: t.text, opacity: 0.3 }} />
-        <span className="mt-0.5 h-2.5 w-9 rounded-full" style={{ background: t.accent }} />
+    <span className="flex h-20 flex-col justify-end gap-1 p-2.5" style={{ background: th.background }}>
+      <span className="flex flex-col gap-1 rounded-md p-2" style={{ background: th.surface }}>
+        <span className="h-1.5 w-10 rounded-full" style={{ background: th.text, opacity: 0.85 }} />
+        <span className="h-1 w-14 rounded-full" style={{ background: th.text, opacity: 0.3 }} />
+        <span className="mt-0.5 h-2.5 w-9 rounded-full" style={{ background: th.accent }} />
       </span>
     </span>
   );
@@ -272,7 +273,7 @@ export function TemplatesPanel({
     setSaving(true);
     try {
       await api.emailTemplates.create({ name: name.trim(), design: serializeDesign(design) });
-      toast.success("Modèle enregistré", name.trim());
+      toast.success(t("Modèle enregistré", "Template saved"), name.trim());
       setName("");
       await saved.reload();
     } catch (err) {
@@ -282,9 +283,9 @@ export function TemplatesPanel({
     }
   }
 
-  async function remove(t: SavedTemplate) {
+  async function remove(tpl: SavedTemplate) {
     try {
-      await api.emailTemplates.remove(t.id);
+      await api.emailTemplates.remove(tpl.id);
       await saved.reload();
     } catch (err) {
       toast.error(err);
@@ -293,11 +294,11 @@ export function TemplatesPanel({
 
   return (
     <>
-      <PanelTitle title="Modèles" subtitle="Repartez d'une base, ou réutilisez vos propres designs." />
+      <PanelTitle title={t("Modèles", "Templates")} subtitle={t("Repartez d'une base, ou réutilisez vos propres designs.", "Start from a base, or reuse your own designs.")} />
       <div className="space-y-6 px-5 pb-6">
         <div className="rounded-2xl bg-slate-900 p-4 text-white dark:bg-white/[0.06]">
-          <p className="font-display text-sm font-bold uppercase">Enregistrer ce design</p>
-          <p className="mt-1 text-xs text-white/60">Pour le réutiliser dans vos prochaines campagnes.</p>
+          <p className="font-display text-sm font-bold uppercase">{t("Enregistrer ce design", "Save this design")}</p>
+          <p className="mt-1 text-xs text-white/60">{t("Pour le réutiliser dans vos prochaines campagnes.", "Reuse it in your next campaigns.")}</p>
           <form
             className="mt-3 flex gap-2"
             onSubmit={(e) => {
@@ -305,31 +306,31 @@ export function TemplatesPanel({
               void save();
             }}
           >
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom du modèle" className="h-9 text-xs" />
-            <Button type="submit" variant="accent" size="sm" icon={Save} loading={saving} disabled={!name.trim()} aria-label="Enregistrer le modèle" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Nom du modèle", "Template name")} className="h-9 text-xs" />
+            <Button type="submit" variant="accent" size="sm" icon={Save} loading={saving} disabled={!name.trim()} aria-label={t("Enregistrer le modèle", "Save template")} />
           </form>
         </div>
 
         <div>
-          <p className="eyebrow mb-2.5">Mes modèles</p>
+          <p className="eyebrow mb-2.5">{t("Mes modèles", "My templates")}</p>
           {saved.loading && !saved.data ? (
             <div className="h-16 animate-pulse rounded-2xl bg-slate-100 dark:bg-white/5" />
           ) : (saved.data ?? []).length === 0 ? (
-            <p className="rounded-2xl bg-slate-50 px-3 py-4 text-center text-xs text-slate-500 dark:bg-white/[0.03]">Aucun modèle enregistré.</p>
+            <p className="rounded-2xl bg-slate-50 px-3 py-4 text-center text-xs text-slate-500 dark:bg-white/[0.03]">{t("Aucun modèle enregistré.", "No saved templates.")}</p>
           ) : (
             <div className="space-y-2">
-              {(saved.data ?? []).map((t) => {
-                const d = parseDesign(t.design);
+              {(saved.data ?? []).map((tpl) => {
+                const d = parseDesign(tpl.design);
                 return (
-                  <div key={t.id} className="group flex items-center gap-3 rounded-2xl p-1.5 ring-1 ring-slate-900/10 dark:ring-white/10">
-                    <button type="button" disabled={disabled || !d} onClick={() => setPending({ kind: "saved", t })} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                  <div key={tpl.id} className="group flex items-center gap-3 rounded-2xl p-1.5 ring-1 ring-slate-900/10 dark:ring-white/10">
+                    <button type="button" disabled={disabled || !d} onClick={() => setPending({ kind: "saved", t: tpl })} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                       <span className="w-16 shrink-0 overflow-hidden rounded-xl">{d && <MiniPreview design={d} />}</span>
                       <span className="min-w-0">
-                        <span className="block truncate font-display text-sm font-semibold text-slate-900 group-hover:text-brand-500 dark:text-white">{t.name}</span>
-                        <span className="block text-[11px] text-slate-500">{formatDate(t.updated_at)}</span>
+                        <span className="block truncate font-display text-sm font-semibold text-slate-900 group-hover:text-brand-500 dark:text-white">{tpl.name}</span>
+                        <span className="block text-[11px] text-slate-500">{formatDate(tpl.updated_at)}</span>
                       </span>
                     </button>
-                    <button type="button" onClick={() => void remove(t)} className="mr-1 rounded-full p-1.5 text-slate-400 hover:bg-red-500 hover:text-white" aria-label={`Supprimer ${t.name}`}>
+                    <button type="button" onClick={() => void remove(tpl)} className="mr-1 rounded-full p-1.5 text-slate-400 hover:bg-red-500 hover:text-white" aria-label={t(`Supprimer ${tpl.name}`, `Delete ${tpl.name}`)}>
                       <Trash2 className="size-3.5" />
                     </button>
                   </div>
@@ -340,7 +341,7 @@ export function TemplatesPanel({
         </div>
 
         <div>
-          <p className="eyebrow mb-2.5">Modèles Pingsell</p>
+          <p className="eyebrow mb-2.5">{t("Modèles Pingsell", "Pingsell templates")}</p>
           <div className="grid grid-cols-2 gap-2">
             {previews.map(({ p, d }) => (
               <button
@@ -372,11 +373,14 @@ export function TemplatesPanel({
           }
           setPending(null);
         }}
-        title="Remplacer le contenu actuel ?"
-        confirmLabel="Remplacer"
+        title={t("Remplacer le contenu actuel ?", "Replace the current content?")}
+        confirmLabel={t("Remplacer", "Replace")}
       >
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          L'email sera remplacé par « {pending?.kind === "preset" ? pending.p.name : pending?.t.name} ». Vous pourrez revenir en arrière avec ⌘Z.
+          {t(
+            <>L'email sera remplacé par « {pending?.kind === "preset" ? pending.p.name : pending?.t.name} ». Vous pourrez revenir en arrière avec ⌘Z.</>,
+            <>The email will be replaced with “{pending?.kind === "preset" ? pending.p.name : pending?.t.name}”. You can undo with ⌘Z.</>,
+          )}
         </p>
       </ConfirmModal>
     </>

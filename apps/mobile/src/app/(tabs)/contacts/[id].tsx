@@ -15,6 +15,7 @@ import {
   messageStatusLabel,
   sourceLabel,
 } from '@/lib/format';
+import { t } from '@/lib/i18n';
 import { radius, spacing, useColors } from '@/lib/theme';
 import type { ContactEvent, Message } from '@/lib/types';
 import { useApiQuery } from '@/lib/useApi';
@@ -47,9 +48,9 @@ export default function ContactDetailScreen() {
       </View>
 
       <Card style={styles.statsGrid}>
-        <Stat label="Dépensé" value={formatCurrency(contact.total_spent)} />
-        <Stat label="Commandes" value={formatNumber(contact.orders_count)} />
-        <Stat label="Dernière cmd" value={contact.last_order_at ? formatDate(contact.last_order_at) : '—'} />
+        <Stat label={t('Dépensé', 'Spent')} value={formatCurrency(contact.total_spent)} />
+        <Stat label={t('Commandes', 'Orders')} value={formatNumber(contact.orders_count)} />
+        <Stat label={t('Dernière cmd', 'Last order')} value={contact.last_order_at ? formatDate(contact.last_order_at) : '—'} />
       </Card>
 
       <SectionTitle>Tags</SectionTitle>
@@ -63,37 +64,37 @@ export default function ContactDetailScreen() {
           ))}
         </View>
       ) : (
-        <Text style={{ color: c.textMuted }}>Aucun tag.</Text>
+        <Text style={{ color: c.textMuted }}>{t('Aucun tag.', 'No tags.')}</Text>
       )}
 
-      <SectionTitle>Informations</SectionTitle>
+      <SectionTitle>{t('Informations', 'Details')}</SectionTitle>
       <Card style={{ paddingVertical: 0 }}>
         <InfoRow label="Email" value={contact.email} />
-        <InfoRow label="Téléphone" value={contact.phone || '—'} />
+        <InfoRow label={t('Téléphone', 'Phone')} value={contact.phone || '—'} />
         <InfoRow label="Source" value={sourceLabel[contact.source] ?? contact.source} />
         {attributes.map(([key, value]) => (
           <InfoRow key={key} label={key} value={typeof value === 'object' ? JSON.stringify(value) : String(value)} />
         ))}
-        <InfoRow label="Ajouté le" value={formatDate(contact.created_at)} last />
+        <InfoRow label={t('Ajouté le', 'Added on')} value={formatDate(contact.created_at)} last />
       </Card>
 
-      <SectionTitle>Activité récente</SectionTitle>
+      <SectionTitle>{t('Activité récente', 'Recent activity')}</SectionTitle>
       <Card style={{ paddingVertical: spacing.sm }}>
         {contact.events.length ? (
           contact.events.map((event, i) => (
             <EventRow key={event.id} event={event} last={i === contact.events.length - 1} />
           ))
         ) : (
-          <EmptyState icon="pulse-outline" title="Aucune activité" />
+          <EmptyState icon="pulse-outline" title={t('Aucune activité', 'No activity')} />
         )}
       </Card>
 
-      <SectionTitle>Emails reçus</SectionTitle>
+      <SectionTitle>{t('Emails reçus', 'Emails received')}</SectionTitle>
       <Card style={{ paddingVertical: spacing.sm }}>
         {contact.messages.length ? (
           contact.messages.map((m, i) => <MessageRow key={m.id} message={m} last={i === contact.messages.length - 1} />)
         ) : (
-          <EmptyState icon="mail-outline" title="Aucun email envoyé" />
+          <EmptyState icon="mail-outline" title={t('Aucun email envoyé', 'No emails sent')} />
         )}
       </Card>
     </Screen>
@@ -144,7 +145,11 @@ function EventRow({ event, last }: { event: ContactEvent; last: boolean }) {
 
 function MessageRow({ message, last }: { message: Message; last: boolean }) {
   const c = useColors();
-  const engagement = message.clicked_at ? 'Cliqué' : message.opened_at ? 'Ouvert' : messageStatusLabel[message.status];
+  const engagement = message.clicked_at
+    ? t('Cliqué', 'Clicked')
+    : message.opened_at
+      ? t('Ouvert', 'Opened')
+      : messageStatusLabel[message.status];
   return (
     <View style={[styles.timelineRow, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border }]}>
       <View style={{ flex: 1, gap: 2 }}>

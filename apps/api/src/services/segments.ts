@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { get, parseJson, scalar, type DatabaseSync, type SQLInputValue } from '../db.js';
 import { badRequest } from '../lib/http.js';
+import { t } from '../i18n.js';
 
 export const SEGMENT_FIELDS = [
   'email',
@@ -70,14 +71,14 @@ function kindOf(field: Field): keyof typeof ALLOWED_OPS {
 function requireNumber(c: SegmentCondition): number {
   const n = Number(c.value);
   if (c.value === null || c.value === undefined || c.value === '' || !Number.isFinite(n)) {
-    throw badRequest(`Règle « ${c.field} ${c.op} » : une valeur numérique est requise`);
+    throw badRequest(t(`Règle « ${c.field} ${c.op} » : une valeur numérique est requise`, `Rule “${c.field} ${c.op}”: a numeric value is required`));
   }
   return n;
 }
 
 function requireText(c: SegmentCondition): string {
   if (c.value === null || c.value === undefined || String(c.value).trim() === '') {
-    throw badRequest(`Règle « ${c.field} ${c.op} » : une valeur est requise`);
+    throw badRequest(t(`Règle « ${c.field} ${c.op} » : une valeur est requise`, `Rule “${c.field} ${c.op}”: a value is required`));
   }
   return String(c.value).trim();
 }
@@ -89,7 +90,7 @@ function daysAgoIso(days: number): string {
 function compileCondition(c: SegmentCondition): CompiledRules {
   const kind = kindOf(c.field);
   if (!ALLOWED_OPS[kind].has(c.op)) {
-    throw badRequest(`Opérateur « ${c.op} » non supporté pour le champ « ${c.field} »`);
+    throw badRequest(t(`Opérateur « ${c.op} » non supporté pour le champ « ${c.field} »`, `Operator “${c.op}” isn’t supported for field “${c.field}”`));
   }
   // Column names come from a closed enum, never from user input.
   const col = c.field;
@@ -127,7 +128,7 @@ function compileCondition(c: SegmentCondition): CompiledRules {
   }
 
   // text
-  if (!TEXT_FIELDS.has(c.field)) throw badRequest(`Champ inconnu : ${c.field}`);
+  if (!TEXT_FIELDS.has(c.field)) throw badRequest(t(`Champ inconnu : ${c.field}`, `Unknown field: ${c.field}`));
   const value = c.value === null || c.value === undefined ? '' : String(c.value).trim().toLowerCase();
   switch (c.op) {
     case 'eq':
@@ -135,14 +136,14 @@ function compileCondition(c: SegmentCondition): CompiledRules {
     case 'neq':
       return { sql: `LOWER(COALESCE(${col}, '')) != ?`, params: [value] };
     case 'contains':
-      if (!value) throw badRequest(`Règle « ${c.field} contains » : une valeur est requise`);
+      if (!value) throw badRequest(t(`Règle « ${c.field} contains » : une valeur est requise`, `Rule “${c.field} contains”: a value is required`));
       return { sql: `LOWER(COALESCE(${col}, '')) LIKE ? ESCAPE '\\'`, params: [`%${escapeLike(value)}%`] };
     case 'gt':
       return { sql: `LOWER(COALESCE(${col}, '')) > ?`, params: [value] };
     case 'lt':
       return { sql: `LOWER(COALESCE(${col}, '')) < ?`, params: [value] };
     default:
-      throw badRequest(`Opérateur « ${c.op} » non supporté pour le champ « ${c.field} »`);
+      throw badRequest(t(`Opérateur « ${c.op} » non supporté pour le champ « ${c.field} »`, `Operator “${c.op}” isn’t supported for field “${c.field}”`));
   }
 }
 
@@ -166,7 +167,12 @@ export function validateRules(input: unknown): SegmentRules {
   const result = rulesSchema.safeParse(input ?? {});
   if (!result.success) {
     const issue = result.error.issues[0];
-    throw badRequest(`Règles invalides — ${issue?.path.join('.') ?? ''} ${issue?.message ?? ''}`.trim());
+    throw badRequest(
+      t(
+        `Règles invalides — ${issue?.path.join('.') ?? ''} ${issue?.message ?? ''}`.trim(),
+        `Invalid rules — ${issue?.path.join('.') ?? ''} ${issue?.message ?? ''}`.trim(),
+      ),
+    );
   }
   compileRules(result.data);
   return result.data;

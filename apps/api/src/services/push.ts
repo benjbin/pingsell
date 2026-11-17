@@ -5,6 +5,8 @@ import type { AppConfig } from '../config.js';
 import { all, get, newId, now, parseJson, run, scalar, transaction, type DatabaseSync, type Row, type SQLInputValue } from '../db.js';
 import { applyMergeTags } from './render.js';
 import { compileRules, loadSegmentRules } from './segments.js';
+import { zmsg } from '../lib/http.js';
+import { t, withAccountLang } from '../i18n.js';
 
 /* -------------------------------------------------------------------------- */
 /* Credentials                                                                */
@@ -19,9 +21,9 @@ export const fcmSchema = z.object({
 export type FcmCredentials = z.output<typeof fcmSchema>;
 
 export const apnsSchema = z.object({
-  key_p8: z.string().includes('PRIVATE KEY', { message: 'La clé .p8 doit contenir « BEGIN PRIVATE KEY »' }),
-  key_id: z.string().trim().regex(/^[A-Z0-9]{10}$/, 'Key ID : 10 caractères (lettres majuscules et chiffres)'),
-  team_id: z.string().trim().regex(/^[A-Z0-9]{10}$/, 'Team ID : 10 caractères (lettres majuscules et chiffres)'),
+  key_p8: z.string().includes('PRIVATE KEY', zmsg('La clé .p8 doit contenir « BEGIN PRIVATE KEY »', 'The .p8 key must contain “BEGIN PRIVATE KEY”')),
+  key_id: z.string().trim().regex(/^[A-Z0-9]{10}$/, zmsg('Key ID : 10 caractères (lettres majuscules et chiffres)', 'Key ID: 10 characters (uppercase letters and digits)')),
+  team_id: z.string().trim().regex(/^[A-Z0-9]{10}$/, zmsg('Team ID : 10 caractères (lettres majuscules et chiffres)', 'Team ID: 10 characters (uppercase letters and digits)')),
   bundle_id: z.string().trim().min(3).max(200),
   production: z.boolean().default(true),
 });
@@ -156,7 +158,7 @@ export const PROVIDERS = ['fcm', 'apns', 'expo'] as const;
 export type PushProvider = (typeof PROVIDERS)[number];
 
 export const deviceSchema = z.object({
-  token: z.string().trim().min(8, 'Jeton de notification invalide').max(4096),
+  token: z.string().trim().min(8, zmsg('Jeton de notification invalide', 'Invalid notification token')).max(4096),
   platform: z.enum(PLATFORMS),
   provider: z.enum(PROVIDERS).optional(),
   email: z.string().trim().max(254).optional(),
@@ -330,8 +332,8 @@ export const audienceSchema = z.discriminatedUnion('type', [
 export type PushAudience = z.output<typeof audienceSchema>;
 
 export const pushContentSchema = z.object({
-  title: z.string().trim().min(1, 'Le titre est requis').max(120),
-  body: z.string().trim().min(1, 'Le texte est requis').max(500),
+  title: z.string().trim().min(1, zmsg('Le titre est requis', 'Title is required')).max(120),
+  body: z.string().trim().min(1, zmsg('Le texte est requis', 'Text is required')).max(500),
   image_url: z.string().trim().url().max(2000).nullable().optional(),
   url: z.string().trim().max(2000).nullable().optional(),
 });
@@ -342,7 +344,7 @@ export const CHANNELS = ['push', 'in_app'] as const;
 export type PushChannel = (typeof CHANNELS)[number];
 export const channelsSchema = z
   .array(z.enum(CHANNELS))
-  .min(1, 'Choisissez au moins un canal : écran verrouillé ou dans l’app')
+  .min(1, zmsg('Choisissez au moins un canal : écran verrouillé ou dans l’app', 'Choose at least one channel: lock screen or in-app'))
   .transform((list) => [...new Set(list)]);
 
 export interface Recipient {
@@ -724,7 +726,7 @@ async function fcmAccessToken(creds: FcmCredentials): Promise<string> {
     body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${unsigned}.${b64url(signature)}` }),
   });
   const data = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error_description?: string };
-  if (!res.ok || !data.access_token) throw new Error(`Authentification Firebase refusée : ${data.error_description ?? res.status}`);
+  if (!res.ok || !data.access_token) throw new Error(t(`Authentification Firebase refusée : ${data.error_description ?? res.status}`, `Firebase authentication refused: ${data.error_description ?? res.status}`));
   fcmTokens.set(cacheKey, { token: data.access_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 });
   return data.access_token;
 }
@@ -767,7 +769,7 @@ async function sendFcm(config: AppConfig, creds: FcmCredentials, p: PushPayload)
   const code = json.error?.details?.find((d) => d.errorCode)?.errorCode ?? json.error?.status ?? String(res.status);
   return {
     ok: false,
-    error: `FCM ${code}${json.error?.message ? ` : ${json.error.message}` : ''}`,
+    error: `FCM ${code}${json.error?.message ? t(` : ${json.error.message}`, `: ${json.error.message}`) : ''}`,
     invalidToken: code === 'UNREGISTERED' || res.status === 404,
   };
 }
@@ -808,7 +810,7 @@ function sendApns(config: AppConfig, creds: ApnsCredentials, p: PushPayload): Pr
       session.close();
       resolve(outcome);
     };
-    session.on('error', (err) => done({ ok: false, error: `APNs injoignable : ${err.message}`, invalidToken: false }));
+    session.on('error', (err) => done({ ok: false, error: t(`APNs injoignable : ${err.message}`, `APNs unreachable: ${err.message}`), invalidToken: false }));
     const req = session.request({
       ':method': 'POST',
       ':path': `/3/device/${encodeURIComponent(p.token)}`,
@@ -836,7 +838,7 @@ function sendApns(config: AppConfig, creds: ApnsCredentials, p: PushPayload): Pr
         invalidToken: status === 410 || ['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'].includes(reason),
       });
     });
-    req.on('error', (err) => done({ ok: false, error: `APNs : ${err.message}`, invalidToken: false }));
+    req.on('error', (err) => done({ ok: false, error: t(`APNs : ${err.message}`, `APNs: ${err.message}`), invalidToken: false }));
     req.end(body);
   });
 }
@@ -868,7 +870,7 @@ async function sendExpo(config: AppConfig, creds: ExpoCredentials | null, p: Pus
   const ticket = json.data?.[0];
   if (res.ok && ticket?.status === 'ok') return { ok: true, providerId: ticket.id ?? `expo_${p.messageId}` };
   const code = ticket?.details?.error ?? json.errors?.[0]?.message ?? String(res.status);
-  return { ok: false, error: `Expo ${code}${ticket?.message ? ` : ${ticket.message}` : ''}`, invalidToken: code === 'DeviceNotRegistered' };
+  return { ok: false, error: `Expo ${code}${ticket?.message ? t(` : ${ticket.message}`, `: ${ticket.message}`) : ''}`, invalidToken: code === 'DeviceNotRegistered' };
 }
 
 export async function deliverPush(config: AppConfig, cfg: PushConfig, provider: PushProvider, p: PushPayload): Promise<PushOutcome> {
@@ -879,10 +881,10 @@ export async function deliverPush(config: AppConfig, cfg: PushConfig, provider: 
   try {
     if (provider === 'expo') return await sendExpo(config, cfg.expo, p);
     if (provider === 'fcm') {
-      if (!cfg.fcm) return { ok: false, error: 'Firebase (FCM) n’est pas configuré', invalidToken: false };
+      if (!cfg.fcm) return { ok: false, error: t('Firebase (FCM) n’est pas configuré', 'Firebase (FCM) isn’t configured'), invalidToken: false };
       return await sendFcm(config, cfg.fcm, p);
     }
-    if (!cfg.apns) return { ok: false, error: 'Apple (APNs) n’est pas configuré', invalidToken: false };
+    if (!cfg.apns) return { ok: false, error: t('Apple (APNs) n’est pas configuré', 'Apple (APNs) isn’t configured'), invalidToken: false };
     return await sendApns(config, cfg.apns, p);
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err), invalidToken: false };
@@ -919,16 +921,19 @@ export async function sendPushBatch(db: DatabaseSync, config: AppConfig, limit: 
       cfg = ensurePushConfig(db, m.account_id);
       configs.set(m.account_id, cfg);
     }
-    const outcome = await deliverPush(config, cfg, m.provider, {
-      messageId: m.id,
-      token: m.token,
-      title: m.title,
-      body: m.body,
-      imageUrl: m.image_url,
-      url: m.url,
-      inboxId: m.inbox_id,
-      badge: inboxUnread(db, m.account_id, { id: m.device_id, contact_id: m.device_contact_id }),
-    });
+    // Delivery errors are stored for the merchant: written in the account's language.
+    const outcome = await withAccountLang(db, m.account_id, () =>
+      deliverPush(config, cfg, m.provider, {
+        messageId: m.id,
+        token: m.token,
+        title: m.title,
+        body: m.body,
+        imageUrl: m.image_url,
+        url: m.url,
+        inboxId: m.inbox_id,
+        badge: inboxUnread(db, m.account_id, { id: m.device_id, contact_id: m.device_contact_id }),
+      }),
+    );
     if (outcome.ok) {
       run(db, "UPDATE push_messages SET status = 'sent', provider_id = ?, error = NULL, sent_at = ? WHERE id = ?", outcome.providerId, now(), m.id);
     } else {

@@ -1,6 +1,7 @@
 // Mapping Shopify customers/orders to Pingsell contacts.
 import type { IntegrationContext } from '../context.js';
 import { findContactByEmail } from './store.js';
+import { t } from '../../i18n.js';
 
 /** Normalized customer data, whatever the source (REST webhook payload or GraphQL node). */
 export interface ShopifyCustomerData {
@@ -93,7 +94,7 @@ export function upsertShopifyContact(ctx: IntegrationContext, accountId: string,
 
   const { contact, created } = ctx.upsertContact(accountId, input);
   const contactId = String((contact as { id?: unknown } | null)?.id ?? existing?.id ?? '');
-  if (!contactId) throw new Error(`Contact introuvable après upsert (${data.email})`);
+  if (!contactId) throw new Error(t(`Contact introuvable après upsert (${data.email})`, `Contact not found after upsert (${data.email})`));
   return { contactId, created, status: status ?? existing?.status ?? 'subscribed' };
 }
 

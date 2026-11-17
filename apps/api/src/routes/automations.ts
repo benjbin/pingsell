@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { all, get, newId, now, run, scalar, transaction, type SQLInputValue } from '../db.js';
 import type { Deps } from '../deps.js';
-import { badRequest, listResponse, notFound, pagination, parse } from '../lib/http.js';
+import { badRequest, listResponse, notFound, pagination, parse, zmsg } from '../lib/http.js';
 import {
   TRIGGERS,
   automationStats,
@@ -10,9 +10,10 @@ import {
   stepsSchema,
   triggerConfigSchema,
 } from '../services/automations.js';
+import { t } from '../i18n.js';
 
 const createSchema = z.object({
-  name: z.string().trim().min(1, 'Le nom est requis').max(200),
+  name: z.string().trim().min(1, zmsg('Le nom est requis', 'Name is required')).max(200),
   trigger: z.enum(TRIGGERS),
   trigger_config: triggerConfigSchema.optional(),
   steps: stepsSchema,
@@ -25,7 +26,7 @@ type Params = { Params: { id: string } };
 export async function automationRoutes(app: FastifyInstance, { db }: Deps) {
   const load = (accountId: string, id: string) => {
     const row = get(db, 'SELECT * FROM automations WHERE id = ? AND account_id = ?', id, accountId);
-    if (!row) throw notFound('Automatisation introuvable');
+    if (!row) throw notFound(t('Automatisation introuvable', 'Automation not found'));
     return serializeAutomation(row);
   };
   const withStats = (accountId: string, id: string) => {
@@ -34,7 +35,7 @@ export async function automationRoutes(app: FastifyInstance, { db }: Deps) {
   };
   const assertTagConfig = (trigger: string, config: { tag?: string } | undefined) => {
     if (trigger === 'tag_added' && !config?.tag) {
-      throw badRequest('Le déclencheur « tag ajouté » nécessite trigger_config.tag');
+      throw badRequest(t('Le déclencheur « tag ajouté » nécessite trigger_config.tag', 'The “tag added” trigger requires trigger_config.tag'));
     }
   };
 

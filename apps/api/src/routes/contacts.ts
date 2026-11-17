@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { all, parseJson, run, scalar, transaction, type SQLInputValue } from '../db.js';
 import type { Deps } from '../deps.js';
 import { csvToContacts } from '../lib/csv.js';
-import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString } from '../lib/http.js';
+import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString, zmsg } from '../lib/http.js';
 import { cancelRunsForContact, fireTrigger } from '../services/automations.js';
 import {
   CONTACT_STATUSES,
@@ -20,11 +20,12 @@ import {
 } from '../services/contacts.js';
 import { compileRules, loadSegmentRules } from '../services/segments.js';
 import { serializeMessage } from '../services/messages.js';
+import { t } from '../i18n.js';
 
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
 
 const contactInputSchema = z.object({
-  email: z.string().trim().min(1, "L'email est requis").max(254),
+  email: z.string().trim().min(1, zmsg("L'email est requis", 'Email is required')).max(254),
   first_name: optionalText(100),
   last_name: optionalText(100),
   phone: optionalText(40),
@@ -50,16 +51,16 @@ const importSchema = z.union([
 
 /** Orders from any shop, POS or back-office (Shopify sends its own through webhooks). */
 const orderSchema = z.object({
-  email: z.string().trim().min(1, "L'email est requis").max(254),
+  email: z.string().trim().min(1, zmsg("L'email est requis", 'Email is required')).max(254),
   first_name: optionalText(100),
   last_name: optionalText(100),
   phone: optionalText(40),
-  order_id: z.string().trim().min(1, 'order_id est requis').max(100),
+  order_id: z.string().trim().min(1, zmsg('order_id est requis', 'order_id is required')).max(100),
   /** `created` = order placed (« Commande passée »), `fulfilled` = shipped (« Commande expédiée »). */
   status: z.enum(['created', 'fulfilled']).default('created'),
   /** Accepts 59.9, "59.90" or "59,90" (POS and PHP back-ends often send strings). */
   total: z
-    .preprocess((v) => (typeof v === 'string' && v.trim() !== '' ? Number(v.trim().replace(',', '.')) : v), z.number().nonnegative().max(1_000_000_000, 'Le total est trop élevé'))
+    .preprocess((v) => (typeof v === 'string' && v.trim() !== '' ? Number(v.trim().replace(',', '.')) : v), z.number().nonnegative().max(1_000_000_000, zmsg('Le total est trop élevé', 'Total is too high')))
     .optional(),
   currency: z.string().trim().max(8).optional(),
   tracking_number: z.string().trim().max(100).optional(),
@@ -105,14 +106,14 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
     }
     const status = queryString(request.query, 'status');
     if (status) {
-      if (!(CONTACT_STATUSES as readonly string[]).includes(status)) throw badRequest('Statut inconnu');
+      if (!(CONTACT_STATUSES as readonly string[]).includes(status)) throw badRequest(t('Statut inconnu', 'Unknown status'));
       where.push('status = ?');
       params.push(status);
     }
     const segmentId = queryString(request.query, 'segment_id');
     if (segmentId) {
       const rules = loadSegmentRules(db, request.accountId, segmentId);
-      if (!rules) throw notFound('Segment introuvable');
+      if (!rules) throw notFound(t('Segment introuvable', 'Segment not found'));
       const compiled = compileRules(rules);
       where.push(compiled.sql);
       params.push(...compiled.params);
@@ -201,7 +202,10 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       return reply.code(200).send({
         ok: true,
         skipped: true,
-        message: "Contact inconnu : envoyez d'abord la commande (status « created ») ou créez le contact, puis l'expédition.",
+        message: t(
+          "Contact inconnu : envoyez d'abord la commande (status « created ») ou créez le contact, puis l'expédition.",
+          'Unknown contact: send the order first (status "created") or create the contact, then the shipment.',
+        ),
       });
     }
     return reply.code(result.duplicate ? 200 : 201).send({ ok: true, contact_id: result.contact!.id, duplicate: result.duplicate });
@@ -209,7 +213,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
 
   app.get<Params>('/contacts/:id', async (request) => {
     const contact = findContact(db, request.accountId, request.params.id);
-    if (!contact) throw notFound('Contact introuvable');
+    if (!contact) throw notFound(t('Contact introuvable', 'Contact not found'));
     const events = all(
       db,
       'SELECT id, type, data, created_at FROM events WHERE contact_id = ? AND account_id = ? ORDER BY created_at DESC LIMIT 50',
@@ -228,14 +232,14 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
   app.patch<Params>('/contacts/:id', async (request) => {
     const body = parse(patchSchema, request.body);
     const existing = findContact(db, request.accountId, request.params.id);
-    if (!existing) throw notFound('Contact introuvable');
+    if (!existing) throw notFound(t('Contact introuvable', 'Contact not found'));
 
     const updates: Record<string, SQLInputValue> = {};
     if (body.email !== undefined) {
       const email = normalizeEmail(body.email);
-      if (!isValidEmail(email)) throw badRequest('Adresse email invalide');
+      if (!isValidEmail(email)) throw badRequest(t('Adresse email invalide', 'Invalid email address'));
       const other = findContactByEmail(db, request.accountId, email);
-      if (other && other.id !== existing.id) throw conflict('Un autre contact utilise déjà cette adresse email');
+      if (other && other.id !== existing.id) throw conflict(t('Un autre contact utilise déjà cette adresse email', 'Another contact already uses this email address'));
       updates.email = email;
     }
     for (const key of ['first_name', 'last_name', 'phone'] as const) {
@@ -263,7 +267,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
 
   app.delete<Params>('/contacts/:id', async (request, reply) => {
     const contact = findContact(db, request.accountId, request.params.id);
-    if (!contact) throw notFound('Contact introuvable');
+    if (!contact) throw notFound(t('Contact introuvable', 'Contact not found'));
     transaction(db, () => {
       run(db, 'DELETE FROM events WHERE contact_id = ? AND account_id = ?', contact.id, request.accountId);
       run(db, 'DELETE FROM contacts WHERE id = ?', contact.id);
@@ -274,7 +278,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
   app.post<Params>('/contacts/:id/tags', async (request) => {
     const body = parse(tagsSchema, request.body);
     const contact = findContact(db, request.accountId, request.params.id);
-    if (!contact) throw notFound('Contact introuvable');
+    if (!contact) throw notFound(t('Contact introuvable', 'Contact not found'));
     const remove = new Set(normalizeTags(body.remove));
     const add = normalizeTags(body.add).filter((t) => !contact.tags.includes(t));
     const tags = [...contact.tags.filter((t) => !remove.has(t)), ...add.filter((t) => !remove.has(t))];
@@ -292,7 +296,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       'csv' in body
         ? csvToContacts(body.csv).map(({ row, ...data }) => ({ row, data }))
         : body.contacts.map((data, i) => ({ row: i + 1, data }));
-    if (inputs.length > 50_000) throw badRequest('Import limité à 50 000 contacts par requête');
+    if (inputs.length > 50_000) throw badRequest(t('Import limité à 50 000 contacts par requête', 'Imports are limited to 50,000 contacts per request'));
 
     let created = 0;
     let updated = 0;
@@ -305,7 +309,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
           errorDetails.push({
             row,
             email: typeof data.email === 'string' ? data.email : null,
-            error: parsed.error.issues[0]?.message ?? 'Ligne invalide',
+            error: parsed.error.issues[0]?.message ?? t('Ligne invalide', 'Invalid row'),
           });
           continue;
         }

@@ -2,6 +2,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { OPS_BY_KIND, SEGMENT_FIELDS } from "../../lib/constants";
 import type { SegmentCondition, SegmentField, SegmentOp, SegmentRules } from "../../lib/types";
 import { Button, Input, Select } from "../../components/ui/primitives";
+import { t } from "../../lib/i18n";
 
 export function defaultCondition(field: SegmentField = "tags"): SegmentCondition {
   const kind = SEGMENT_FIELDS[field].kind;
@@ -36,14 +37,14 @@ function ConditionRow({
 
   return (
     <div className="grid grid-cols-1 gap-2 rounded-xl bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-center dark:bg-slate-800/50">
-      <Select value={condition.field} onChange={(e) => changeField(e.target.value as SegmentField)} aria-label="Champ">
+      <Select value={condition.field} onChange={(e) => changeField(e.target.value as SegmentField)} aria-label={t("Champ", "Field")}>
         {(Object.keys(SEGMENT_FIELDS) as SegmentField[]).map((f) => (
           <option key={f} value={f}>
             {SEGMENT_FIELDS[f].label}
           </option>
         ))}
       </Select>
-      <Select value={condition.op} onChange={(e) => onChange({ ...condition, op: e.target.value as SegmentOp })} aria-label="Opérateur">
+      <Select value={condition.op} onChange={(e) => onChange({ ...condition, op: e.target.value as SegmentOp })} aria-label={t("Opérateur", "Operator")}>
         {ops.map((o) => (
           <option key={o.op} value={o.op}>
             {o.label}
@@ -51,7 +52,7 @@ function ConditionRow({
         ))}
       </Select>
       {fieldDef.kind === "enum" ? (
-        <Select value={String(condition.value)} onChange={(e) => onChange({ ...condition, value: e.target.value })} aria-label="Valeur">
+        <Select value={String(condition.value)} onChange={(e) => onChange({ ...condition, value: e.target.value })} aria-label={t("Valeur", "Value")}>
           {fieldDef.options?.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -66,21 +67,21 @@ function ConditionRow({
             step={fieldDef.kind === "date" ? 1 : "any"}
             value={Number.isNaN(condition.value as number) ? "" : condition.value}
             onChange={(e) => onChange({ ...condition, value: e.target.value === "" ? Number.NaN : Number(e.target.value) })}
-            aria-label="Valeur"
+            aria-label={t("Valeur", "Value")}
             className={fieldDef.kind === "date" ? "pr-12" : undefined}
           />
-          {fieldDef.kind === "date" && <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-slate-400">jours</span>}
+          {fieldDef.kind === "date" && <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-xs text-slate-400">{t("jours", "days")}</span>}
         </div>
       ) : fieldDef.kind === "tags" ? (
         <Input
             list={TAG_LIST_ID}
             value={String(condition.value)}
             onChange={(e) => onChange({ ...condition, value: e.target.value.trim().toLowerCase() })}
-            placeholder="ex : vip"
-            aria-label="Tag"
+            placeholder={t("ex : vip", "e.g. vip")}
+            aria-label={t("Tag", "Tag")}
           />
       ) : (
-        <Input value={String(condition.value)} onChange={(e) => onChange({ ...condition, value: e.target.value })} placeholder="Valeur" aria-label="Valeur" />
+        <Input value={String(condition.value)} onChange={(e) => onChange({ ...condition, value: e.target.value })} placeholder={t("Valeur", "Value")} aria-label={t("Valeur", "Value")} />
       )}
       <Button
         variant="ghost"
@@ -88,7 +89,7 @@ function ConditionRow({
         icon={Trash2}
         onClick={onRemove}
         disabled={!canRemove}
-        aria-label="Supprimer la condition"
+        aria-label={t("Supprimer la condition", "Remove condition")}
         className="justify-self-end"
       />
     </div>
@@ -101,20 +102,20 @@ export function RuleBuilder({ rules, onChange, tags }: { rules: SegmentRules; on
   return (
     <div className="space-y-4">
       <datalist id={TAG_LIST_ID}>
-        {tags.map((t) => (
-          <option key={t} value={t} />
+        {tags.map((tag) => (
+          <option key={tag} value={tag} />
         ))}
       </datalist>
       <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-        <span>Les contacts qui remplissent</span>
+        <span>{t("Les contacts qui remplissent", "Contacts that match")}</span>
         <Select
           value={rules.match}
           onChange={(e) => onChange({ ...rules, match: e.target.value as "all" | "any" })}
           className="h-9 w-auto font-medium"
-          aria-label="Correspondance"
+          aria-label={t("Correspondance", "Match")}
         >
-          <option value="all">toutes les conditions</option>
-          <option value="any">au moins une condition</option>
+          <option value="all">{t("toutes les conditions", "all conditions")}</option>
+          <option value="any">{t("au moins une condition", "at least one condition")}</option>
         </Select>
       </div>
 
@@ -123,7 +124,7 @@ export function RuleBuilder({ rules, onChange, tags }: { rules: SegmentRules; on
           <div key={i}>
             {i > 0 && (
               <div className="py-1 pl-3 text-[11px] font-semibold tracking-wider text-brand-600 uppercase dark:text-brand-400">
-                {rules.match === "all" ? "et" : "ou"}
+                {rules.match === "all" ? t("et", "and") : t("ou", "or")}
               </div>
             )}
             <ConditionRow
@@ -137,7 +138,7 @@ export function RuleBuilder({ rules, onChange, tags }: { rules: SegmentRules; on
       </div>
 
       <Button variant="outline" size="sm" icon={Plus} onClick={() => onChange({ ...rules, conditions: [...rules.conditions, defaultCondition("total_spent")] })}>
-        Ajouter une condition
+        {t("Ajouter une condition", "Add a condition")}
       </Button>
     </div>
   );

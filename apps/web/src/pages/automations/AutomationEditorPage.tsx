@@ -37,6 +37,7 @@ import { useToast } from "../../components/ui/Toast";
 import { AiGeneratePanel } from "../../components/AiGeneratePanel";
 import { EmailPreview } from "../../components/EmailPreview";
 import { DEFAULT_EMAIL_HTML } from "../campaigns/defaultTemplate";
+import { t } from "../../lib/i18n";
 
 const TRIGGER_ICONS: Record<AutomationTrigger, LucideIcon> = {
   contact_created: UserPlus,
@@ -65,12 +66,12 @@ function ExitStepEditor({ step, onChange }: { step: Extract<AutomationStep, { ty
   return (
     <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
       <div className="flex flex-wrap items-center gap-2">
-        <span>Arrêter le parcours si le client</span>
+        <span>{t("Arrêter le parcours si le client", "Stop the journey if the customer")}</span>
         <Select
           className="h-9 w-auto"
           value={step.condition}
           onChange={(e) => onChange({ type: "exit_if", condition: e.target.value as ExitCondition })}
-          aria-label="Condition d'arrêt"
+          aria-label={t("Condition d'arrêt", "Exit condition")}
         >
           {(Object.keys(EXIT_CONDITIONS) as ExitCondition[]).map((c) => (
             <option key={c} value={c}>
@@ -80,7 +81,7 @@ function ExitStepEditor({ step, onChange }: { step: Extract<AutomationStep, { ty
         </Select>
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Placez-la après une attente : les clients qui ont déjà réagi ne reçoivent pas les relances suivantes.
+        {t("Placez-la après une attente : les clients qui ont déjà réagi ne reçoivent pas les relances suivantes.", "Place it after a wait: customers who already engaged won't get the follow-ups.")}
       </p>
     </div>
   );
@@ -91,18 +92,18 @@ type PushStep = Extract<AutomationStep, { type: "push" }>;
 function PushStepEditor({ step, onChange }: { step: PushStep; onChange: (s: PushStep) => void }) {
   return (
     <div className="space-y-3">
-      <Field label="Titre">
-        <Input maxLength={120} value={step.title} onChange={(e) => onChange({ ...step, title: e.target.value })} placeholder="{{first_name|Bonjour}}, votre panier vous attend" />
+      <Field label={t("Titre", "Title")}>
+        <Input maxLength={120} value={step.title} onChange={(e) => onChange({ ...step, title: e.target.value })} placeholder={t("{{first_name|Bonjour}}, votre panier vous attend", "{{first_name|Hi}}, your cart is waiting")} />
       </Field>
-      <Field label="Texte">
-        <Textarea rows={2} maxLength={500} value={step.body} onChange={(e) => onChange({ ...step, body: e.target.value })} placeholder="Finalisez votre commande, la livraison est offerte." />
+      <Field label={t("Texte", "Text")}>
+        <Textarea rows={2} maxLength={500} value={step.body} onChange={(e) => onChange({ ...step, body: e.target.value })} placeholder={t("Finalisez votre commande, la livraison est offerte.", "Complete your order, shipping is on us.")} />
       </Field>
-      <Field label="Lien à l'ouverture (optionnel)" hint="Envoyée sur tous les appareils du contact enregistrés dans votre application.">
-        <Input value={step.url ?? ""} onChange={(e) => onChange({ ...step, url: e.target.value })} placeholder="https://… ou monapp://panier" />
+      <Field label={t("Lien à l'ouverture (optionnel)", "Link on open (optional)")} hint={t("Envoyée sur tous les appareils du contact enregistrés dans votre application.", "Sent to every device the contact has registered in your app.")}>
+        <Input value={step.url ?? ""} onChange={(e) => onChange({ ...step, url: e.target.value })} placeholder={t("https://… ou monapp://panier", "https://… or myapp://cart")} />
       </Field>
       <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
         <input type="checkbox" className="size-4 accent-brand-500" checked={step.in_app !== false} onChange={(e) => onChange({ ...step, in_app: e.target.checked })} />
-        Garder aussi la notification dans l'app (centre de notifications)
+        {t("Garder aussi la notification dans l'app (centre de notifications)", "Also keep the notification in the app (notification center)")}
       </label>
     </div>
   );
@@ -113,7 +114,7 @@ function WaitStepEditor({ step, onChange }: { step: Extract<AutomationStep, { ty
   const display = unit === "days" ? step.hours / 24 : step.hours;
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-      <span>Attendre</span>
+      <span>{t("Attendre", "Wait")}</span>
       <Input
         type="number"
         min={1}
@@ -123,7 +124,7 @@ function WaitStepEditor({ step, onChange }: { step: Extract<AutomationStep, { ty
           const n = Math.max(0, Number(e.target.value));
           onChange({ type: "wait", hours: unit === "days" ? n * 24 : n });
         }}
-        aria-label="Durée"
+        aria-label={t("Durée", "Duration")}
       />
       <Select
         className="h-9 w-auto"
@@ -133,12 +134,12 @@ function WaitStepEditor({ step, onChange }: { step: Extract<AutomationStep, { ty
           setUnit(u);
           onChange({ type: "wait", hours: u === "days" ? Math.max(1, Math.round(step.hours / 24)) * 24 : step.hours });
         }}
-        aria-label="Unité"
+        aria-label={t("Unité", "Unit")}
       >
-        <option value="hours">heure(s)</option>
-        <option value="days">jour(s)</option>
+        <option value="hours">{t("heure(s)", "hour(s)")}</option>
+        <option value="days">{t("jour(s)", "day(s)")}</option>
       </Select>
-      <span>avant l'étape suivante</span>
+      <span>{t("avant l'étape suivante", "before the next step")}</span>
     </div>
   );
 }
@@ -156,15 +157,15 @@ function EmailStepEditor({
   const [showAi, setShowAi] = useState(false);
   return (
     <div className="space-y-3">
-      <Field label="Objet">
-        <Input value={step.subject} onChange={(e) => onChange({ ...step, subject: e.target.value })} placeholder="Bienvenue {{first_name}} !" />
+      <Field label={t("Objet", "Subject")}>
+        <Input value={step.subject} onChange={(e) => onChange({ ...step, subject: e.target.value })} placeholder={t("Bienvenue {{first_name}} !", "Welcome {{first_name}}!")} />
       </Field>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" icon={Sparkles} onClick={() => setShowAi((v) => !v)}>
-          {showAi ? "Masquer les modèles" : "Partir d'un modèle"}
+          {showAi ? t("Masquer les modèles", "Hide templates") : t("Partir d'un modèle", "Start from a template")}
         </Button>
         <Button variant="secondary" size="sm" icon={showPreview ? EyeOff : Eye} onClick={() => setShowPreview((v) => !v)}>
-          {showPreview ? "Voir le code" : "Aperçu"}
+          {showPreview ? t("Voir le code", "View code") : t("Aperçu", "Preview")}
         </Button>
       </div>
       {showAi && (
@@ -189,7 +190,7 @@ function EmailStepEditor({
           className="font-mono text-xs"
           value={step.html}
           onChange={(e) => onChange({ ...step, html: e.target.value })}
-          aria-label="HTML de l'email"
+          aria-label={t("HTML de l'email", "Email HTML")}
         />
       )}
     </div>
@@ -200,16 +201,16 @@ function InsertStep({ onInsert }: { onInsert: (s: AutomationStep) => void }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 py-2">
       <Button variant="secondary" size="sm" icon={Clock} onClick={() => onInsert(newWaitStep())}>
-        Attente
+        {t("Attente", "Wait")}
       </Button>
       <Button variant="secondary" size="sm" icon={Mail} onClick={() => onInsert(newEmailStep())}>
-        Email
+        {t("Email", "Email")}
       </Button>
       <Button variant="secondary" size="sm" icon={BellRing} onClick={() => onInsert(newPushStep())}>
-        Push
+        {t("Push", "Push")}
       </Button>
       <Button variant="secondary" size="sm" icon={CircleStop} onClick={() => onInsert(newExitStep())}>
-        Arrêter si…
+        {t("Arrêter si…", "Stop if…")}
       </Button>
     </div>
   );
@@ -232,7 +233,7 @@ export function AutomationEditorPage() {
   const [trigger, setTrigger] = useState<AutomationTrigger>("contact_created");
   const [tag, setTag] = useState("");
   const [steps, setSteps] = useState<KeyedStep[]>(() => [
-    keyed({ type: "email", subject: "Bienvenue {{first_name}} !", html: DEFAULT_EMAIL_HTML }),
+    keyed({ type: "email", subject: t("Bienvenue {{first_name}} !", "Welcome {{first_name}}!"), html: DEFAULT_EMAIL_HTML }),
     keyed({ type: "wait", hours: 72 }),
     keyed(newEmailStep()),
   ]);
@@ -263,13 +264,13 @@ export function AutomationEditorPage() {
     });
 
   function validate(): string | null {
-    if (!name.trim()) return "Donnez un nom à l'automatisation";
-    if (trigger === "tag_added" && !tag.trim()) return "Indiquez le tag qui déclenche l'automatisation";
-    if (!steps.some((s) => s.step.type === "email" || s.step.type === "push")) return "Ajoutez au moins une étape email ou push";
+    if (!name.trim()) return t("Donnez un nom à l'automatisation", "Give your automation a name");
+    if (trigger === "tag_added" && !tag.trim()) return t("Indiquez le tag qui déclenche l'automatisation", "Enter the tag that triggers the automation");
+    if (!steps.some((s) => s.step.type === "email" || s.step.type === "push")) return t("Ajoutez au moins une étape email ou push", "Add at least one email or push step");
     for (const { step } of steps) {
-      if (step.type === "email" && !step.subject.trim()) return "Chaque email doit avoir un objet";
-      if (step.type === "push" && (!step.title.trim() || !step.body.trim())) return "Chaque notification push doit avoir un titre et un texte";
-      if (step.type === "wait" && !(step.hours > 0)) return "Chaque attente doit durer au moins 1 heure";
+      if (step.type === "email" && !step.subject.trim()) return t("Chaque email doit avoir un objet", "Every email needs a subject");
+      if (step.type === "push" && (!step.title.trim() || !step.body.trim())) return t("Chaque notification push doit avoir un titre et un texte", "Every push notification needs a title and text");
+      if (step.type === "wait" && !(step.hours > 0)) return t("Chaque attente doit durer au moins 1 heure", "Every wait must last at least 1 hour");
     }
     return null;
   }
@@ -290,11 +291,11 @@ export function AutomationEditorPage() {
     try {
       if (isNew) {
         const created = await api.automations.create(input);
-        toast.success("Automatisation créée", "Activez-la quand vous êtes prêt.");
+        toast.success(t("Automatisation créée", "Automation created"), t("Activez-la quand vous êtes prêt.", "Turn it on when you're ready."));
         navigate(`/automatisations/${created.id}`, { replace: true });
       } else {
         await api.automations.update(id, input);
-        toast.success("Automatisation enregistrée");
+        toast.success(t("Automatisation enregistrée", "Automation saved"));
       }
     } catch (err) {
       toast.error(err);
@@ -310,7 +311,7 @@ export function AutomationEditorPage() {
       if (status === "active") await api.automations.pause(id);
       else await api.automations.activate(id);
       setStatus(status === "active" ? "paused" : "active");
-      toast.success(status === "active" ? "Automatisation en pause" : "Automatisation activée");
+      toast.success(status === "active" ? t("Automatisation en pause", "Automation paused") : t("Automatisation activée", "Automation activated"));
     } catch (err) {
       toast.error(err);
     } finally {
@@ -334,15 +335,15 @@ export function AutomationEditorPage() {
       <PageHeader
         back={
           <Link to="/automatisations" className="mb-2 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
-            <ArrowLeft className="size-4" /> Automatisations
+            <ArrowLeft className="size-4" /> {t("Automatisations", "Automations")}
           </Link>
         }
         title={
           <span className="flex flex-wrap items-center gap-3">
-            {name || (isNew ? "Nouvelle automatisation" : "Automatisation")}
+            {name || (isNew ? t("Nouvelle automatisation", "New automation") : t("Automatisation", "Automation"))}
             {!isNew && (
               <Badge tone={status === "active" ? "green" : "slate"} dot>
-                {status === "active" ? "Active" : "En pause"}
+                {status === "active" ? t("Active", "Active") : t("En pause", "Paused")}
               </Badge>
             )}
           </span>
@@ -351,11 +352,11 @@ export function AutomationEditorPage() {
           <>
             {!isNew && (
               <Button variant="secondary" icon={status === "active" ? Pause : Play} onClick={toggleStatus} loading={toggling}>
-                {status === "active" ? "Mettre en pause" : "Activer"}
+                {status === "active" ? t("Mettre en pause", "Pause") : t("Activer", "Activate")}
               </Button>
             )}
             <Button icon={Save} onClick={save} loading={saving}>
-              Enregistrer
+              {t("Enregistrer", "Save")}
             </Button>
           </>
         }
@@ -363,8 +364,8 @@ export function AutomationEditorPage() {
 
       <div className="mx-auto max-w-3xl">
         <Card className="p-5">
-          <Field label="Nom" htmlFor="auto-name">
-            <Input id="auto-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="ex : Série de bienvenue" />
+          <Field label={t("Nom", "Name")} htmlFor="auto-name">
+            <Input id="auto-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("ex : Série de bienvenue", "e.g. Welcome series")} />
           </Field>
         </Card>
 
@@ -375,17 +376,17 @@ export function AutomationEditorPage() {
             <span className="flex size-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300">
               <Zap className="size-4" />
             </span>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Déclencheur</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("Déclencheur", "Trigger")}</h3>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {(Object.keys(TRIGGERS) as AutomationTrigger[]).map((t) => {
-              const Icon = TRIGGER_ICONS[t];
-              const active = t === trigger;
+            {(Object.keys(TRIGGERS) as AutomationTrigger[]).map((tr) => {
+              const Icon = TRIGGER_ICONS[tr];
+              const active = tr === trigger;
               return (
                 <button
-                  key={t}
+                  key={tr}
                   type="button"
-                  onClick={() => setTrigger(t)}
+                  onClick={() => setTrigger(tr)}
                   className={cx(
                     "flex items-start gap-3 rounded-xl p-3 text-left ring-1 transition",
                     active
@@ -395,19 +396,19 @@ export function AutomationEditorPage() {
                 >
                   <Icon className={cx("mt-0.5 size-5 shrink-0", active ? "text-brand-600 dark:text-brand-300" : "text-slate-400")} />
                   <span>
-                    <span className="block text-sm font-medium text-slate-900 dark:text-white">{TRIGGERS[t].label}</span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400">{TRIGGERS[t].description}</span>
+                    <span className="block text-sm font-medium text-slate-900 dark:text-white">{TRIGGERS[tr].label}</span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400">{TRIGGERS[tr].description}</span>
                   </span>
                 </button>
               );
             })}
           </div>
           {trigger === "tag_added" && (
-            <Field label="Tag déclencheur" htmlFor="auto-tag" className="mt-4" hint="L'automatisation démarre quand ce tag est ajouté à un contact.">
-              <Input id="auto-tag" list="auto-tag-options" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="ex : vip" />
+            <Field label={t("Tag déclencheur", "Trigger tag")} htmlFor="auto-tag" className="mt-4" hint={t("L'automatisation démarre quand ce tag est ajouté à un contact.", "The automation starts when this tag is added to a contact.")}>
+              <Input id="auto-tag" list="auto-tag-options" value={tag} onChange={(e) => setTag(e.target.value)} placeholder={t("ex : vip", "e.g. vip")} />
               <datalist id="auto-tag-options">
-                {(tags.data ?? []).map((t) => (
-                  <option key={t.tag} value={t.tag} />
+                {(tags.data ?? []).map((tg) => (
+                  <option key={tg.tag} value={tg.tag} />
                 ))}
               </datalist>
             </Field>
@@ -445,18 +446,18 @@ export function AutomationEditorPage() {
                   )}
                 </span>
                 <h3 className="flex-1 text-sm font-semibold text-slate-900 dark:text-white">
-                  Étape {index + 1} · {step.type === "email"
-                    ? "Envoyer un email"
+                  {t("Étape", "Step")} {index + 1} · {step.type === "email"
+                    ? t("Envoyer un email", "Send an email")
                     : step.type === "push"
-                      ? "Notification push"
+                      ? t("Notification push", "Push notification")
                       : step.type === "exit_if"
-                        ? "Condition d'arrêt"
-                        : "Attendre"}
+                        ? t("Condition d'arrêt", "Exit condition")
+                        : t("Attendre", "Wait")}
                 </h3>
                 <div className="flex gap-0.5">
-                  <Button variant="ghost" size="sm" icon={ArrowUp} onClick={() => move(index, -1)} disabled={index === 0} aria-label="Monter" />
-                  <Button variant="ghost" size="sm" icon={ArrowDown} onClick={() => move(index, 1)} disabled={index === steps.length - 1} aria-label="Descendre" />
-                  <Button variant="ghost" size="sm" icon={Trash2} onClick={() => removeStep(key)} aria-label="Supprimer l'étape" />
+                  <Button variant="ghost" size="sm" icon={ArrowUp} onClick={() => move(index, -1)} disabled={index === 0} aria-label={t("Monter", "Move up")} />
+                  <Button variant="ghost" size="sm" icon={ArrowDown} onClick={() => move(index, 1)} disabled={index === steps.length - 1} aria-label={t("Descendre", "Move down")} />
+                  <Button variant="ghost" size="sm" icon={Trash2} onClick={() => removeStep(key)} aria-label={t("Supprimer l'étape", "Delete step")} />
                 </div>
               </div>
               {step.type === "wait" ? (
@@ -479,12 +480,12 @@ export function AutomationEditorPage() {
           <span className="flex size-9 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
             <Flag className="size-4" />
           </span>
-          Fin du parcours
+          {t("Fin du parcours", "End of journey")}
         </div>
         {steps.length === 0 && (
           <p className="pb-6 text-center text-sm text-slate-500">
             <Plus className="mr-1 inline size-4" />
-            Ajoutez une première étape ci-dessus.
+            {t("Ajoutez une première étape ci-dessus.", "Add a first step above.")}
           </p>
         )}
       </div>

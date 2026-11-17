@@ -7,6 +7,7 @@ import { processPushResends } from './services/pushGrowth.js';
 import { accountSender, markFailed, markSent } from './services/messages.js';
 import { htmlToText } from './services/render.js';
 import type { EmailProvider } from './services/mailer.js';
+import { outsideLang } from './i18n.js';
 
 export interface WorkerLogger {
   info(msg: string): void;
@@ -50,7 +51,8 @@ export class SendingWorker {
 
   /** Requests an immediate tick (e.g. right after a campaign is sent). */
   kick(): void {
-    setImmediate(() => void this.tick());
+    // Leave the caller's request language behind: each job uses its account's language.
+    setImmediate(() => outsideLang(() => void this.tick()));
   }
 
   async tick(): Promise<void> {

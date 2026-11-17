@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import { ApiClient, DEFAULT_API_URL, normalizeApiUrl } from './api';
 import { getItem, removeItem, setItem, STORAGE_KEYS } from './storage';
+import { t } from './i18n';
 import type { Account } from './types';
 
 type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
@@ -89,6 +90,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth doit être utilisé dans <AuthProvider>');
+  if (!ctx) throw new Error(t('useAuth doit être utilisé dans <AuthProvider>', 'useAuth must be used within <AuthProvider>'));
   return ctx;
 }

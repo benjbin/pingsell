@@ -5,17 +5,18 @@ import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View
 
 import { Badge, EmptyState, ErrorState, LoadingState } from '@/components/ui';
 import { campaignStatusLabel, formatDate, formatNumber, formatPercent } from '@/lib/format';
+import { t } from '@/lib/i18n';
 import { radius, spacing, useColors } from '@/lib/theme';
 import type { Campaign, CampaignStatus } from '@/lib/types';
 import { useApiQuery } from '@/lib/useApi';
 
 type Filter = 'all' | CampaignStatus;
 const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'Toutes' },
-  { key: 'draft', label: 'Brouillons' },
-  { key: 'scheduled', label: 'Programmées' },
-  { key: 'sending', label: 'En cours' },
-  { key: 'sent', label: 'Envoyées' },
+  { key: 'all', label: t('Toutes', 'All') },
+  { key: 'draft', label: t('Brouillons', 'Drafts') },
+  { key: 'scheduled', label: t('Programmées', 'Scheduled') },
+  { key: 'sending', label: t('En cours', 'Sending') },
+  { key: 'sent', label: t('Envoyées', 'Sent') },
 ];
 
 export default function CampaignsScreen() {
@@ -71,8 +72,11 @@ export default function CampaignsScreen() {
       ListEmptyComponent={
         <EmptyState
           icon="paper-plane-outline"
-          title="Aucune campagne"
-          text="Créez vos campagnes depuis le back-office web, elles apparaîtront ici."
+          title={t('Aucune campagne', 'No campaigns')}
+          text={t(
+            'Créez vos campagnes depuis le back-office web, elles apparaîtront ici.',
+            'Create campaigns in the web dashboard and they’ll show up here.',
+          )}
         />
       }
       renderItem={({ item }) => <CampaignRow campaign={item} />}
@@ -86,10 +90,10 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
   const stats = campaign.stats;
   const date =
     campaign.status === 'sent'
-      ? `Envoyée le ${formatDate(campaign.sent_at)}`
+      ? t(`Envoyée le ${formatDate(campaign.sent_at)}`, `Sent ${formatDate(campaign.sent_at)}`)
       : campaign.status === 'scheduled'
-        ? `Prévue le ${formatDate(campaign.scheduled_at)}`
-        : `Modifiée le ${formatDate(campaign.updated_at)}`;
+        ? t(`Prévue le ${formatDate(campaign.scheduled_at)}`, `Scheduled for ${formatDate(campaign.scheduled_at)}`)
+        : t(`Modifiée le ${formatDate(campaign.updated_at)}`, `Edited ${formatDate(campaign.updated_at)}`);
 
   return (
     <Pressable
@@ -117,9 +121,9 @@ function CampaignRow({ campaign }: { campaign: Campaign }) {
       </View>
       {stats && stats.sent > 0 ? (
         <View style={[styles.stats, { borderTopColor: c.border }]}>
-          <MiniStat label="Envoyés" value={formatNumber(stats.sent)} />
-          <MiniStat label="Ouverture" value={formatPercent(stats.open_rate)} />
-          <MiniStat label="Clics" value={formatPercent(stats.click_rate)} />
+          <MiniStat label={t('Envoyés', 'Sent')} value={formatNumber(stats.sent)} />
+          <MiniStat label={t('Ouverture', 'Opens')} value={formatPercent(stats.open_rate)} />
+          <MiniStat label={t('Clics', 'Clicks')} value={formatPercent(stats.click_rate)} />
         </View>
       ) : null}
     </Pressable>

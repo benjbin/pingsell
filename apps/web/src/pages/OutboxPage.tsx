@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Inbox, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
+import { t } from "../lib/i18n";
 import { useAsync } from "../lib/useAsync";
 import { cx, formatRelative } from "../lib/format";
 import type { Tone } from "../lib/constants";
@@ -9,10 +10,10 @@ import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton } fro
 import { EmailPreview } from "../components/EmailPreview";
 
 const MESSAGE_STATUS: Record<MessageStatus, { label: string; tone: Tone }> = {
-  queued: { label: "En file", tone: "amber" },
-  sent: { label: "Envoyé", tone: "green" },
-  failed: { label: "Échec", tone: "red" },
-  bounced: { label: "Rejeté", tone: "red" },
+  queued: { label: t("En file", "Queued"), tone: "amber" },
+  sent: { label: t("Envoyé", "Sent"), tone: "green" },
+  failed: { label: t("Échec", "Failed"), tone: "red" },
+  bounced: { label: t("Rejeté", "Bounced"), tone: "red" },
 };
 
 /** Remove the open-tracking pixel so previewing here doesn't count as an open. */
@@ -33,11 +34,14 @@ export function OutboxPage() {
   return (
     <>
       <PageHeader
-        title="Boîte d'envoi (dev)"
-        description="Les derniers emails « envoyés » par le fournisseur log. Idéal pour tester sans envoyer de vrais emails."
+        title={t("Boîte d'envoi (dev)", "Outbox (dev)")}
+        description={t(
+          "Les derniers emails « envoyés » par le fournisseur log. Idéal pour tester sans envoyer de vrais emails.",
+          "The latest emails “sent” by the log provider. Perfect for testing without sending real emails.",
+        )}
         actions={
           <Button variant="secondary" icon={RefreshCw} onClick={outbox.reload} loading={outbox.loading && !!outbox.data}>
-            Actualiser
+            {t("Actualiser", "Refresh")}
           </Button>
         }
       />
@@ -51,7 +55,9 @@ export function OutboxPage() {
         </div>
       ) : messages.length === 0 ? (
         <Card>
-          <EmptyState icon={Inbox} title="Boîte d'envoi vide" description="Envoyez un email de test depuis une campagne pour le voir apparaître ici." />
+          <EmptyState icon={Inbox} title={t("Boîte d'envoi vide", "Outbox is empty")}
+            description={t("Envoyez un email de test depuis une campagne pour le voir apparaître ici.", "Send a test email from a campaign to see it here.")}
+           />
         </Card>
       ) : (
         <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
@@ -73,8 +79,8 @@ export function OutboxPage() {
                     <p className="mt-0.5 truncate text-sm text-slate-600 dark:text-slate-300">{m.subject}</p>
                     <div className="mt-1.5 flex gap-1.5">
                       <Badge tone={MESSAGE_STATUS[m.status]?.tone ?? "slate"}>{MESSAGE_STATUS[m.status]?.label ?? m.status}</Badge>
-                      {m.campaign_id && <Badge tone="brand">Campagne</Badge>}
-                      {m.automation_id && <Badge tone="blue">Automatisation</Badge>}
+                      {m.campaign_id && <Badge tone="brand">{t("Campagne", "Campaign")}</Badge>}
+                      {m.automation_id && <Badge tone="blue">{t("Automatisation", "Automation")}</Badge>}
                       {!m.campaign_id && !m.automation_id && <Badge tone="slate">Test</Badge>}
                     </div>
                   </button>
@@ -85,7 +91,7 @@ export function OutboxPage() {
           {selected && (
             <Card className="min-w-0">
               <div className="border-b border-slate-100 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                À : <span className="font-medium text-slate-700 dark:text-slate-200">{selected.to_email}</span>
+                {t("À : ", "To: ")}<span className="font-medium text-slate-700 dark:text-slate-200">{selected.to_email}</span>
                 {selected.error && <span className="ml-2 text-red-600 dark:text-red-400">· {selected.error}</span>}
               </div>
               <EmailPreview html={withoutOpenPixel(selected.html ?? "")} subject={selected.subject} height={620} />

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Search, Upload, UserPlus, Users } from "lucide-react";
 import { api } from "../../lib/api";
+import { t } from "../../lib/i18n";
 import { useAsync, useDebounced } from "../../lib/useAsync";
 import { CONTACT_SOURCE, CONTACT_STATUS } from "../../lib/constants";
-import { formatCurrency, formatDate, fullName, initials } from "../../lib/format";
+import { formatCurrency, formatDate, formatNumber, fullName, initials } from "../../lib/format";
 import type { ContactStatus } from "../../lib/types";
 import {
   Avatar,
@@ -58,14 +59,21 @@ export function ContactsPage() {
     <>
       <PageHeader
         title="Contacts"
-        description={contacts.data ? `${contacts.data.total} contact${contacts.data.total > 1 ? "s" : ""}` : "Votre audience"}
+        description={
+          contacts.data
+            ? t(
+                `${contacts.data.total} contact${contacts.data.total > 1 ? "s" : ""}`,
+                `${formatNumber(contacts.data.total)} contact${contacts.data.total === 1 ? "" : "s"}`,
+              )
+            : t("Votre audience", "Your audience")
+        }
         actions={
           <>
             <Button variant="secondary" icon={Upload} onClick={() => setImportOpen(true)}>
-              Importer un CSV
+              {t("Importer un CSV", "Import CSV")}
             </Button>
             <Button icon={UserPlus} onClick={() => setAddOpen(true)}>
-              Ajouter un contact
+              {t("Ajouter un contact", "Add contact")}
             </Button>
           </>
         }
@@ -77,7 +85,7 @@ export function ContactsPage() {
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
             <Input
               className="pl-9"
-              placeholder="Rechercher par nom ou email…"
+              placeholder={t("Rechercher par nom ou email…", "Search by name or email…")}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -86,8 +94,8 @@ export function ContactsPage() {
             />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:flex">
-            <Select value={status} onChange={(e) => resetPage(setStatus)(e.target.value as ContactStatus | "")} className="xl:w-40" aria-label="Statut">
-              <option value="">Tous les statuts</option>
+            <Select value={status} onChange={(e) => resetPage(setStatus)(e.target.value as ContactStatus | "")} className="xl:w-40" aria-label={t("Statut", "Status")}>
+              <option value="">{t("Tous les statuts", "All statuses")}</option>
               {(Object.keys(CONTACT_STATUS) as ContactStatus[]).map((s) => (
                 <option key={s} value={s}>
                   {CONTACT_STATUS[s].label}
@@ -95,15 +103,15 @@ export function ContactsPage() {
               ))}
             </Select>
             <Select value={tag} onChange={(e) => resetPage(setTag)(e.target.value)} className="xl:w-40" aria-label="Tag">
-              <option value="">Tous les tags</option>
-              {(tags.data ?? []).map((t) => (
-                <option key={t.tag} value={t.tag}>
-                  {t.tag} ({t.count})
+              <option value="">{t("Tous les tags", "All tags")}</option>
+              {(tags.data ?? []).map((tc) => (
+                <option key={tc.tag} value={tc.tag}>
+                  {tc.tag} ({tc.count})
                 </option>
               ))}
             </Select>
             <Select value={segmentId} onChange={(e) => resetPage(setSegmentId)(e.target.value)} className="xl:w-44" aria-label="Segment">
-              <option value="">Tous les segments</option>
+              <option value="">{t("Tous les segments", "All segments")}</option>
               {(segments.data ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -121,19 +129,19 @@ export function ContactsPage() {
           <TableSkeleton rows={8} cols={5} />
         ) : contacts.data && contacts.data.data.length === 0 ? (
           hasFilters ? (
-            <EmptyState icon={Search} title="Aucun résultat" description="Aucun contact ne correspond à ces filtres." />
+            <EmptyState icon={Search} title={t("Aucun résultat", "No results")} description={t("Aucun contact ne correspond à ces filtres.", "No contacts match these filters.")} />
           ) : (
             <EmptyState
               icon={Users}
-              title="Aucun contact pour l'instant"
-              description="Importez votre liste existante, connectez Shopify ou ajoutez un contact à la main."
+              title={t("Aucun contact pour l'instant", "No contacts yet")}
+              description={t("Importez votre liste existante, connectez Shopify ou ajoutez un contact à la main.", "Import your existing list, connect Shopify, or add a contact manually.")}
               action={
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button variant="secondary" icon={Upload} onClick={() => setImportOpen(true)}>
-                    Importer un CSV
+                    {t("Importer un CSV", "Import CSV")}
                   </Button>
                   <Button icon={UserPlus} onClick={() => setAddOpen(true)}>
-                    Ajouter un contact
+                    {t("Ajouter un contact", "Add contact")}
                   </Button>
                 </div>
               }
@@ -146,11 +154,11 @@ export function ContactsPage() {
                 <thead className="text-xs font-medium tracking-wide whitespace-nowrap text-slate-500 uppercase dark:text-slate-400">
                   <tr className="border-b border-slate-100 dark:border-slate-800">
                     <th className="px-5 py-3 font-medium">Contact</th>
-                    <th className="px-3 py-3 font-medium">Statut</th>
+                    <th className="px-3 py-3 font-medium">{t("Statut", "Status")}</th>
                     <th className="px-3 py-3 font-medium">Tags</th>
-                    <th className="px-3 py-3 text-right font-medium">Dépensé</th>
+                    <th className="px-3 py-3 text-right font-medium">{t("Dépensé", "Spent")}</th>
                     <th className="px-3 py-3 font-medium">Source</th>
-                    <th className="px-5 py-3 font-medium">Ajouté le</th>
+                    <th className="px-5 py-3 font-medium">{t("Ajouté le", "Added")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -176,8 +184,8 @@ export function ContactsPage() {
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex max-w-[220px] flex-wrap gap-1">
-                          {c.tags.slice(0, 3).map((t) => (
-                            <TagChip key={t} tag={t} />
+                          {c.tags.slice(0, 3).map((tag) => (
+                            <TagChip key={tag} tag={tag} />
                           ))}
                           {c.tags.length > 3 && <span className="text-xs text-slate-400">+{c.tags.length - 3}</span>}
                         </div>

@@ -1,6 +1,7 @@
 import type { AppConfig } from '../config.js';
 import { get, newId, now, run, type DatabaseSync, type Row } from '../db.js';
 import { renderEmail, type MergeContact, type RenderedEmail } from './render.js';
+import { withAccountLang } from '../i18n.js';
 
 export interface Sender {
   name: string;
@@ -34,15 +35,18 @@ export function createMessage(
   input: CreateMessageInput,
 ): { id: string; rendered: RenderedEmail } {
   const id = newId();
-  const rendered = renderEmail({
-    messageId: id,
-    publicUrl: config.publicUrl,
-    subject: input.subject,
-    html: input.html,
-    preheader: input.preheader,
-    contact: input.contact,
-    senderName: input.senderName,
-  });
+  // Footer texts follow the account's language when rendered by the worker.
+  const rendered = withAccountLang(db, input.accountId, () =>
+    renderEmail({
+      messageId: id,
+      publicUrl: config.publicUrl,
+      subject: input.subject,
+      html: input.html,
+      preheader: input.preheader,
+      contact: input.contact,
+      senderName: input.senderName,
+    }),
+  );
   run(
     db,
     `INSERT INTO messages (id, account_id, campaign_id, automation_id, contact_id, to_email, subject, html, status, created_at)

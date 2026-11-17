@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 
+import { t } from '@/lib/i18n';
 import { useColors } from '@/lib/theme';
 
 export default function CampagnesStackLayout() {
@@ -11,11 +12,11 @@ export default function CampagnesStackLayout() {
         headerShadowVisible: false,
         headerTintColor: c.accentText,
         headerTitleStyle: { color: c.text, fontWeight: '700' },
-        headerBackTitle: 'Retour',
+        headerBackTitle: t('Retour', 'Back'),
         contentStyle: { backgroundColor: c.background },
       }}
     >
-      <Stack.Screen name="index" options={{ title: 'Campagnes' }} />
+      <Stack.Screen name="index" options={{ title: t('Campagnes', 'Campaigns') }} />
       <Stack.Screen name="[id]" options={{ title: '' }} />
     </Stack>
   );

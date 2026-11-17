@@ -1,5 +1,7 @@
 import { Alert, Platform } from 'react-native';
 
+import { t } from './i18n';
+
 /** Cross-platform confirmation dialog (Alert on native, window.confirm on web). */
 export function confirmAsync(
   title: string,
@@ -16,7 +18,7 @@ export function confirmAsync(
       title,
       message,
       [
-        { text: 'Annuler', style: 'cancel', onPress: () => resolve(false) },
+        { text: t('Annuler', 'Cancel'), style: 'cancel', onPress: () => resolve(false) },
         { text: confirmLabel, style: options.destructive ? 'destructive' : 'default', onPress: () => resolve(true) },
       ],
       { cancelable: true, onDismiss: () => resolve(false) },

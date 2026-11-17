@@ -12,6 +12,8 @@
  * Merge tags such as {{first_name|}} are kept verbatim and replaced at send time.
  */
 
+import { t, LANG, LOCALE } from "../../lib/i18n";
+
 export type Align = "left" | "center" | "right";
 export type Transform = "none" | "uppercase";
 
@@ -278,16 +280,17 @@ export const DEFAULT_THEME: Theme = {
   borderColor: "#DDE4F0",
 };
 
-export const THEME_SWATCHES: Array<{ name: string; theme: Partial<Theme> }> = [
+export const THEME_SWATCHES: Array<{ key: string; name: string; theme: Partial<Theme> }> = [
   {
+    key: "Neokrome",
     name: "Neokrome",
     theme: { background: "#EEF2F8", surface: "#FFFFFF", text: "#0B214A", body: "", accent: "#145CFF", accentText: "#FFFFFF", headingFont: "outfit", headingWeight: 800, headingTransform: "uppercase", headingSpacing: -0.03, bodyFont: "manrope", radius: 999 },
   },
-  { name: "Encre", theme: { background: "#F3F1EA", surface: "#FFFFFF", text: "#0E0E0C", body: "", accent: "#0E0E0C", accentText: "#FFFFFF", headingFont: "playfair", headingWeight: 600, headingTransform: "none", headingSpacing: -0.01, bodyFont: "helvetica", radius: 0 } },
-  { name: "Vermillon", theme: { background: "#FFF3EE", surface: "#FFFFFF", text: "#1A1A18", body: "", accent: "#FF4D1C", accentText: "#FFFFFF", headingFont: "poppins", headingWeight: 800, headingTransform: "none", headingSpacing: -0.03, bodyFont: "poppins", radius: 12 } },
-  { name: "Forêt", theme: { background: "#EEF2EC", surface: "#FFFFFF", text: "#16241B", body: "", accent: "#1F4D36", accentText: "#FFFFFF", headingFont: "lora", headingWeight: 600, headingTransform: "none", headingSpacing: -0.01, bodyFont: "helvetica", radius: 6 } },
-  { name: "Océan", theme: { background: "#EDF2F7", surface: "#FFFFFF", text: "#0F1E2E", body: "", accent: "#1D4ED8", accentText: "#FFFFFF", headingFont: "inter", headingWeight: 800, headingTransform: "none", headingSpacing: -0.02, bodyFont: "inter", radius: 12 } },
-  { name: "Nuit", theme: { background: "#071733", surface: "#0B214A", text: "#FFFFFF", body: "", accent: "#145CFF", accentText: "#FFFFFF", headingFont: "spacegrotesk", headingWeight: 700, headingTransform: "none", headingSpacing: -0.02, bodyFont: "helvetica", radius: 999 } },
+  { key: "Encre", name: t("Encre", "Ink"), theme: { background: "#F3F1EA", surface: "#FFFFFF", text: "#0E0E0C", body: "", accent: "#0E0E0C", accentText: "#FFFFFF", headingFont: "playfair", headingWeight: 600, headingTransform: "none", headingSpacing: -0.01, bodyFont: "helvetica", radius: 0 } },
+  { key: "Vermillon", name: t("Vermillon", "Vermilion"), theme: { background: "#FFF3EE", surface: "#FFFFFF", text: "#1A1A18", body: "", accent: "#FF4D1C", accentText: "#FFFFFF", headingFont: "poppins", headingWeight: 800, headingTransform: "none", headingSpacing: -0.03, bodyFont: "poppins", radius: 12 } },
+  { key: "Forêt", name: t("Forêt", "Forest"), theme: { background: "#EEF2EC", surface: "#FFFFFF", text: "#16241B", body: "", accent: "#1F4D36", accentText: "#FFFFFF", headingFont: "lora", headingWeight: 600, headingTransform: "none", headingSpacing: -0.01, bodyFont: "helvetica", radius: 6 } },
+  { key: "Océan", name: t("Océan", "Ocean"), theme: { background: "#EDF2F7", surface: "#FFFFFF", text: "#0F1E2E", body: "", accent: "#1D4ED8", accentText: "#FFFFFF", headingFont: "inter", headingWeight: 800, headingTransform: "none", headingSpacing: -0.02, bodyFont: "inter", radius: 12 } },
+  { key: "Nuit", name: t("Nuit", "Night"), theme: { background: "#071733", surface: "#0B214A", text: "#FFFFFF", body: "", accent: "#145CFF", accentText: "#FFFFFF", headingFont: "spacegrotesk", headingWeight: 700, headingTransform: "none", headingSpacing: -0.02, bodyFont: "helvetica", radius: 999 } },
 ];
 
 export const SOCIAL_LABELS: Record<SocialNetwork, string> = {
@@ -298,13 +301,13 @@ export const SOCIAL_LABELS: Record<SocialNetwork, string> = {
   linkedin: "LinkedIn",
   youtube: "YouTube",
   pinterest: "Pinterest",
-  website: "Site web",
+  website: t("Site web", "Website"),
 };
 
 export const MERGE_TAGS: Array<{ tag: string; label: string }> = [
-  { tag: "{{first_name|}}", label: "Prénom" },
-  { tag: "{{last_name|}}", label: "Nom" },
-  { tag: "{{email}}", label: "Email" },
+  { tag: "{{first_name|}}", label: t("Prénom", "First name") },
+  { tag: "{{last_name|}}", label: t("Nom", "Last name") },
+  { tag: "{{email}}", label: t("Email", "Email") },
 ];
 
 // --- Brand kit ------------------------------------------------------------------------------
@@ -354,50 +357,57 @@ export function uid(): string {
   return `b${Date.now().toString(36)}${counter.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-export type BlockCategory = "Contenu" | "Mise en avant" | "Commerce" | "Engagement" | "Mise en page";
+/** Display label of a block category (localized). */
+export type BlockCategory = string;
+
+const CAT_CONTENT = t("Contenu", "Content");
+const CAT_FEATURE = t("Mise en avant", "Highlights");
+const CAT_COMMERCE = t("Commerce", "Commerce");
+const CAT_ENGAGE = t("Engagement", "Engagement");
+const CAT_LAYOUT = t("Mise en page", "Layout");
 
 export const BLOCK_LIBRARY: Array<{ type: BlockType; label: string; hint: string; category: BlockCategory }> = [
-  { type: "heading", label: "Titre", hint: "Grand titre accrocheur", category: "Contenu" },
-  { type: "text", label: "Texte", hint: "Paragraphe mis en forme", category: "Contenu" },
-  { type: "image", label: "Image", hint: "Visuel, avec lien optionnel", category: "Contenu" },
-  { type: "button", label: "Bouton", hint: "Appel à l'action", category: "Contenu" },
-  { type: "buttons", label: "2 boutons", hint: "Action principale + secondaire", category: "Contenu" },
-  { type: "list", label: "Liste", hint: "Puces, numéros, coches", category: "Contenu" },
-  { type: "quote", label: "Citation", hint: "Phrase mise en valeur", category: "Contenu" },
-  { type: "video", label: "Vidéo", hint: "Miniature cliquable", category: "Contenu" },
-  { type: "hero", label: "Bannière", hint: "Image de fond + titre + bouton", category: "Mise en avant" },
-  { type: "imageText", label: "Image + texte", hint: "Côte à côte", category: "Mise en avant" },
-  { type: "gallery", label: "Galerie", hint: "Grille de 2 à 9 images", category: "Mise en avant" },
-  { type: "features", label: "Avantages", hint: "Livraison, retours, paiement…", category: "Mise en avant" },
-  { type: "stats", label: "Chiffres", hint: "Chiffres clés", category: "Mise en avant" },
-  { type: "product", label: "Produit", hint: "Photo, prix, lien", category: "Commerce" },
-  { type: "columns", label: "Colonnes", hint: "2 ou 3 cartes côte à côte", category: "Commerce" },
-  { type: "promo", label: "Code promo", hint: "Code à copier", category: "Commerce" },
-  { type: "countdown", label: "Compte à rebours", hint: "Calculé au moment de l'envoi", category: "Commerce" },
-  { type: "review", label: "Avis client", hint: "Étoiles + témoignage", category: "Commerce" },
-  { type: "survey", label: "Sondage", hint: "Note, emoji, NPS, oui/non", category: "Engagement" },
-  { type: "event", label: "Événement", hint: "Date, lieu, inscription", category: "Engagement" },
-  { type: "faq", label: "FAQ", hint: "Questions / réponses", category: "Engagement" },
-  { type: "apps", label: "Applis", hint: "App Store, Google Play", category: "Engagement" },
-  { type: "signature", label: "Signature", hint: "Photo, nom, fonction", category: "Engagement" },
-  { type: "logo", label: "Logo", hint: "Nom ou image de marque", category: "Mise en page" },
-  { type: "menu", label: "Menu", hint: "Liens de navigation", category: "Mise en page" },
-  { type: "social", label: "Réseaux", hint: "Liens vers vos réseaux", category: "Mise en page" },
-  { type: "divider", label: "Séparateur", hint: "Ligne fine", category: "Mise en page" },
-  { type: "spacer", label: "Espace", hint: "Respiration verticale", category: "Mise en page" },
-  { type: "html", label: "HTML", hint: "Code personnalisé", category: "Mise en page" },
-  { type: "footer", label: "Pied de page", hint: "Mentions + désinscription", category: "Mise en page" },
+  { type: "heading", label: t("Titre", "Heading"), hint: t("Grand titre accrocheur", "Big, catchy headline"), category: CAT_CONTENT },
+  { type: "text", label: t("Texte", "Text"), hint: t("Paragraphe mis en forme", "Formatted paragraph"), category: CAT_CONTENT },
+  { type: "image", label: t("Image", "Image"), hint: t("Visuel, avec lien optionnel", "Visual, with optional link"), category: CAT_CONTENT },
+  { type: "button", label: t("Bouton", "Button"), hint: t("Appel à l'action", "Call to action"), category: CAT_CONTENT },
+  { type: "buttons", label: t("2 boutons", "2 buttons"), hint: t("Action principale + secondaire", "Primary + secondary action"), category: CAT_CONTENT },
+  { type: "list", label: t("Liste", "List"), hint: t("Puces, numéros, coches", "Bullets, numbers, checks"), category: CAT_CONTENT },
+  { type: "quote", label: t("Citation", "Quote"), hint: t("Phrase mise en valeur", "Highlighted sentence"), category: CAT_CONTENT },
+  { type: "video", label: t("Vidéo", "Video"), hint: t("Miniature cliquable", "Clickable thumbnail"), category: CAT_CONTENT },
+  { type: "hero", label: t("Bannière", "Banner"), hint: t("Image de fond + titre + bouton", "Background image + headline + button"), category: CAT_FEATURE },
+  { type: "imageText", label: t("Image + texte", "Image + text"), hint: t("Côte à côte", "Side by side"), category: CAT_FEATURE },
+  { type: "gallery", label: t("Galerie", "Gallery"), hint: t("Grille de 2 à 9 images", "Grid of 2 to 9 images"), category: CAT_FEATURE },
+  { type: "features", label: t("Avantages", "Perks"), hint: t("Livraison, retours, paiement…", "Shipping, returns, payment…"), category: CAT_FEATURE },
+  { type: "stats", label: t("Chiffres", "Stats"), hint: t("Chiffres clés", "Key figures"), category: CAT_FEATURE },
+  { type: "product", label: t("Produit", "Product"), hint: t("Photo, prix, lien", "Photo, price, link"), category: CAT_COMMERCE },
+  { type: "columns", label: t("Colonnes", "Columns"), hint: t("2 ou 3 cartes côte à côte", "2 or 3 cards side by side"), category: CAT_COMMERCE },
+  { type: "promo", label: t("Code promo", "Promo code"), hint: t("Code à copier", "Code to copy"), category: CAT_COMMERCE },
+  { type: "countdown", label: t("Compte à rebours", "Countdown"), hint: t("Calculé au moment de l'envoi", "Calculated at send time"), category: CAT_COMMERCE },
+  { type: "review", label: t("Avis client", "Customer review"), hint: t("Étoiles + témoignage", "Stars + testimonial"), category: CAT_COMMERCE },
+  { type: "survey", label: t("Sondage", "Survey"), hint: t("Note, emoji, NPS, oui/non", "Rating, emoji, NPS, yes/no"), category: CAT_ENGAGE },
+  { type: "event", label: t("Événement", "Event"), hint: t("Date, lieu, inscription", "Date, place, sign-up"), category: CAT_ENGAGE },
+  { type: "faq", label: t("FAQ", "FAQ"), hint: t("Questions / réponses", "Questions & answers"), category: CAT_ENGAGE },
+  { type: "apps", label: t("Applis", "Apps"), hint: t("App Store, Google Play", "App Store, Google Play"), category: CAT_ENGAGE },
+  { type: "signature", label: t("Signature", "Signature"), hint: t("Photo, nom, fonction", "Photo, name, role"), category: CAT_ENGAGE },
+  { type: "logo", label: t("Logo", "Logo"), hint: t("Nom ou image de marque", "Brand name or image"), category: CAT_LAYOUT },
+  { type: "menu", label: t("Menu", "Menu"), hint: t("Liens de navigation", "Navigation links"), category: CAT_LAYOUT },
+  { type: "social", label: t("Réseaux", "Social"), hint: t("Liens vers vos réseaux", "Links to your social accounts"), category: CAT_LAYOUT },
+  { type: "divider", label: t("Séparateur", "Divider"), hint: t("Ligne fine", "Thin line"), category: CAT_LAYOUT },
+  { type: "spacer", label: t("Espace", "Spacer"), hint: t("Respiration verticale", "Vertical breathing room"), category: CAT_LAYOUT },
+  { type: "html", label: t("HTML", "HTML"), hint: t("Code personnalisé", "Custom code"), category: CAT_LAYOUT },
+  { type: "footer", label: t("Pied de page", "Footer"), hint: t("Mentions + désinscription", "Legal notice + unsubscribe"), category: CAT_LAYOUT },
 ];
 
 const emptyColumn = (n: number): ColumnItem => ({
   imageUrl: "",
-  title: `Produit ${n}`,
-  text: "Une courte description.",
+  title: t(`Produit ${n}`, `Product ${n}`),
+  text: t("Une courte description.", "A short description."),
   href: "https://",
-  cta: "Voir",
+  cta: t("Voir", "View"),
 });
 
-export function createBlock(type: BlockType, brand = "Votre marque", kit: BrandKit | null = null): Block {
+export function createBlock(type: BlockType, brand = t("Votre marque", "Your brand"), kit: BrandKit | null = null): Block {
   return brandBlock(rawBlock(type, brand), kit);
 }
 
@@ -407,29 +417,32 @@ function rawBlock(type: BlockType, brand: string): Block {
     case "logo":
       return { id, type, text: brand, imageUrl: "", align: "center", height: 40 };
     case "heading":
-      return { id, type, text: "Un titre qui donne envie", size: "lg", align: "left" };
+      return { id, type, text: t("Un titre qui donne envie", "A headline worth reading"), size: "lg", align: "left" };
     case "text":
       return {
         id,
         type,
-        text: "Bonjour {{first_name|}},<br><br>Racontez ici votre nouveauté, votre offre ou votre histoire. Restez court : une idée, une émotion, une action.",
+        text: t(
+          "Bonjour {{first_name|}},<br><br>Racontez ici votre nouveauté, votre offre ou votre histoire. Restez court : une idée, une émotion, une action.",
+          "Hi {{first_name|}},<br><br>Share your news, your offer or your story here. Keep it short: one idea, one feeling, one action.",
+        ),
         align: "left",
         size: "md",
       };
     case "image":
       return { id, type, src: "", alt: "", href: "", width: 100, align: "center", radius: 12 };
     case "button":
-      return { id, type, label: "Découvrir", href: "https://", align: "left", full: false };
+      return { id, type, label: t("Découvrir", "Discover"), href: "https://", align: "left", full: false };
     case "product":
-      return { id, type, imageUrl: "", title: "Nom du produit", price: "49 €", oldPrice: "", href: "https://", cta: "Voir le produit", layout: "left" };
+      return { id, type, imageUrl: "", title: t("Nom du produit", "Product name"), price: t("49 €", "€49"), oldPrice: "", href: "https://", cta: t("Voir le produit", "View product"), layout: "left" };
     case "columns":
       return { id, type, items: [emptyColumn(1), emptyColumn(2)] };
     case "promo":
-      return { id, type, code: "BIENVENUE10", caption: "-10 % sur votre première commande" };
+      return { id, type, code: t("BIENVENUE10", "WELCOME10"), caption: t("-10 % sur votre première commande", "10% off your first order") };
     case "quote":
-      return { id, type, text: "« Livraison rapide, produit superbe. Je recommande les yeux fermés. »", author: "Camille, cliente depuis 2024" };
+      return { id, type, text: t("« Livraison rapide, produit superbe. Je recommande les yeux fermés. »", "“Fast shipping, gorgeous product. I recommend it without hesitation.”"), author: t("Camille, cliente depuis 2024", "Camille, customer since 2024") };
     case "video":
-      return { id, type, thumbnail: "", href: "https://", caption: "Regarder la vidéo" };
+      return { id, type, thumbnail: "", href: "https://", caption: t("Regarder la vidéo", "Watch the video") };
     case "social":
       return {
         id,
@@ -446,31 +459,31 @@ function rawBlock(type: BlockType, brand: string): Block {
     case "spacer":
       return { id, type, height: 24 };
     case "html":
-      return { id, type, html: '<p style="margin:0;text-align:center;">Votre HTML ici</p>' };
+      return { id, type, html: `<p style="margin:0;text-align:center;">${t("Votre HTML ici", "Your HTML here")}</p>` };
     case "footer":
-      return { id, type, text: `${esc(brand)} · Vous recevez cet email car vous êtes inscrit(e) à notre newsletter.` };
+      return { id, type, text: t(`${esc(brand)} · Vous recevez cet email car vous êtes inscrit(e) à notre newsletter.`, `${esc(brand)} · You are receiving this email because you subscribed to our newsletter.`) };
     case "hero":
-      return { id, type, imageUrl: "", title: "La nouvelle collection est là", text: "Des pièces pensées pour durer, en édition limitée.", cta: "Découvrir", href: "https://", align: "center", overlay: 35 };
+      return { id, type, imageUrl: "", title: t("La nouvelle collection est là", "The new collection is here"), text: t("Des pièces pensées pour durer, en édition limitée.", "Pieces made to last, in a limited edition."), cta: t("Découvrir", "Discover"), href: "https://", align: "center", overlay: 35 };
     case "imageText":
-      return { id, type, imageUrl: "", title: "Fabriqué avec soin", text: "Racontez l'histoire du produit, de l'atelier ou de l'équipe en quelques lignes.", cta: "En savoir plus", href: "https://", layout: "left" };
+      return { id, type, imageUrl: "", title: t("Fabriqué avec soin", "Made with care"), text: t("Racontez l'histoire du produit, de l'atelier ou de l'équipe en quelques lignes.", "Tell the story of the product, the workshop or the team in a few lines."), cta: t("En savoir plus", "Learn more"), href: "https://", layout: "left" };
     case "list":
-      return { id, type, marker: "check", items: [{ text: "Livraison offerte dès 50 €" }, { text: "Retours gratuits sous 30 jours" }, { text: "Paiement en 3 fois sans frais" }] };
+      return { id, type, marker: "check", items: [{ text: t("Livraison offerte dès 50 €", "Free shipping on orders over €50") }, { text: t("Retours gratuits sous 30 jours", "Free returns within 30 days") }, { text: t("Paiement en 3 fois sans frais", "Pay in 3 interest-free installments") }] };
     case "gallery":
       return { id, type, columns: 2, images: [0, 1, 2, 3].map(() => ({ src: "", href: "", alt: "" })) };
     case "buttons":
-      return { id, type, align: "center", primary: { label: "Acheter", href: "https://" }, secondary: { label: "En savoir plus", href: "https://" } };
+      return { id, type, align: "center", primary: { label: t("Acheter", "Shop now"), href: "https://" }, secondary: { label: t("En savoir plus", "Learn more"), href: "https://" } };
     case "stats":
-      return { id, type, items: [{ value: "12 000+", label: "clients satisfaits" }, { value: "4,9/5", label: "note moyenne" }, { value: "48 h", label: "livraison" }] };
+      return { id, type, items: [{ value: t("12 000+", "12,000+"), label: t("clients satisfaits", "happy customers") }, { value: t("4,9/5", "4.9/5"), label: t("note moyenne", "average rating") }, { value: t("48 h", "48h"), label: t("livraison", "delivery") }] };
     case "review":
-      return { id, type, rating: 5, text: "« Qualité impeccable et service client au top. Ma deuxième commande ne tardera pas ! »", author: "Léa M., cliente vérifiée", avatarUrl: "", align: "center" };
+      return { id, type, rating: 5, text: t("« Qualité impeccable et service client au top. Ma deuxième commande ne tardera pas ! »", "“Flawless quality and top-notch customer service. My second order is coming soon!”"), author: t("Léa M., cliente vérifiée", "Léa M., verified customer"), avatarUrl: "", align: "center" };
     case "faq":
       return {
         id,
         type,
         separators: true,
         items: [
-          { q: "Quels sont les délais de livraison ?", a: "Votre commande est expédiée sous 24 h et livrée en 2 à 4 jours ouvrés." },
-          { q: "Puis-je retourner un article ?", a: "Oui, vous disposez de 30 jours pour changer d'avis. Le retour est gratuit." },
+          { q: t("Quels sont les délais de livraison ?", "How long does shipping take?"), a: t("Votre commande est expédiée sous 24 h et livrée en 2 à 4 jours ouvrés.", "Your order ships within 24 hours and arrives in 2 to 4 business days.") },
+          { q: t("Puis-je retourner un article ?", "Can I return an item?"), a: t("Oui, vous disposez de 30 jours pour changer d'avis. Le retour est gratuit.", "Yes, you have 30 days to change your mind. Returns are free.") },
         ],
       };
     case "features":
@@ -480,20 +493,20 @@ function rawBlock(type: BlockType, brand: string): Block {
         layout: "row",
         align: "center",
         items: [
-          { icon: "🚚", title: "Livraison offerte", text: "Dès 50 € d'achat" },
-          { icon: "↩️", title: "Retours gratuits", text: "Sous 30 jours" },
-          { icon: "🔒", title: "Paiement sécurisé", text: "CB, PayPal, Apple Pay" },
+          { icon: "🚚", title: t("Livraison offerte", "Free shipping"), text: t("Dès 50 € d'achat", "On orders over €50") },
+          { icon: "↩️", title: t("Retours gratuits", "Free returns"), text: t("Sous 30 jours", "Within 30 days") },
+          { icon: "🔒", title: t("Paiement sécurisé", "Secure checkout"), text: t("CB, PayPal, Apple Pay", "Card, PayPal, Apple Pay") },
         ],
       };
     case "countdown": {
       const until = new Date(Date.now() + 3 * 86400000);
       until.setMinutes(0, 0, 0);
-      return { id, type, until: until.toISOString(), title: "L'offre se termine dans" };
+      return { id, type, until: until.toISOString(), title: t("L'offre se termine dans", "Offer ends in") };
     }
     case "event":
-      return { id, type, title: "Vente privée en boutique", date: "Samedi 6 décembre", time: "14 h – 19 h", place: "12 rue des Artisans, Paris", cta: "Je m'inscris", href: "https://" };
+      return { id, type, title: t("Vente privée en boutique", "In-store private sale"), date: t("Samedi 6 décembre", "Saturday, December 6"), time: t("14 h – 19 h", "2–7 PM"), place: "12 rue des Artisans, Paris", cta: t("Je m'inscris", "Sign me up"), href: "https://" };
     case "survey":
-      return { id, type, question: "Comment s'est passée votre dernière commande ?", scale: "stars", href: "https://", lowLabel: "Décevant", highLabel: "Parfait" };
+      return { id, type, question: t("Comment s'est passée votre dernière commande ?", "How was your last order?"), scale: "stars", href: "https://", lowLabel: t("Décevant", "Disappointing"), highLabel: t("Parfait", "Perfect") };
     case "apps":
       return { id, type, iosUrl: "https://apps.apple.com/", androidUrl: "https://play.google.com/", align: "center" };
     case "menu":
@@ -503,14 +516,14 @@ function rawBlock(type: BlockType, brand: string): Block {
         align: "center",
         uppercase: true,
         links: [
-          { label: "Nouveautés", href: "https://" },
-          { label: "Femme", href: "https://" },
-          { label: "Homme", href: "https://" },
-          { label: "Promos", href: "https://" },
+          { label: t("Nouveautés", "New in"), href: "https://" },
+          { label: t("Femme", "Women"), href: "https://" },
+          { label: t("Homme", "Men"), href: "https://" },
+          { label: t("Promos", "Sale"), href: "https://" },
         ],
       };
     case "signature":
-      return { id, type, avatarUrl: "", name: "Camille Durand", role: `Fondatrice, ${esc(brand)}`, text: "Merci de faire partie de l'aventure. À très vite !" };
+      return { id, type, avatarUrl: "", name: "Camille Durand", role: t(`Fondatrice, ${esc(brand)}`, `Founder, ${esc(brand)}`), text: t("Merci de faire partie de l'aventure. À très vite !", "Thanks for being part of the journey. See you soon!") };
   }
 }
 
@@ -533,7 +546,7 @@ export interface Preset {
 }
 
 const T = (overrides: Partial<Theme> = {}): Theme => ({ ...DEFAULT_THEME, ...overrides });
-const swatch = (name: string) => THEME_SWATCHES.find((s) => s.name === name)!.theme;
+const swatch = (key: string) => THEME_SWATCHES.find((s) => s.key === key)!.theme;
 const H = (text: string, size: BlockOf<"heading">["size"], align: Align = "left"): Block => ({ id: uid(), type: "heading", text, size, align });
 const P = (text: string, align: Align = "left"): Block => ({ id: uid(), type: "text", text, align, size: "md" });
 const BTN = (label: string, align: Align = "left", full = false): Block => ({ id: uid(), type: "button", label, href: "https://", align, full });
@@ -541,8 +554,8 @@ const BTN = (label: string, align: Align = "left", full = false): Block => ({ id
 export const PRESETS: Preset[] = [
   {
     key: "blank",
-    name: "Page blanche",
-    description: "Logo, titre, texte, bouton.",
+    name: t("Page blanche", "Blank page"),
+    description: t("Logo, titre, texte, bouton.", "Logo, headline, text, button."),
     subject: "",
     preheader: "",
     build: (brand) => ({
@@ -553,27 +566,32 @@ export const PRESETS: Preset[] = [
   },
   {
     key: "sale",
-    name: "Soldes",
-    description: "Grosse remise, code promo, produits.",
-    subject: "{{first_name|}}, -20 % sur tout, ce week-end seulement",
-    preheader: "Vos prix préférés n'ont jamais été aussi bas.",
+    name: t("Soldes", "Sale"),
+    description: t("Grosse remise, code promo, produits.", "Big discount, promo code, products."),
+    subject: t("{{first_name|}}, -20 % sur tout, ce week-end seulement", "{{first_name|}}, 20% off everything, this weekend only"),
+    preheader: t("Vos prix préférés n'ont jamais été aussi bas.", "Your favorites have never been this cheap."),
     build: (brand) => ({
       version: 2,
       theme: T(swatch("Vermillon")),
       blocks: [
         rawBlock("logo", brand),
-        H("-20 %<br>sur tout.", "xl"),
-        P("Bonjour {{first_name|}},<br><br>Ce week-end seulement, toute la boutique passe à <strong>-20 %</strong>. Les quantités sont limitées : vos favoris n'attendront pas."),
-        { id: uid(), type: "promo", code: "SOLDES20", caption: "À saisir au moment du paiement · jusqu'à dimanche minuit" },
+        H(t("-20 %<br>sur tout.", "20% off<br>everything."), "xl"),
+        P(
+          t(
+            "Bonjour {{first_name|}},<br><br>Ce week-end seulement, toute la boutique passe à <strong>-20 %</strong>. Les quantités sont limitées : vos favoris n'attendront pas.",
+            "Hi {{first_name|}},<br><br>This weekend only, the whole store is <strong>20% off</strong>. Quantities are limited: your favorites won't wait.",
+          ),
+        ),
+        { id: uid(), type: "promo", code: t("SOLDES20", "SALE20"), caption: t("À saisir au moment du paiement · jusqu'à dimanche minuit", "Enter it at checkout · until Sunday midnight") },
         {
           id: uid(),
           type: "columns",
           items: [
-            { imageUrl: "", title: "Pull mérinos", text: "<s>89 €</s> 71,20 €", href: "https://", cta: "J'en profite" },
-            { imageUrl: "", title: "Écharpe en laine", text: "<s>45 €</s> 36 €", href: "https://", cta: "J'en profite" },
+            { imageUrl: "", title: t("Pull mérinos", "Merino sweater"), text: t("<s>89 €</s> 71,20 €", "<s>€89</s> €71.20"), href: "https://", cta: t("J'en profite", "Grab it") },
+            { imageUrl: "", title: t("Écharpe en laine", "Wool scarf"), text: t("<s>45 €</s> 36 €", "<s>€45</s> €36"), href: "https://", cta: t("J'en profite", "Grab it") },
           ],
         },
-        BTN("Voir toute la boutique", "center", true),
+        BTN(t("Voir toute la boutique", "Shop the whole store"), "center", true),
         rawBlock("social", brand),
         rawBlock("footer", brand),
       ],
@@ -581,38 +599,43 @@ export const PRESETS: Preset[] = [
   },
   {
     key: "launch",
-    name: "Nouveauté",
-    description: "Lancement de produit, visuel fort.",
-    subject: "Nouveau : on l'attendait depuis longtemps",
-    preheader: "Découvrez-le en avant-première.",
+    name: t("Nouveauté", "Launch"),
+    description: t("Lancement de produit, visuel fort.", "Product launch, bold visual."),
+    subject: t("Nouveau : on l'attendait depuis longtemps", "New: the one we've all been waiting for"),
+    preheader: t("Découvrez-le en avant-première.", "Be the first to see it."),
     build: (brand) => ({
       version: 2,
       theme: T(swatch("Nuit")),
       blocks: [
         rawBlock("logo", brand),
         rawBlock("image", brand),
-        H("La nouvelle collection est là.", "xl", "center"),
-        P("{{first_name|Bonjour}}, vous êtes parmi les premiers à la découvrir. Des pièces pensées pour durer, en quantités limitées.", "center"),
-        BTN("Découvrir la collection", "center"),
+        H(t("La nouvelle collection est là.", "The new collection is here."), "xl", "center"),
+        P(t("{{first_name|Bonjour}}, vous êtes parmi les premiers à la découvrir. Des pièces pensées pour durer, en quantités limitées.", "{{first_name|Hi}}, you're among the first to see it. Pieces made to last, in limited quantities."), "center"),
+        BTN(t("Découvrir la collection", "Discover the collection"), "center"),
         rawBlock("footer", brand),
       ],
     }),
   },
   {
     key: "welcome",
-    name: "Bienvenue",
-    description: "Premier email après inscription.",
-    subject: "Bienvenue {{first_name|}} 👋",
-    preheader: "Un petit cadeau pour bien commencer.",
+    name: t("Bienvenue", "Welcome"),
+    description: t("Premier email après inscription.", "First email after sign-up."),
+    subject: t("Bienvenue {{first_name|}} 👋", "Welcome {{first_name|}} 👋"),
+    preheader: t("Un petit cadeau pour bien commencer.", "A little gift to get you started."),
     build: (brand) => ({
       version: 2,
       theme: T(swatch("Forêt")),
       blocks: [
         rawBlock("logo", brand),
-        H("Bienvenue dans la famille.", "xl"),
-        P(`Bonjour {{first_name|}},<br><br>Merci de nous avoir rejoints ! Chez ${esc(brand)}, on aime les choses bien faites. Pour fêter votre arrivée, voici un petit cadeau :`),
-        { id: uid(), type: "promo", code: "BIENVENUE10", caption: "-10 % sur votre première commande" },
-        BTN("Faire mon premier achat"),
+        H(t("Bienvenue dans la famille.", "Welcome to the family."), "xl"),
+        P(
+          t(
+            `Bonjour {{first_name|}},<br><br>Merci de nous avoir rejoints ! Chez ${esc(brand)}, on aime les choses bien faites. Pour fêter votre arrivée, voici un petit cadeau :`,
+            `Hi {{first_name|}},<br><br>Thanks for joining us! At ${esc(brand)}, we love things done right. To celebrate your arrival, here's a little gift:`,
+          ),
+        ),
+        { id: uid(), type: "promo", code: t("BIENVENUE10", "WELCOME10"), caption: t("-10 % sur votre première commande", "10% off your first order") },
+        BTN(t("Faire mon premier achat", "Make my first purchase")),
         rawBlock("quote", brand),
         rawBlock("footer", brand),
       ],
@@ -620,41 +643,41 @@ export const PRESETS: Preset[] = [
   },
   {
     key: "cart",
-    name: "Panier abandonné",
-    description: "Relance douce avec le produit.",
-    subject: "{{first_name|}}, vous avez oublié quelque chose",
-    preheader: "Votre panier vous attend encore.",
+    name: t("Panier abandonné", "Abandoned cart"),
+    description: t("Relance douce avec le produit.", "Gentle reminder with the product."),
+    subject: t("{{first_name|}}, vous avez oublié quelque chose", "{{first_name|}}, you forgot something"),
+    preheader: t("Votre panier vous attend encore.", "Your cart is still waiting."),
     build: (brand) => ({
       version: 2,
       theme: T(),
       blocks: [
         rawBlock("logo", brand),
-        H("Votre panier vous attend.", "lg"),
-        P("Bonjour {{first_name|}},<br><br>Vous étiez à deux clics de craquer. On a mis votre sélection de côté, mais pas pour longtemps."),
-        { id: uid(), type: "product", imageUrl: "", title: "Votre article", price: "59 €", oldPrice: "", href: "https://", cta: "Finaliser ma commande", layout: "left" },
-        P("Une question ? Répondez simplement à cet email, on vous répond dans la journée."),
+        H(t("Votre panier vous attend.", "Your cart is waiting."), "lg"),
+        P(t("Bonjour {{first_name|}},<br><br>Vous étiez à deux clics de craquer. On a mis votre sélection de côté, mais pas pour longtemps.", "Hi {{first_name|}},<br><br>You were two clicks away. We saved your picks for you, but not for long.")),
+        { id: uid(), type: "product", imageUrl: "", title: t("Votre article", "Your item"), price: t("59 €", "€59"), oldPrice: "", href: "https://", cta: t("Finaliser ma commande", "Complete my order"), layout: "left" },
+        P(t("Une question ? Répondez simplement à cet email, on vous répond dans la journée.", "Questions? Just reply to this email and we'll get back to you the same day.")),
         rawBlock("footer", brand),
       ],
     }),
   },
   {
     key: "newsletter",
-    name: "Newsletter",
-    description: "Édito + plusieurs sujets.",
-    subject: "Les nouvelles du mois chez nous",
-    preheader: "Coulisses, nouveautés et coups de cœur.",
+    name: t("Newsletter", "Newsletter"),
+    description: t("Édito + plusieurs sujets.", "Editorial + several stories."),
+    subject: t("Les nouvelles du mois chez nous", "This month's news from us"),
+    preheader: t("Coulisses, nouveautés et coups de cœur.", "Behind the scenes, new arrivals and favorites."),
     build: (brand) => ({
       version: 2,
       theme: T(swatch("Encre")),
       blocks: [
         rawBlock("logo", brand),
-        H("L'édito", "lg"),
-        P("Bonjour {{first_name|}},<br><br>Ce mois-ci, on vous emmène dans les coulisses de l'atelier et on vous présente nos trois coups de cœur."),
+        H(t("L'édito", "The editorial"), "lg"),
+        P(t("Bonjour {{first_name|}},<br><br>Ce mois-ci, on vous emmène dans les coulisses de l'atelier et on vous présente nos trois coups de cœur.", "Hi {{first_name|}},<br><br>This month, we take you behind the scenes at the workshop and share our three favorites.")),
         rawBlock("divider", brand),
         rawBlock("video", brand),
-        H("Nos coups de cœur", "md"),
+        H(t("Nos coups de cœur", "Our favorites"), "md"),
         { id: uid(), type: "columns", items: [emptyColumn(1), emptyColumn(2), emptyColumn(3)] },
-        BTN("Lire la suite"),
+        BTN(t("Lire la suite", "Read more")),
         rawBlock("social", brand),
         rawBlock("footer", brand),
       ],
@@ -826,7 +849,7 @@ export function mix(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
-const TAG_LABELS: Record<string, string> = { first_name: "Prénom", last_name: "Nom", email: "Email", unsubscribe_url: "Lien désinscription" };
+const TAG_LABELS: Record<string, string> = { first_name: t("Prénom", "First name"), last_name: t("Nom", "Last name"), email: t("Email", "Email"), unsubscribe_url: t("Lien désinscription", "Unsubscribe link") };
 
 /** Canvas only: show merge tags as non-editable chips (outside of HTML tags). */
 function chipify(html: string): string {
@@ -950,7 +973,7 @@ export function countdownParts(iso: string, now: number): Record<CountdownUnit, 
 
 export function formatUntil(iso: string): string {
   const d = new Date(iso);
-  return Number.isFinite(d.getTime()) ? d.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "Date invalide";
+  return Number.isFinite(d.getTime()) ? d.toLocaleString(LOCALE, { dateStyle: "medium", timeStyle: "short" }) : t("Date invalide", "Invalid date");
 }
 
 const HEADING_SIZES = { xl: 48, lg: 34, md: 22 } as const;
@@ -1011,7 +1034,7 @@ function inner(block: Block, ctx: Ctx): string {
       return row(`<div style="${style}">${field(ctx, "text", block.text, true, linkColor(theme))}</div>`, pad(ctx, block, 10, 10));
     }
     case "image": {
-      if (!block.src) return ctx.canvas ? row(placeholder(ctx, 220, "Glissez une image ici<br>ou choisissez-la dans le panneau de droite"), pad(ctx, block, 12, 12)) : "";
+      if (!block.src) return ctx.canvas ? row(placeholder(ctx, 220, t("Glissez une image ici<br>ou choisissez-la dans le panneau de droite", "Drop an image here<br>or pick one in the right panel")), pad(ctx, block, 12, 12)) : "";
       const w = Math.round((contentWidth * (block.width ?? 100)) / 100);
       const radius = block.radius ?? (block.rounded === false ? 0 : 12);
       const bw = block.borderWidth ?? 0;
@@ -1048,7 +1071,7 @@ function inner(block: Block, ctx: Ctx): string {
       const img = block.imageUrl
         ? `<img src="${esc(block.imageUrl)}" alt="${esc(block.title)}" width="${imgW}" style="display:block;width:100%;max-width:${imgW}px;height:auto;border:0;border-radius:${Math.max(0, radius - 4)}px;">`
         : ctx.canvas
-          ? placeholder(ctx, layout === "stack" ? 260 : 200, "Photo")
+          ? placeholder(ctx, layout === "stack" ? 260 : 200, t("Photo", "Photo"))
           : "";
       const old = block.oldPrice ? ` <span style="font-size:14px;font-weight:normal;text-decoration:line-through;color:${muted};">${inlineField(ctx, "oldPrice", block.oldPrice)}</span>` : "";
       const info = `<p style="margin:0 0 6px;font-family:${hFont()};font-size:22px;line-height:1.2;font-weight:${theme.headingWeight};color:${theme.text};">${inlineField(ctx, "title", block.title)}</p>
@@ -1073,7 +1096,7 @@ ${buttonHtml(ctx, block.cta, block.href, false, "cta")}`;
           const img = it.imageUrl
             ? `<img src="${esc(it.imageUrl)}" alt="${esc(it.title)}" width="${imgW}" style="display:block;width:100%;height:auto;border:0;border-radius:${block.imageRadius ?? 10}px;">`
             : ctx.canvas
-              ? placeholder(ctx, Math.round(imgW * 0.9), "Image")
+              ? placeholder(ctx, Math.round(imgW * 0.9), t("Image", "Image"))
               : "";
           const link =
             block.showCta !== false && it.cta
@@ -1096,7 +1119,7 @@ ${link}
       const border = `1.5px ${block.borderStyle ?? "dashed"} ${block.borderColor || theme.accent}`;
       return row(
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"${block.bg ? ` bgcolor="${block.bg}"` : ""} style="${css({ border, "border-radius": "14px", background: block.bg })}"><tr><td align="center" style="padding:22px 16px;font-family:${bFont()};">
-<p style="margin:0 0 6px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:${muted};">${inlineField(ctx, "label", block.label ?? "Votre code")}</p>
+<p style="margin:0 0 6px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:${muted};">${inlineField(ctx, "label", block.label ?? t("Votre code", "Your code"))}</p>
 <p style="margin:0;font-family:'Courier New',monospace;font-size:${block.codeSize ?? 28}px;font-weight:bold;letter-spacing:0.12em;color:${block.codeColor || theme.text};">${inlineField(ctx, "code", block.code)}</p>
 <p style="margin:8px 0 0;font-size:13px;color:${muted};">${inlineField(ctx, "caption", block.caption)}</p>
 </td></tr></table>`,
@@ -1120,7 +1143,7 @@ ${link}
       const thumb = block.thumbnail
         ? `<a href="${safeHref(block.href)}" target="_blank" style="display:block;"><img src="${esc(block.thumbnail)}" alt="${esc(block.caption)}" width="${contentWidth}" style="display:block;width:100%;max-width:${contentWidth}px;height:auto;border:0;border-radius:${radius}px;"></a>`
         : ctx.canvas
-          ? placeholder(ctx, 260, "▶&nbsp; Miniature de la vidéo")
+          ? placeholder(ctx, 260, t("▶&nbsp; Miniature de la vidéo", "▶&nbsp; Video thumbnail"))
           : "";
       return row(
         `${thumb}<p style="margin:12px 0 0;text-align:center;font-family:${bFont()};font-size:14px;font-weight:bold;"><a href="${safeHref(block.href)}" target="_blank" style="color:${block.captionColor || linkColor(theme)};text-decoration:none;">▶&nbsp; ${inlineField(ctx, "caption", block.caption)}</a></p>`,
@@ -1141,7 +1164,7 @@ ${link}
         .filter((l) => l.url.trim() && l.url.trim() !== "https://")
         .map((l) => `<a href="${safeHref(l.url)}" target="_blank" style="${style};font-family:${bFont()};font-size:${size}px;font-weight:bold;text-decoration:none;">${SOCIAL_LABELS[l.network]}</a>`)
         .join("");
-      if (!links) return ctx.canvas ? row(placeholder(ctx, 60, "Ajoutez vos liens de réseaux sociaux"), pad(ctx, block, 12, 12)) : "";
+      if (!links) return ctx.canvas ? row(placeholder(ctx, 60, t("Ajoutez vos liens de réseaux sociaux", "Add your social media links")), pad(ctx, block, 12, 12)) : "";
       return row(`<div style="text-align:${block.align};">${links}</div>`, pad(ctx, block, 16, 16));
     }
     case "divider": {
@@ -1153,12 +1176,12 @@ ${link}
     case "spacer":
       return `<div style="height:${Math.max(4, Math.min(200, block.height))}px;line-height:1px;font-size:0;">&nbsp;</div>`;
     case "html":
-      return row(block.html || (ctx.canvas ? placeholder(ctx, 60, "Bloc HTML vide") : ""), pad(ctx, block, 12, 12));
+      return row(block.html || (ctx.canvas ? placeholder(ctx, 60, t("Bloc HTML vide", "Empty HTML block")) : ""), pad(ctx, block, 12, 12));
     case "footer": {
       const color = block.color || muted;
       const lc = block.linkColor || color;
       return row(
-        `<div style="border-top:1px solid ${mix(theme.text, 0.12)};padding-top:24px;font-family:${bFont()};font-size:${block.fontSize ?? 12}px;line-height:1.6;color:${color};text-align:${block.align ?? "center"};">${field(ctx, "text", block.text, true, lc)}<br><a href="{{unsubscribe_url}}" style="color:${lc};text-decoration:underline;">${inlineField(ctx, "unsubscribeLabel", block.unsubscribeLabel ?? "Se désinscrire")}</a></div>`,
+        `<div style="border-top:1px solid ${mix(theme.text, 0.12)};padding-top:24px;font-family:${bFont()};font-size:${block.fontSize ?? 12}px;line-height:1.6;color:${color};text-align:${block.align ?? "center"};">${field(ctx, "text", block.text, true, lc)}<br><a href="{{unsubscribe_url}}" style="color:${lc};text-decoration:underline;">${inlineField(ctx, "unsubscribeLabel", block.unsubscribeLabel ?? t("Se désinscrire", "Unsubscribe"))}</a></div>`,
         pad(ctx, block, 28, 36),
       );
     }
@@ -1188,7 +1211,7 @@ ${link}
       const img = block.imageUrl
         ? `<img src="${esc(block.imageUrl)}" alt="${esc(block.title)}" width="${imgW}" style="display:block;width:100%;max-width:${imgW}px;height:auto;border:0;border-radius:${block.imageRadius ?? 12}px;">`
         : ctx.canvas
-          ? placeholder(ctx, Math.round(imgW * 0.9), "Image")
+          ? placeholder(ctx, Math.round(imgW * 0.9), t("Image", "Image"))
           : "";
       const text = `<p style="margin:0 0 8px;font-family:${hFont()};font-size:22px;line-height:1.2;font-weight:${theme.headingWeight};${theme.headingTransform === "uppercase" ? "text-transform:uppercase;" : ""}color:${theme.text};">${inlineField(ctx, "title", block.title)}</p>
 <div style="margin:0 0 16px;font-family:${bFont()};font-size:${theme.bodySize - 1}px;line-height:${theme.bodyLineHeight};color:${bodyColor(theme)};">${field(ctx, "text", block.text, true, linkColor(theme))}</div>
@@ -1221,7 +1244,7 @@ ${block.showCta !== false ? buttonHtml(ctx, block.cta, block.href, false, "cta")
         const tag = im.src
           ? `<img src="${esc(im.src)}" alt="${esc(im.alt)}" width="${w}" style="display:block;width:100%;height:auto;border:0;border-radius:${block.radius ?? 10}px;">`
           : ctx.canvas
-            ? placeholder(ctx, w, `Image ${i + 1}`)
+            ? placeholder(ctx, w, t(`Image ${i + 1}`, `Image ${i + 1}`))
             : "";
         const inner = im.href && im.src ? `<a href="${safeHref(im.href)}" target="_blank">${tag}</a>` : tag;
         const col = i % n;
@@ -1299,11 +1322,11 @@ ${block.showCta !== false ? buttonHtml(ctx, block.cta, block.href, false, "cta")
       const boxBg = block.boxBg || mix(theme.text, 0.06);
       const live = countdownParts(block.until, Date.now());
       const units: Array<[CountdownUnit, string]> = [
-        ["days", "jours"],
-        ["hours", "heures"],
-        ["minutes", "minutes"],
+        ["days", t("jours", "days")],
+        ["hours", t("heures", "hours")],
+        ["minutes", t("minutes", "minutes")],
       ];
-      if (block.showSeconds) units.push(["seconds", "secondes"]);
+      if (block.showSeconds) units.push(["seconds", t("secondes", "seconds")]);
       const value = (u: CountdownUnit) => (ctx.canvas ? live[u] : `{{countdown_${u}|${block.until}}}`);
       const cells = units
         .map(
@@ -1321,7 +1344,7 @@ ${block.showCta !== false ? buttonHtml(ctx, block.cta, block.href, false, "cta")
       const line = (emoji: string, path: string, v: string) => (v || ctx.canvas ? `<p style="margin:0 0 6px;font-family:${bFont()};font-size:15px;line-height:1.5;color:${bodyColor(theme)};">${emoji}&nbsp; ${inlineField(ctx, path, v)}</p>` : "");
       return row(
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"${block.cardBg ? ` bgcolor="${block.cardBg}"` : ""} style="${css({ background: block.cardBg || mix(ac, 0.06), "border-radius": "16px", "border-left": `4px solid ${ac}` })}"><tr><td style="padding:22px 24px;">
-<p style="margin:0 0 6px;font-family:${bFont()};font-size:11px;font-weight:bold;letter-spacing:0.16em;text-transform:uppercase;color:${ac};">Événement</p>
+<p style="margin:0 0 6px;font-family:${bFont()};font-size:11px;font-weight:bold;letter-spacing:0.16em;text-transform:uppercase;color:${ac};">${t("Événement", "Event")}</p>
 <p style="margin:0 0 14px;font-family:${hFont()};font-size:24px;line-height:1.2;font-weight:${theme.headingWeight};${theme.headingTransform === "uppercase" ? "text-transform:uppercase;" : ""}color:${theme.text};">${inlineField(ctx, "title", block.title)}</p>
 ${line("📅", "date", block.date)}${line("🕒", "time", block.time)}${line("📍", "place", block.place)}
 <div style="height:12px;line-height:12px;font-size:0;">&nbsp;</div>
@@ -1342,7 +1365,7 @@ ${buttonHtml(ctx, block.cta, block.href, false, "cta", { bg: block.accent })}
           : block.scale === "nps"
             ? Array.from({ length: 11 }, (_, i) => [String(i), String(i)] as [string, string])
             : block.scale === "yesno"
-              ? [["oui", "Oui"], ["non", "Non"]]
+              ? [["oui", t("Oui", "Yes")], ["non", t("Non", "No")]]
               : [["1", "★"], ["2", "★★"], ["3", "★★★"], ["4", "★★★★"], ["5", "★★★★★"]];
       const cell = ([v, label]: [string, string]) => {
         if (block.scale === "emoji") return `<td style="padding:0 4px;"><a href="${href(v)}" target="_blank" style="display:inline-block;font-size:34px;line-height:1;text-decoration:none;">${label}</a></td>`;
@@ -1369,8 +1392,8 @@ ${buttonHtml(ctx, block.cta, block.href, false, "cta", { bg: block.accent })}
         url.trim() && url.trim() !== "https://"
           ? `<td style="padding:4px;"><a href="${safeHref(url)}" target="_blank" style="display:inline-block;background:${bg};border-radius:10px;padding:8px 16px 8px 14px;text-decoration:none;color:#FFFFFF;font-family:Helvetica,Arial,sans-serif;text-align:left;">${icon ? `<span style="font-size:20px;line-height:1;vertical-align:middle;">${icon}</span>&nbsp;` : ""}<span style="display:inline-block;vertical-align:middle;"><span style="display:block;font-size:9px;line-height:1.2;letter-spacing:0.04em;">${small}</span><span style="display:block;font-size:16px;line-height:1.15;font-weight:bold;">${big}</span></span></a></td>`
           : "";
-      const cells = badge(block.iosUrl, "Télécharger dans", "l'App Store", "") + badge(block.androidUrl, "Disponible sur", "Google Play", "▶");
-      if (!cells) return ctx.canvas ? row(placeholder(ctx, 60, "Ajoutez les liens de vos applis"), pad(ctx, block, 12, 12)) : "";
+      const cells = badge(block.iosUrl, t("Télécharger dans", "Download on the"), t("l'App Store", "App Store"), "") + badge(block.androidUrl, t("Disponible sur", "Get it on"), "Google Play", "▶");
+      if (!cells) return ctx.canvas ? row(placeholder(ctx, 60, t("Ajoutez les liens de vos applis", "Add your app links")), pad(ctx, block, 12, 12)) : "";
       return row(`<table role="presentation" cellpadding="0" cellspacing="0" border="0"${block.align === "left" ? "" : ` align="${block.align}"`} style="${block.align === "center" ? "margin:0 auto;" : block.align === "right" ? "margin-left:auto;" : ""}"><tr>${cells}</tr></table>`, pad(ctx, block, 16, 16));
     }
     case "menu": {
@@ -1474,12 +1497,12 @@ export function renderEmail(design: Design, preheader = ""): string {
   const muted = mutedColor(theme);
   const footer = hasFooter
     ? ""
-    : row(`<div style="font-family:${fontStack(theme.bodyFont, "helvetica")};font-size:12px;color:${muted};text-align:center;"><a href="{{unsubscribe_url}}" style="color:${muted};">Se désinscrire</a></div>`, `24px ${theme.padX}px 32px`);
+    : row(`<div style="font-family:${fontStack(theme.bodyFont, "helvetica")};font-size:12px;color:${muted};text-align:center;"><a href="{{unsubscribe_url}}" style="color:${muted};">${t("Se désinscrire", "Unsubscribe")}</a></div>`, `24px ${theme.padX}px 32px`);
   const fonts = googleFontsHref(usedWebFonts(design));
   const faces = fontFaceCss(theme, usedFontKeys(design));
   const border = theme.borderWidth > 0 ? `border:${theme.borderWidth}px solid ${theme.borderColor};` : "";
   return `<!DOCTYPE html>
-<html lang="fr">
+<html lang="${LANG}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1555,13 +1578,13 @@ export function blockSummary(block: Block): string {
     case "video":
       return block.caption;
     case "image":
-      return block.alt || (block.src ? block.src.split("/").pop() ?? "" : "Sans image");
+      return block.alt || (block.src ? block.src.split("/").pop() ?? "" : t("Sans image", "No image"));
     case "social":
       return block.links.map((l) => SOCIAL_LABELS[l.network]).join(", ");
     case "spacer":
       return `${block.height} px`;
     case "html":
-      return "Code personnalisé";
+      return t("Code personnalisé", "Custom code");
     case "hero":
     case "imageText":
     case "event":
@@ -1569,7 +1592,7 @@ export function blockSummary(block: Block): string {
     case "list":
       return block.items.map((i) => strip(i.text)).join(" · ");
     case "gallery":
-      return `${block.images.length} images`;
+      return t(`${block.images.length} images`, `${block.images.length} ${block.images.length === 1 ? "image" : "images"}`);
     case "buttons":
       return `${block.primary.label} · ${block.secondary.label}`;
     case "stats":

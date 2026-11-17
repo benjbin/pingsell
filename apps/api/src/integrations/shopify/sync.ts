@@ -4,6 +4,7 @@ import type { ShopifyClient } from './client.js';
 import { cleanEmail, parseTags, toNumber, upsertShopifyContact } from './contacts.js';
 import { findContactByEmail, insertHistoricalOrderEvent, orderAlreadyRecorded, updateIntegration } from './store.js';
 import type { SyncResult } from './types.js';
+import { t } from '../../i18n.js';
 
 const PAGE_SIZE = 100; // keeps the query cost well under the 1000-point limit
 const ORDER_HISTORY_DAYS = 365; // Shopify only returns 60 days without read_all_orders anyway
@@ -202,7 +203,7 @@ export async function runFullSync(ctx: IntegrationContext, accountId: string, cl
 
 export class SyncInProgressError extends Error {
   constructor() {
-    super('Une synchronisation Shopify est déjà en cours');
+    super(t('Une synchronisation Shopify est déjà en cours', 'A Shopify sync is already in progress'));
     this.name = 'SyncInProgressError';
   }
 }

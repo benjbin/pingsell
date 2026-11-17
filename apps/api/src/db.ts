@@ -369,6 +369,8 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   );
   `,
   },
+  // v9 — account language (fr | en) for texts generated outside a request: worker, campaign emails.
+  `ALTER TABLE accounts ADD COLUMN language TEXT NOT NULL DEFAULT 'fr';`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {
@@ -395,7 +397,7 @@ export function migrate(db: DatabaseSync): void {
         db.exec(sql);
         if (foreignKeysOff) {
           const broken = db.prepare('PRAGMA foreign_key_check').all();
-          if (broken.length) throw new Error(`Migration ${version + 1} : ${broken.length} clé(s) étrangère(s) invalide(s)`);
+          if (broken.length) throw new Error(`Migration ${version + 1}: ${broken.length} invalid foreign key(s)`);
         }
         db.exec(`PRAGMA user_version = ${version + 1}`);
       });

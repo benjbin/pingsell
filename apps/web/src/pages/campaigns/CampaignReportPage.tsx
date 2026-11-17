@@ -8,8 +8,9 @@ import { formatDateTime, formatNumber, formatPercent } from "../../lib/format";
 import { Badge, Card, CardHeader, EmptyState, ErrorState, PageHeader, Skeleton, StatCard } from "../../components/ui/primitives";
 import { SERIES_COLORS, TimeAreaChart } from "../../components/charts";
 import { EmailPreview } from "../../components/EmailPreview";
+import { t, LOCALE } from "../../lib/i18n";
 
-const hourFmt = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const hourFmt = new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 function formatHour(v: string): string {
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? v : hourFmt.format(d);
@@ -26,11 +27,11 @@ export function CampaignReportPage() {
   // Poll while the worker is sending.
   useEffect(() => {
     if (!inProgress) return;
-    const t = setInterval(() => {
+    const timer = setInterval(() => {
       void campaign.reload();
       void stats.reload();
     }, 3000);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inProgress]);
 
@@ -38,10 +39,10 @@ export function CampaignReportPage() {
 
   const funnel = s
     ? [
-        { label: "Destinataires", value: s.recipients, ratio: 1, color: "bg-slate-400" },
-        { label: "Envoyés", value: s.sent, ratio: s.recipients ? s.sent / s.recipients : 0, color: "bg-brand-600" },
-        { label: "Ouverts", value: s.opened, ratio: s.sent ? s.opened / s.sent : 0, color: "bg-sky-500" },
-        { label: "Cliqués", value: s.clicked, ratio: s.sent ? s.clicked / s.sent : 0, color: "bg-emerald-500" },
+        { label: t("Destinataires", "Recipients"), value: s.recipients, ratio: 1, color: "bg-slate-400" },
+        { label: t("Envoyés", "Sent"), value: s.sent, ratio: s.recipients ? s.sent / s.recipients : 0, color: "bg-brand-600" },
+        { label: t("Ouverts", "Opened"), value: s.opened, ratio: s.sent ? s.opened / s.sent : 0, color: "bg-sky-500" },
+        { label: t("Cliqués", "Clicked"), value: s.clicked, ratio: s.sent ? s.clicked / s.sent : 0, color: "bg-emerald-500" },
       ]
     : [];
 
@@ -50,7 +51,7 @@ export function CampaignReportPage() {
       <PageHeader
         back={
           <Link to="/campagnes" className="mb-2 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
-            <ArrowLeft className="size-4" /> Campagnes
+            <ArrowLeft className="size-4" /> {t("Campagnes", "Campaigns")}
           </Link>
         }
         title={
@@ -65,7 +66,7 @@ export function CampaignReportPage() {
             <Skeleton className="h-8 w-64" />
           )
         }
-        description={c ? (c.sent_at ? `Envoyée le ${formatDateTime(c.sent_at)}` : c.subject) : undefined}
+        description={c ? (c.sent_at ? t(`Envoyée le ${formatDateTime(c.sent_at)}`, `Sent ${formatDateTime(c.sent_at)}`) : c.subject) : undefined}
       />
 
       {inProgress && (
@@ -74,7 +75,7 @@ export function CampaignReportPage() {
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-amber-400 opacity-75" />
             <span className="relative inline-flex size-2.5 rounded-full bg-amber-500" />
           </span>
-          Envoi en cours… les statistiques se mettent à jour automatiquement.
+          {t("Envoi en cours… les statistiques se mettent à jour automatiquement.", "Sending… stats update automatically.")}
         </div>
       )}
 
@@ -85,30 +86,30 @@ export function CampaignReportPage() {
       )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Destinataires" icon={Users} loading={!s} value={formatNumber(s?.recipients)} />
-        <StatCard label="Envoyés" icon={Send} loading={!s} value={formatNumber(s?.sent)} />
-        <StatCard label="Ouvertures" icon={MailOpen} loading={!s} value={formatPercent(s?.open_rate)} hint={s && `${formatNumber(s.opened)} contacts`} />
-        <StatCard label="Clics" icon={MousePointerClick} loading={!s} value={formatPercent(s?.click_rate)} hint={s && `${formatNumber(s.clicked)} contacts`} />
-        <StatCard label="Désabonnements" icon={Ban} loading={!s} value={formatNumber(s?.unsubscribed)} />
-        <StatCard label="Échecs" icon={TriangleAlert} loading={!s} value={formatNumber(s?.failed)} />
+        <StatCard label={t("Destinataires", "Recipients")} icon={Users} loading={!s} value={formatNumber(s?.recipients)} />
+        <StatCard label={t("Envoyés", "Sent")} icon={Send} loading={!s} value={formatNumber(s?.sent)} />
+        <StatCard label={t("Ouvertures", "Opens")} icon={MailOpen} loading={!s} value={formatPercent(s?.open_rate)} hint={s && t(`${formatNumber(s.opened)} contacts`, `${formatNumber(s.opened)} ${s.opened === 1 ? "contact" : "contacts"}`)} />
+        <StatCard label={t("Clics", "Clicks")} icon={MousePointerClick} loading={!s} value={formatPercent(s?.click_rate)} hint={s && t(`${formatNumber(s.clicked)} contacts`, `${formatNumber(s.clicked)} ${s.clicked === 1 ? "contact" : "contacts"}`)} />
+        <StatCard label={t("Désabonnements", "Unsubscribes")} icon={Ban} loading={!s} value={formatNumber(s?.unsubscribed)} />
+        <StatCard label={t("Échecs", "Failed")} icon={TriangleAlert} loading={!s} value={formatNumber(s?.failed)} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
-          <CardHeader title="Chronologie" description="Ouvertures et clics par heure" />
+          <CardHeader title={t("Chronologie", "Timeline")} description={t("Ouvertures et clics par heure", "Opens and clicks per hour")} />
           <div className="p-4 sm:p-5">
             {!s ? (
               <Skeleton className="h-[280px] w-full" />
             ) : s.timeline.length === 0 ? (
-              <EmptyState icon={MailOpen} title="Pas encore d'ouvertures" description="Les ouvertures et clics apparaîtront ici dès les premières interactions." />
+              <EmptyState icon={MailOpen} title={t("Pas encore d'ouvertures", "No opens yet")} description={t("Les ouvertures et clics apparaîtront ici dès les premières interactions.", "Opens and clicks will show up here as soon as people interact.")} />
             ) : (
               <TimeAreaChart
                 data={s.timeline}
                 xKey="hour"
                 formatX={formatHour}
                 series={[
-                  { key: "opens", label: "Ouvertures", color: SERIES_COLORS.opened },
-                  { key: "clicks", label: "Clics", color: SERIES_COLORS.clicked },
+                  { key: "opens", label: t("Ouvertures", "Opens"), color: SERIES_COLORS.opened },
+                  { key: "clicks", label: t("Clics", "Clicks"), color: SERIES_COLORS.clicked },
                 ]}
               />
             )}
@@ -116,7 +117,7 @@ export function CampaignReportPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Entonnoir" />
+          <CardHeader title={t("Entonnoir", "Funnel")} />
           <div className="space-y-4 p-5">
             {!s
               ? [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-9 w-full" />)
@@ -135,7 +136,7 @@ export function CampaignReportPage() {
                 ))}
             {s && s.sent > 0 && s.failed === 0 && (
               <p className="flex items-center gap-1.5 pt-2 text-xs text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="size-3.5" /> Aucun échec de livraison
+                <CheckCircle2 className="size-3.5" /> {t("Aucun échec de livraison", "No delivery failures")}
               </p>
             )}
           </div>

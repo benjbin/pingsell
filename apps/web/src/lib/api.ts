@@ -1,4 +1,5 @@
 // Typed client for the Pingsell REST API (see SPEC.md, base /api/v1).
+import { LANG, t } from "./i18n";
 import type {
   Analytics,
   ApiKey,
@@ -98,7 +99,7 @@ function buildQuery(query?: Query): string {
 }
 
 async function request<T>(method: string, path: string, body?: unknown, query?: Query): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = { Accept: "application/json", "Accept-Language": LANG };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -111,7 +112,7 @@ async function request<T>(method: string, path: string, body?: unknown, query?: 
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new ApiError(0, `Impossible de joindre l'API (${API_URL}). Vérifiez qu'elle est démarrée.`);
+    throw new ApiError(0, t(`Impossible de joindre l'API (${API_URL}). Vérifiez qu'elle est démarrée.`, `Can't reach the API (${API_URL}). Make sure it's running.`));
   }
 
   if (res.status === 204) return undefined as T;
@@ -129,7 +130,7 @@ async function request<T>(method: string, path: string, body?: unknown, query?: 
     const message =
       json && typeof json === "object" && "error" in json && typeof (json as { error: unknown }).error === "string"
         ? (json as { error: string }).error
-        : `Erreur ${res.status}`;
+        : t(`Erreur ${res.status}`, `Error ${res.status}`);
     throw new ApiError(res.status, message);
   }
   return json as T;
@@ -321,5 +322,5 @@ export const api = {
 
 export function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
-  return "Une erreur inattendue est survenue.";
+  return t("Une erreur inattendue est survenue.", "An unexpected error occurred.");
 }

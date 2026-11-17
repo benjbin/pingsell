@@ -8,6 +8,7 @@ import { formatCurrency, formatNumber, fullName, initials } from "../../lib/form
 import type { SegmentPreview, SegmentRules } from "../../lib/types";
 import { Avatar, Badge, Button, Card, CardHeader, ErrorState, Field, Input, PageHeader, Skeleton, Spinner } from "../../components/ui/primitives";
 import { useToast } from "../../components/ui/Toast";
+import { t } from "../../lib/i18n";
 import { RuleBuilder, defaultCondition, isConditionComplete } from "./RuleBuilder";
 
 const INITIAL_RULES: SegmentRules = { match: "all", conditions: [defaultCondition("tags")] };
@@ -52,14 +53,14 @@ export function SegmentEditorPage() {
 
   async function save() {
     if (!name.trim()) {
-      toast.error("Donnez un nom à votre segment");
+      toast.error(t("Donnez un nom à votre segment", "Give your segment a name"));
       return;
     }
     setSaving(true);
     try {
       if (isNew) await api.segments.create({ name: name.trim(), rules: completeRules });
       else await api.segments.update(id, { name: name.trim(), rules: completeRules });
-      toast.success(isNew ? "Segment créé" : "Segment enregistré");
+      toast.success(isNew ? t("Segment créé", "Segment created") : t("Segment enregistré", "Segment saved"));
       navigate("/segments");
     } catch (err) {
       toast.error(err);
@@ -75,14 +76,14 @@ export function SegmentEditorPage() {
       <PageHeader
         back={
           <Link to="/segments" className="mb-2 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200">
-            <ArrowLeft className="size-4" /> Segments
+            <ArrowLeft className="size-4" /> {t("Segments", "Segments")}
           </Link>
         }
-        title={isNew ? "Nouveau segment" : name || "Segment"}
-        description="Définissez des règles : le segment se met à jour automatiquement."
+        title={isNew ? t("Nouveau segment", "New segment") : name || t("Segment", "Segment")}
+        description={t("Définissez des règles : le segment se met à jour automatiquement.", "Set rules: the segment updates automatically.")}
         actions={
           <Button icon={Save} onClick={save} loading={saving} disabled={!isNew && existing.loading}>
-            Enregistrer
+            {t("Enregistrer", "Save")}
           </Button>
         }
       />
@@ -90,17 +91,17 @@ export function SegmentEditorPage() {
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
         <div className="space-y-6 xl:col-span-3">
           <Card className="p-5">
-            <Field label="Nom du segment" htmlFor="seg-name">
-              <Input id="seg-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="ex : Clients VIP" />
+            <Field label={t("Nom du segment", "Segment name")} htmlFor="seg-name">
+              <Input id="seg-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("ex : Clients VIP", "e.g. VIP customers")} />
             </Field>
           </Card>
           <Card>
-            <CardHeader title="Règles" description="Combinez autant de conditions que nécessaire." />
+            <CardHeader title={t("Règles", "Rules")} description={t("Combinez autant de conditions que nécessaire.", "Combine as many conditions as you need.")} />
             <div className="p-5">
               {!isNew && existing.loading ? (
                 <Skeleton className="h-32 w-full" />
               ) : (
-                <RuleBuilder rules={rules} onChange={setRules} tags={(tags.data ?? []).map((t) => t.tag)} />
+                <RuleBuilder rules={rules} onChange={setRules} tags={(tags.data ?? []).map((tg) => tg.tag)} />
               )}
             </div>
           </Card>
@@ -110,7 +111,7 @@ export function SegmentEditorPage() {
           <Card className="xl:sticky xl:top-24">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
               <div>
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Contacts correspondants</p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t("Contacts correspondants", "Matching contacts")}</p>
                 <p className="mt-1 flex items-center gap-2 text-3xl font-semibold text-slate-900 tabular-nums dark:text-white">
                   {preview ? formatNumber(preview.count) : "—"}
                   {previewLoading && <Spinner className="size-4" />}
@@ -130,10 +131,10 @@ export function SegmentEditorPage() {
                   ))}
                 </div>
               ) : preview.sample.length === 0 ? (
-                <p className="p-6 text-center text-sm text-slate-500 dark:text-slate-400">Aucun contact ne correspond à ces règles.</p>
+                <p className="p-6 text-center text-sm text-slate-500 dark:text-slate-400">{t("Aucun contact ne correspond à ces règles.", "No contacts match these rules.")}</p>
               ) : (
                 <>
-                  <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">Échantillon</p>
+                  <p className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">{t("Échantillon", "Sample")}</p>
                   <ul className={previewLoading ? "opacity-60" : ""}>
                     {preview.sample.map((c) => (
                       <li key={c.id} className="flex items-center gap-3 rounded-lg px-3 py-2">

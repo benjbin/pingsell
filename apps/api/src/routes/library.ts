@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { API_ROOT } from '../config.js';
 import { all, get, newId, now, run } from '../db.js';
 import type { Deps } from '../deps.js';
-import { badRequest, notFound, parse } from '../lib/http.js';
+import { badRequest, notFound, parse, zmsg } from '../lib/http.js';
+import { t } from '../i18n.js';
 
 /** Uploaded files live on disk; the DB only keeps metadata. */
 export const UPLOAD_DIR = resolve(API_ROOT, process.env.UPLOAD_DIR?.trim() || './uploads');
@@ -34,7 +35,7 @@ const brandKitSchema = z.object({
 });
 
 const templateSchema = z.object({
-  name: z.string().trim().min(1, 'Donnez un nom au modèle').max(120),
+  name: z.string().trim().min(1, zmsg('Donnez un nom au modèle', 'Give the template a name')).max(120),
   design: z.string().min(2).max(2_000_000),
 });
 
@@ -72,9 +73,9 @@ export function assetUrl(publicUrl: string, storedName: string): string {
 export async function publicUploadRoutes(app: FastifyInstance) {
   app.get('/media/:file', async (request, reply) => {
     const { file } = request.params as { file: string };
-    if (!STORED_RE.test(file)) throw notFound('Fichier introuvable');
+    if (!STORED_RE.test(file)) throw notFound(t('Fichier introuvable', 'File not found'));
     const path = resolve(UPLOAD_DIR, file);
-    if (!existsSync(path)) throw notFound('Fichier introuvable');
+    if (!existsSync(path)) throw notFound(t('Fichier introuvable', 'File not found'));
     const ext = file.split('.').pop()!;
     const mime = Object.entries(MIME_EXT).find(([, e]) => e === ext)?.[0] ?? 'application/octet-stream';
     return reply
@@ -111,10 +112,10 @@ export async function libraryRoutes(app: FastifyInstance, { db, config }: Deps) 
     const body = parse(uploadSchema, request.body);
     const b64 = body.data.replace(/^data:[^;]+;base64,/, '');
     const buf = Buffer.from(b64, 'base64');
-    if (buf.length === 0) throw badRequest('Fichier vide');
-    if (buf.length > MAX_BYTES) throw badRequest('Fichier trop lourd (8 Mo maximum)');
+    if (buf.length === 0) throw badRequest(t('Fichier vide', 'Empty file'));
+    if (buf.length > MAX_BYTES) throw badRequest(t('Fichier trop lourd (8 Mo maximum)', 'File too large (8 MB max)'));
     const mime = sniff(buf);
-    if (!mime) throw badRequest('Format non pris en charge : images PNG, JPG, GIF, WebP ou polices WOFF2, WOFF, TTF, OTF');
+    if (!mime) throw badRequest(t('Format non pris en charge : images PNG, JPG, GIF, WebP ou polices WOFF2, WOFF, TTF, OTF', 'Unsupported format: PNG, JPG, GIF or WebP images, or WOFF2, WOFF, TTF or OTF fonts'));
     const id = newId();
     const stored = `${id}.${MIME_EXT[mime]}`;
     mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -141,7 +142,7 @@ export async function libraryRoutes(app: FastifyInstance, { db, config }: Deps) 
   app.delete('/assets/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const row = get<AssetRow>(db, 'SELECT * FROM assets WHERE id = ? AND account_id = ?', id, request.accountId);
-    if (!row) throw notFound('Image introuvable');
+    if (!row) throw notFound(t('Image introuvable', 'Image not found'));
     run(db, 'DELETE FROM assets WHERE id = ?', id);
     try {
       unlinkSync(resolve(UPLOAD_DIR, row.stored_name));
@@ -163,7 +164,7 @@ export async function libraryRoutes(app: FastifyInstance, { db, config }: Deps) 
       try {
         JSON.parse(body.brand_kit);
       } catch {
-        throw badRequest('Style de marque invalide');
+        throw badRequest(t('Style de marque invalide', 'Invalid brand style'));
       }
     }
     run(db, 'UPDATE accounts SET brand_kit = ? WHERE id = ?', body.brand_kit, request.accountId);
@@ -201,7 +202,7 @@ export async function libraryRoutes(app: FastifyInstance, { db, config }: Deps) 
   app.delete('/email-templates/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const n = run(db, 'DELETE FROM email_templates WHERE id = ? AND account_id = ?', id, request.accountId);
-    if (!n) throw notFound('Modèle introuvable');
+    if (!n) throw notFound(t('Modèle introuvable', 'Template not found'));
     return reply.code(204).send();
   });
 }

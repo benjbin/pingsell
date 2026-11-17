@@ -2,12 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { all, get, newId, now, run, scalar, transaction } from '../db.js';
 import type { Deps } from '../deps.js';
-import { conflict, listResponse, notFound, pagination, parse } from '../lib/http.js';
+import { conflict, listResponse, notFound, pagination, parse, zmsg } from '../lib/http.js';
 import { serializeContact } from '../services/contacts.js';
 import { compileRules, countMatching, serializeSegment, validateRules } from '../services/segments.js';
+import { t } from '../i18n.js';
 
 const createSchema = z.object({
-  name: z.string().trim().min(1, 'Le nom est requis').max(120),
+  name: z.string().trim().min(1, zmsg('Le nom est requis', 'Name is required')).max(120),
   rules: z.unknown(),
 });
 const patchSchema = z.object({
@@ -76,14 +77,14 @@ export async function segmentRoutes(app: FastifyInstance, { db }: Deps) {
 
   app.get<Params>('/segments/:id', async (request) => {
     const row = get(db, 'SELECT * FROM segments WHERE id = ? AND account_id = ?', request.params.id, request.accountId);
-    if (!row) throw notFound('Segment introuvable');
+    if (!row) throw notFound(t('Segment introuvable', 'Segment not found'));
     return withCount(request.accountId, row);
   });
 
   app.patch<Params>('/segments/:id', async (request) => {
     const body = parse(patchSchema, request.body);
     const row = get(db, 'SELECT * FROM segments WHERE id = ? AND account_id = ?', request.params.id, request.accountId);
-    if (!row) throw notFound('Segment introuvable');
+    if (!row) throw notFound(t('Segment introuvable', 'Segment not found'));
     const segment = serializeSegment(row);
     const rules = body.rules !== undefined ? validateRules(body.rules) : segment.rules;
     run(
@@ -104,7 +105,7 @@ export async function segmentRoutes(app: FastifyInstance, { db }: Deps) {
       request.params.id,
       request.accountId,
     );
-    if (inUse) throw conflict('Ce segment est utilisé par une campagne programmée ou en cours d’envoi');
+    if (inUse) throw conflict(t('Ce segment est utilisé par une campagne programmée ou en cours d’envoi', 'This segment is used by a scheduled or sending campaign'));
     const changes = transaction(db, () => {
       // Drafts targeting this segment are detached (they will need a new audience before sending).
       run(
@@ -116,7 +117,7 @@ export async function segmentRoutes(app: FastifyInstance, { db }: Deps) {
       );
       return run(db, 'DELETE FROM segments WHERE id = ? AND account_id = ?', request.params.id, request.accountId);
     });
-    if (!changes) throw notFound('Segment introuvable');
+    if (!changes) throw notFound(t('Segment introuvable', 'Segment not found'));
     return reply.code(204).send();
   });
 }

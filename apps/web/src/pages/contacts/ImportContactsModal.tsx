@@ -5,10 +5,16 @@ import type { ImportErrorDetail, ImportResult } from "../../lib/types";
 import { Button, Textarea } from "../../components/ui/primitives";
 import { Modal } from "../../components/ui/Overlay";
 import { useToast } from "../../components/ui/Toast";
+import { t } from "../../lib/i18n";
 
-const EXAMPLE = `email,first_name,last_name,tags
+const EXAMPLE = t(
+  `email,first_name,last_name,tags
 marie.dupont@exemple.fr,Marie,Dupont,vip;newsletter
-paul.martin@exemple.fr,Paul,Martin,newsletter`;
+paul.martin@exemple.fr,Paul,Martin,newsletter`,
+  `email,first_name,last_name,tags
+jane.doe@example.com,Jane,Doe,vip;newsletter
+john.smith@example.com,John,Smith,newsletter`,
+);
 
 /** Minimal CSV preview parser (quotes aware) — the API does the real parsing. */
 function previewRows(csv: string, max = 5): string[][] {
@@ -73,7 +79,7 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
       const res = await api.contacts.importContacts({ csv });
       setResult(res);
       onImported(res);
-      toast.success("Import terminé", `${res.created} créés, ${res.updated} mis à jour`);
+      toast.success(t("Import terminé", "Import complete"), t(`${res.created} créés, ${res.updated} mis à jour`, `${res.created} created, ${res.updated} updated`));
     } catch (err) {
       toast.error(err);
     } finally {
@@ -86,18 +92,18 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
       open={open}
       onClose={close}
       size="lg"
-      title="Importer des contacts"
-      description="Fichier CSV avec une colonne email (obligatoire) et, au choix : first_name, last_name, phone, tags (séparés par ;), status."
+      title={t("Importer des contacts", "Import contacts")}
+      description={t("Fichier CSV avec une colonne email (obligatoire) et, au choix : first_name, last_name, phone, tags (séparés par ;), status.", "A CSV file with an email column (required) and, optionally: first_name, last_name, phone, tags (separated by ;), status.")}
       footer={
         result ? (
-          <Button onClick={close}>Fermer</Button>
+          <Button onClick={close}>{t("Fermer", "Close")}</Button>
         ) : (
           <>
             <Button variant="secondary" onClick={close}>
-              Annuler
+              {t("Annuler", "Cancel")}
             </Button>
             <Button onClick={submit} loading={loading} disabled={!csv.trim()}>
-              Importer {totalLines > 0 ? `${totalLines} ligne${totalLines > 1 ? "s" : ""}` : ""}
+              {t("Importer", "Import")} {totalLines > 0 ? t(`${totalLines} ligne${totalLines > 1 ? "s" : ""}`, `${totalLines} row${totalLines === 1 ? "" : "s"}`) : ""}
             </Button>
           </>
         )
@@ -106,12 +112,12 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
       {result ? (
         <div className="flex flex-col items-center py-6 text-center">
           <CheckCircle2 className="size-12 text-emerald-500" />
-          <p className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">Import terminé</p>
+          <p className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">{t("Import terminé", "Import complete")}</p>
           <div className="mt-4 grid w-full max-w-sm grid-cols-3 gap-3">
             {[
-              { label: "Créés", value: result.created },
-              { label: "Mis à jour", value: result.updated },
-              { label: "Erreurs", value: errorCount(result.errors) },
+              { label: t("Créés", "Created"), value: result.created },
+              { label: t("Mis à jour", "Updated"), value: result.updated },
+              { label: t("Erreurs", "Errors"), value: errorCount(result.errors) },
             ].map((s) => (
               <div key={s.label} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                 <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{s.value}</p>
@@ -122,7 +128,7 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
           {errorList(result).length > 0 && (
             <ul className="mt-4 max-h-40 w-full overflow-y-auto rounded-lg bg-red-50 p-3 text-left text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
               {errorList(result).slice(0, 50).map((e, i) => (
-                <li key={i}>{typeof e === "string" ? e : `${e.row != null ? `Ligne ${e.row} — ` : ""}${e.email ? `${e.email} : ` : ""}${e.error}`}</li>
+                <li key={i}>{typeof e === "string" ? e : `${e.row != null ? t(`Ligne ${e.row} — `, `Row ${e.row} — `) : ""}${e.email ? t(`${e.email} : `, `${e.email}: `) : ""}${e.error}`}</li>
               ))}
             </ul>
           )}
@@ -140,8 +146,8 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
             className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 px-6 py-8 text-center transition hover:border-brand-400 hover:bg-brand-50/40 dark:border-slate-700 dark:hover:border-brand-500 dark:hover:bg-brand-900/10"
           >
             <FileUp className="size-8 text-brand-500" />
-            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{fileName ?? "Déposez un fichier CSV ou cliquez pour parcourir"}</span>
-            <span className="text-xs text-slate-500">ou collez le contenu ci-dessous</span>
+            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{fileName ?? t("Déposez un fichier CSV ou cliquez pour parcourir", "Drop a CSV file or click to browse")}</span>
+            <span className="text-xs text-slate-500">{t("ou collez le contenu ci-dessous", "or paste its contents below")}</span>
           </button>
           <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} />
           <Textarea
@@ -178,7 +184,7 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
                   ))}
                 </tbody>
               </table>
-              <p className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400 dark:border-slate-800">Aperçu des premières lignes</p>
+              <p className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400 dark:border-slate-800">{t("Aperçu des premières lignes", "Preview of the first rows")}</p>
             </div>
           )}
         </div>

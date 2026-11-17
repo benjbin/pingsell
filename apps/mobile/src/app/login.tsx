@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
+import { t } from '@/lib/i18n';
 import { radius, spacing, useColors } from '@/lib/theme';
 
 export default function LoginScreen() {
@@ -34,7 +35,7 @@ export default function LoginScreen() {
     try {
       await signIn(apiUrl, email, password);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Connexion impossible');
+      setError(e instanceof Error ? e.message : t('Connexion impossible', 'Sign-in failed'));
       setSubmitting(false);
     }
   }
@@ -49,26 +50,32 @@ export default function LoginScreen() {
             </View>
             <Text style={[styles.title, { color: c.text }]}>Pingsell</Text>
             <Text style={[styles.subtitle, { color: c.textMuted }]}>
-              Connectez-vous pour suivre vos campagnes et vos contacts.
+              {t(
+                'Connectez-vous pour suivre vos campagnes et vos contacts.',
+                'Sign in to track your campaigns and contacts.',
+              )}
             </Text>
           </View>
 
           <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
             <Field
-              label="Adresse de l'API"
+              label={t("Adresse de l'API", 'API URL')}
               value={apiUrl}
               onChangeText={setApiUrl}
               placeholder="http://localhost:4000"
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
-              hint="Sur un iPhone physique, utilisez l'IP locale du Mac (ex. http://192.168.1.20:4000)."
+              hint={t(
+                "Sur un iPhone physique, utilisez l'IP locale du Mac (ex. http://192.168.1.20:4000).",
+                "On a physical iPhone, use your Mac's local IP (e.g. http://192.168.1.20:4000).",
+              )}
             />
             <Field
               label="Email"
               value={email}
               onChangeText={setEmail}
-              placeholder="vous@entreprise.fr"
+              placeholder={t('vous@entreprise.fr', 'you@company.com')}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="email"
@@ -76,7 +83,7 @@ export default function LoginScreen() {
               textContentType="username"
             />
             <Field
-              label="Mot de passe"
+              label={t('Mot de passe', 'Password')}
               value={password}
               onChangeText={setPassword}
               placeholder="••••••••"
@@ -94,11 +101,14 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            <Button label="Se connecter" onPress={onSubmit} loading={submitting} disabled={!canSubmit} />
+            <Button label={t('Se connecter', 'Sign in')} onPress={onSubmit} loading={submitting} disabled={!canSubmit} />
           </View>
 
           <Text style={[styles.footer, { color: c.textSubtle }]}>
-            Compte de démo : demo@missive.local (après « npm run seed » côté API)
+            {t(
+              'Compte de démo : demo@missive.local (après « npm run seed » côté API)',
+              'Demo account: demo@missive.local (after running “npm run seed” on the API)',
+            )}
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

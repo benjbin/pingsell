@@ -5,6 +5,8 @@ import { useAuth } from "../../lib/auth";
 import { useTheme } from "../../lib/theme";
 import { cx, formatNumber } from "../../lib/format";
 import { PingsellLogo } from "../brand/PingsellLogo";
+import { LanguageToggle } from "./LanguageToggle";
+import { t, LOCALE } from "../../lib/i18n";
 
 interface NavItem {
   to: string;
@@ -16,11 +18,11 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
   {
     section: "Studio",
     items: [
-      { to: "/", label: "Tableau de bord", end: true },
-      { to: "/campagnes", label: "Campagnes" },
-      { to: "/automatisations", label: "Automatisations" },
-      { to: "/notifications", label: "Notifications push" },
-      { to: "/statistiques", label: "Statistiques" },
+      { to: "/", label: t("Tableau de bord", "Dashboard"), end: true },
+      { to: "/campagnes", label: t("Campagnes", "Campaigns") },
+      { to: "/automatisations", label: t("Automatisations", "Automations") },
+      { to: "/notifications", label: t("Notifications push", "Push notifications") },
+      { to: "/statistiques", label: t("Statistiques", "Analytics") },
     ],
   },
   {
@@ -31,12 +33,12 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
     ],
   },
   {
-    section: "Réglages",
+    section: t("Réglages", "Settings"),
     items: [
-      { to: "/integrations", label: "Intégrations" },
-      { to: "/boite-envoi", label: "Boîte d'envoi" },
-      { to: "/profil", label: "Profil & équipe" },
-      { to: "/parametres", label: "Paramètres" },
+      { to: "/integrations", label: t("Intégrations", "Integrations") },
+      { to: "/boite-envoi", label: t("Boîte d'envoi", "Outbox") },
+      { to: "/profil", label: t("Profil & équipe", "Profile & team") },
+      { to: "/parametres", label: t("Paramètres", "Settings") },
     ],
   },
 ];
@@ -90,22 +92,22 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       {usage && (
         <div className="mx-4 mb-4 rounded-[20px] bg-white/[0.06] p-5 [@media(max-height:860px)]:hidden">
           <div className="flex items-baseline justify-between">
-            <p className="font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/50 uppercase">Ce mois</p>
-            <p className="text-[11px] text-white/50">{formatNumber(usage.contacts)} contacts</p>
+            <p className="font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/50 uppercase">{t("Ce mois", "This month")}</p>
+            <p className="text-[11px] text-white/50">{formatNumber(usage.contacts)} {t("contacts", usage.contacts === 1 ? "contact" : "contacts")}</p>
           </div>
           <p className="mt-3 font-display text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
             {formatNumber(usage.emails_sent_month)}
-            <span className="ml-1.5 font-sans text-xs font-medium tracking-normal text-white/50">emails</span>
+            <span className="ml-1.5 font-sans text-xs font-medium tracking-normal text-white/50">{t("emails", usage.emails_sent_month === 1 ? "email" : "emails")}</span>
           </p>
           <div className="mt-4 h-1 overflow-hidden rounded-full bg-white/10">
             <div className="h-full rounded-full bg-brand-500 transition-all duration-700" style={{ width: `${Math.max(2, pct)}%` }} />
           </div>
-          <p className="mt-2.5 text-[11px] text-white/50">Facturé au volume d'emails</p>
+          <p className="mt-2.5 text-[11px] text-white/50">{t("Facturé au volume d'emails", "Billed by email volume")}</p>
         </div>
       )}
 
       <div className="flex items-center gap-1 border-t border-white/10 py-3 pr-3 pl-3">
-        <Link to="/profil" onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-3 rounded-full p-2 transition hover:bg-white/[0.06]" title="Profil & équipe">
+        <Link to="/profil" onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-3 rounded-full p-2 transition hover:bg-white/[0.06]" title={t("Profil & équipe", "Profile & team")}>
           <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white font-display text-base font-extrabold text-slate-900">
             {(user?.name ?? account?.name ?? "M").slice(0, 1).toUpperCase()}
           </span>
@@ -117,8 +119,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <button
           onClick={logout}
           className="rounded-full p-2 text-white/50 transition hover:bg-white/10 hover:text-white"
-          title="Se déconnecter"
-          aria-label="Se déconnecter"
+          title={t("Se déconnecter", "Sign out")}
+          aria-label={t("Se déconnecter", "Sign out")}
         >
           <LogOut className="size-4" strokeWidth={1.5} />
         </button>
@@ -136,8 +138,8 @@ export function ThemeToggle({ className }: { className?: string }) {
         "flex size-10 items-center justify-center rounded-full text-slate-900 ring-1 ring-inset ring-slate-900/15 transition duration-300 hover:bg-slate-900 hover:text-white dark:text-white dark:ring-white/15 dark:hover:bg-white dark:hover:text-slate-900",
         className,
       )}
-      aria-label={theme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"}
-      title={theme === "dark" ? "Mode clair" : "Mode sombre"}
+      aria-label={theme === "dark" ? t("Passer en mode clair", "Switch to light mode") : t("Passer en mode sombre", "Switch to dark mode")}
+      title={theme === "dark" ? t("Mode clair", "Light mode") : t("Mode sombre", "Dark mode")}
     >
       {theme === "dark" ? <Sun className="size-4" strokeWidth={1.5} /> : <Moon className="size-4" strokeWidth={1.5} />}
     </button>
@@ -145,7 +147,7 @@ export function ThemeToggle({ className }: { className?: string }) {
 }
 
 function Today() {
-  const label = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+  const label = new Intl.DateTimeFormat(LOCALE, { weekday: "long", day: "numeric", month: "long" }).format(new Date());
   return <span className="eyebrow hidden sm:inline">{label}</span>;
 }
 
@@ -175,7 +177,7 @@ export function AppLayout() {
             <button
               onClick={() => setDrawerOpen(false)}
               className="absolute top-6 right-4 z-10 rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
-              aria-label="Fermer le menu"
+              aria-label={t("Fermer le menu", "Close menu")}
             >
               <X className="size-5" />
             </button>
@@ -189,7 +191,7 @@ export function AppLayout() {
           <button
             onClick={() => setDrawerOpen(true)}
             className="-ml-1 rounded-full p-2 text-slate-900 hover:bg-slate-900/5 lg:hidden dark:text-slate-300 dark:hover:bg-white/5"
-            aria-label="Ouvrir le menu"
+            aria-label={t("Ouvrir le menu", "Open menu")}
           >
             <Menu className="size-5" />
           </button>
@@ -197,8 +199,9 @@ export function AppLayout() {
           <Today />
           <div className="flex-1" />
           <span className="hidden items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 font-display text-[11px] font-semibold tracking-wider text-slate-900 uppercase md:flex dark:bg-white/5 dark:text-slate-200">
-            <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" /> Envois actifs
+            <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" /> {t("Envois actifs", "Sending live")}
           </span>
+          <LanguageToggle />
           <ThemeToggle />
         </header>
         <main className="mx-auto w-full max-w-[1320px] px-4 pt-6 pb-16 sm:px-8 sm:pt-10 lg:px-12">

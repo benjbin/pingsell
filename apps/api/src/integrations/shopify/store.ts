@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { ShopifyClient, requestAccessToken, type TokenProvider } from './client.js';
 import type { IntegrationRow, PublicIntegration, ShopifyConfig } from './types.js';
+import { t } from '../../i18n.js';
 
 const PROVIDER = 'shopify';
 
@@ -92,7 +93,7 @@ export function saveIntegration(
        config = excluded.config`,
   ).run(randomUUID(), accountId, PROVIDER, shop, accessToken, JSON.stringify(config), nowIso());
   const row = getIntegration(db, accountId);
-  if (!row) throw new Error('Intégration Shopify introuvable après enregistrement');
+  if (!row) throw new Error(t('Intégration Shopify introuvable après enregistrement', 'Shopify integration not found after saving'));
   return row;
 }
 
@@ -177,7 +178,7 @@ export function saveCredentials(
 export function tokenProviderFor(db: DatabaseSync, accountId: string): TokenProvider {
   return async () => {
     const row = getIntegration(db, accountId);
-    if (!row) throw new Error('Aucune intégration Shopify pour ce compte');
+    if (!row) throw new Error(t('Aucune intégration Shopify pour ce compte', 'No Shopify integration for this account'));
     const creds = getCredentials(db, accountId);
     const expiresAt = creds?.token_expires_at ? Date.parse(creds.token_expires_at) : NaN;
     const needsRefresh =
