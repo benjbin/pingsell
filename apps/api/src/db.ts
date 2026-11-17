@@ -167,6 +167,31 @@ const MIGRATIONS: string[] = [
   `,
   // v2 — visual editor: block design (JSON) stored next to the rendered HTML
   `ALTER TABLE campaigns ADD COLUMN design TEXT;`,
+  // v3 — media library (uploaded images) and saved email templates
+  `
+  CREATE TABLE assets (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    stored_name TEXT NOT NULL UNIQUE,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_assets_account ON assets(account_id, created_at);
+
+  CREATE TABLE email_templates (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    design TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_email_templates_account ON email_templates(account_id, updated_at);
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

@@ -1,6 +1,7 @@
 // Typed client for the Missive REST API (see SPEC.md, base /api/v1).
 import type {
   ApiKey,
+  Asset,
   AuthResponse,
   Automation,
   AutomationInput,
@@ -18,6 +19,7 @@ import type {
   MeResponse,
   Message,
   Paginated,
+  SavedTemplate,
   Segment,
   SegmentPreview,
   SegmentRules,
@@ -217,6 +219,18 @@ export const api = {
 
   ai: {
     generateEmail: (input: GenerateEmailInput) => post<GeneratedEmail>("/templates/generate-email", input),
+  },
+
+  assets: {
+    list: () => get<{ data: Asset[] }>("/assets").then((r) => r.data),
+    upload: (input: { filename: string; data: string; width?: number; height?: number }) => post<Asset>("/assets", input),
+    remove: (id: string) => del(`/assets/${id}`),
+  },
+
+  emailTemplates: {
+    list: () => get<{ data: SavedTemplate[] }>("/email-templates").then((r) => r.data),
+    create: (input: { name: string; design: string }) => post<SavedTemplate>("/email-templates", input),
+    remove: (id: string) => del(`/email-templates/${id}`),
   },
 
   outbox: (limit = 20) =>

@@ -267,7 +267,7 @@ export function PageHeader({
         {back}
         <h1 className="display text-[34px] leading-[0.95] text-slate-900 sm:text-[44px] dark:text-white">
           {title}
-          <span className="text-brand-500">.</span>
+          {typeof title === "string" && <span className="text-brand-500">.</span>}
         </h1>
         {description && <p className="mt-3 max-w-2xl text-[15px] text-slate-600 dark:text-slate-400">{description}</p>}
       </div>

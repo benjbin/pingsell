@@ -313,3 +313,22 @@ export interface ShopifySyncResult {
   customers: number;
   orders: number;
 }
+
+export interface Asset {
+  id: string;
+  filename: string;
+  url: string;
+  mime: string;
+  size: number;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+}
+
+export interface SavedTemplate {
+  id: string;
+  name: string;
+  design: string;
+  created_at: string;
+  updated_at: string;
+}

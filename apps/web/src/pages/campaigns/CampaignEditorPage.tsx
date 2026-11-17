@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { ArrowLeft, BarChart3, CalendarClock, Code2, Eye, FlaskConical, LayoutGrid, Save, Send, Users, XCircle } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarClock, Code2, Eye, FlaskConical, LayoutGrid, PenLine, Save, Send, Users, XCircle } from "lucide-react";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useAsync } from "../../lib/useAsync";
@@ -11,7 +11,7 @@ import { Badge, Button, Card, CardHeader, ErrorState, Field, Input, PageHeader, 
 import { ConfirmModal, Modal } from "../../components/ui/Overlay";
 import { useToast } from "../../components/ui/Toast";
 import { AiGeneratePanel } from "../../components/AiGeneratePanel";
-import { EmailPreview } from "../../components/EmailPreview";
+import { EmailPreview, renderMergeTags } from "../../components/EmailPreview";
 import { EmailBuilder } from "../../components/email-builder/EmailBuilder";
 import { PRESETS, parseDesign, renderEmail, serializeDesign, type Design, type Preset } from "../../components/email-builder/model";
 
@@ -41,7 +41,7 @@ function toForm(c: Campaign): FormState {
 
 function toInput(f: FormState, html: string): CampaignInput {
   return {
-    name: f.name.trim() || "Campagne sans titre",
+    name: f.name.trim() || (f.subject.trim() ? campaignNameFrom(f.subject) : "Campagne sans titre"),
     subject: f.subject.trim(),
     preheader: f.preheader.trim() || undefined,
     from_name: f.from_name.trim() || undefined,
@@ -81,6 +81,8 @@ export function CampaignEditorPage() {
   const [mode, setMode] = useState<"visual" | "html">("visual");
   const [toVisualOpen, setToVisualOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // New campaigns open straight into the full-screen editor.
+  const [editorOpen, setEditorOpen] = useState(!id);
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [mobileTab, setMobileTab] = useState<"edit" | "preview">("edit");
@@ -120,10 +122,11 @@ export function CampaignEditorPage() {
     setForm((f) => ({ ...f, design: serializeDesign(d) }));
   }
 
-  function applyPreset(p: Preset) {
+  /** Apply a preset. When `withDesign` is false the editor already swapped the blocks (with undo). */
+  function applyPreset(p: Preset, withDesign = true) {
     setForm((f) => ({
       ...f,
-      design: serializeDesign(p.build(brand)),
+      design: withDesign ? serializeDesign(p.build(brand)) : f.design,
       subject: p.subject && (!f.subject || f.subject === lastPresetSubject.current) ? p.subject : f.subject,
       preheader: p.preheader && (!f.preheader || f.preheader === lastPresetPreheader.current) ? p.preheader : f.preheader,
       name: f.name || (p.key !== "blank" ? p.name : ""),
@@ -269,7 +272,7 @@ export function CampaignEditorPage() {
   const settingsCard = (
     <Card>
       <CardHeader title="Paramètres" />
-      <fieldset disabled={!editable} className={`grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 ${visual ? "lg:grid-cols-4" : ""}`}>
+      <fieldset disabled={!editable} className={`grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 `}>
         <Field label="Nom interne" htmlFor="cp-name" className="sm:col-span-2">
           <Input id="cp-name" value={form.name} onChange={(e) => set("name")(e.target.value)} placeholder="ex : Soldes d'hiver 2026" />
         </Field>
@@ -381,9 +384,59 @@ export function CampaignEditorPage() {
       </div>
 
       {visual && design ? (
-        <div className="space-y-6">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
           {settingsCard}
-          <EmailBuilder design={design} onChange={onDesignChange} onApplyPreset={applyPreset} brand={brand} disabled={!editable} />
+          <Card className="overflow-hidden">
+            <CardHeader
+              title="Contenu"
+              description={`${design.blocks.length} blocs · éditeur visuel`}
+              action={
+                <Button size="sm" icon={PenLine} onClick={() => setEditorOpen(true)}>
+                  {editable ? "Ouvrir l'éditeur" : "Voir le design"}
+                </Button>
+              }
+            />
+            <button
+              type="button"
+              onClick={() => setEditorOpen(true)}
+              className="group relative block h-[420px] w-full overflow-hidden"
+              style={{ background: design.theme.background }}
+              aria-label="Ouvrir l'éditeur"
+            >
+              <iframe
+                title="Miniature de l'email"
+                srcDoc={renderMergeTags(html)}
+                tabIndex={-1}
+                className="pointer-events-none absolute top-0 left-1/2 h-[1000px] w-[680px] origin-top -translate-x-1/2 scale-[0.6] border-0"
+              />
+              <span className="absolute inset-0 flex items-center justify-center bg-slate-900/0 transition group-hover:bg-slate-900/40">
+                <span className="flex translate-y-2 items-center gap-2 rounded-full bg-white px-5 py-2.5 font-display text-sm font-semibold text-slate-900 opacity-0 shadow-xl transition group-hover:translate-y-0 group-hover:opacity-100">
+                  <PenLine className="size-4" /> Modifier le design
+                </span>
+              </span>
+            </button>
+          </Card>
+          {editorOpen && (
+            <EmailBuilder
+              design={design}
+              onChange={onDesignChange}
+              onApplyPreset={(p) => applyPreset(p, false)}
+              brand={brand}
+              disabled={!editable}
+              subject={form.subject}
+              preheader={form.preheader}
+              fromName={form.from_name}
+              onSubjectChange={set("subject")}
+              onPreheaderChange={set("preheader")}
+              title={form.name || (id ? "Campagne" : "Nouvelle campagne")}
+              saving={saving}
+              dirty={!id || dirty}
+              onClose={() => setEditorOpen(false)}
+              onSave={() => void persist()}
+              onTest={() => setTestOpen(true)}
+              onPreview={() => setPreviewOpen(true)}
+            />
+          )}
         </div>
       ) : (
       <>

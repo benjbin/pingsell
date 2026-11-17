@@ -19,6 +19,7 @@ import { campaignRoutes } from './routes/campaigns.js';
 import { automationRoutes } from './routes/automations.js';
 import { templateRoutes, integrationRoutes, outboxRoutes, statsRoutes } from './routes/misc.js';
 import { trackingRoutes } from './routes/tracking.js';
+import { libraryRoutes, publicUploadRoutes } from './routes/library.js';
 
 export const API_PREFIX = '/api/v1';
 
@@ -126,6 +127,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   // Public routes: tracking, health.
   await app.register(async (scope) => trackingRoutes(scope, deps));
+  await app.register(async (scope) => publicUploadRoutes(scope));
 
   // REST API.
   await app.register(
@@ -143,6 +145,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         await templateRoutes(priv);
         await outboxRoutes(priv, deps);
         await integrationRoutes(priv, deps);
+        await libraryRoutes(priv, deps);
       });
     },
     { prefix: API_PREFIX },
