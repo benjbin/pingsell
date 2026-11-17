@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import {
   ArrowLeft,
   ArrowRight,
@@ -8,24 +8,19 @@ import {
   CheckCircle2,
   Code2,
   FileSpreadsheet,
-  KeyRound,
-  Link2,
-  Loader2,
   Mail,
   ShoppingBag,
   Smartphone,
   Sparkles,
-  Upload,
   type LucideIcon,
 } from "lucide-react";
-import { API_URL, api } from "../lib/api";
+import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { cx } from "../lib/format";
 import type { AutomationInput } from "../lib/types";
-import { Button, Field, Input } from "../components/ui/primitives";
-import { CopyButton } from "../components/CopyButton";
+import { Button } from "../components/ui/primitives";
 import { useToast } from "../components/ui/Toast";
-import { ImportContactsModal } from "./contacts/ImportContactsModal";
+import { ApiGuide, AppGuide, FileGuide, ShopifyGuide } from "../components/connect/ConnectGuides";
 import { DEFAULT_EMAIL_HTML } from "./campaigns/defaultTemplate";
 
 /* -------------------------------------------------------------------------- */
@@ -64,30 +59,6 @@ function save(s: Saved) {
   } catch {
     /* private mode */
   }
-}
-
-/** Polls `check` every 3 s while `active`, until it returns true. */
-function usePoll(active: boolean, check: () => Promise<boolean>) {
-  const [hit, setHit] = useState(false);
-  const fn = useRef(check);
-  fn.current = check;
-  useEffect(() => {
-    if (!active || hit) return;
-    let stop = false;
-    const tick = async () => {
-      try {
-        if (await fn.current()) setHit(true);
-      } catch {
-        /* keep polling */
-      }
-    };
-    const id = setInterval(() => !stop && void tick(), 3000);
-    return () => {
-      stop = true;
-      clearInterval(id);
-    };
-  }, [active, hit]);
-  return hit;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -248,10 +219,10 @@ export function OnboardingPage() {
             </nav>
 
             <div className="min-w-0 rounded-[26px] bg-white p-6 ring-1 ring-slate-900/10 sm:p-8 dark:bg-slate-900 dark:ring-white/10">
-              {current === "shopify" && <ShopifyStep done={done.shopify} onDone={(l) => markDone("shopify", l)} />}
-              {current === "api" && <ApiStep done={done.api} onDone={(l) => markDone("api", l)} />}
-              {current === "app" && <AppStep done={done.app} onDone={(l) => markDone("app", l)} />}
-              {current === "file" && <FileStep done={done.file} onDone={(l) => markDone("file", l)} />}
+              {current === "shopify" && <ShopifyGuide returnTo="onboarding" done={done.shopify} onDone={(l) => markDone("shopify", l)} />}
+              {current === "api" && <ApiGuide kind="other" done={done.api} onDone={(l) => markDone("api", l)} />}
+              {current === "app" && <AppGuide done={done.app} onDone={(l) => markDone("app", l)} />}
+              {current === "file" && <FileGuide done={done.file} onDone={(l) => markDone("file", l)} />}
 
               <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-900/10 pt-6 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
                 <Button variant="ghost" icon={ArrowLeft} onClick={() => (index === 0 ? setStep("choose") : setIndex(index - 1))}>
@@ -269,341 +240,6 @@ export function OnboardingPage() {
         {step === "scenario" && <ScenarioStep selected={selected} brand={account?.name ?? ""} onBack={() => setStep(selected.length ? "connect" : "choose")} onFinish={finish} />}
       </main>
     </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Steps                                                                      */
-/* -------------------------------------------------------------------------- */
-
-function StepHead({ icon: Icon, title, text, done }: { icon: LucideIcon; title: string; text: ReactNode; done?: string }) {
-  return (
-    <div className="mb-6">
-      <div className="flex items-center gap-3">
-        <span className="flex size-11 items-center justify-center rounded-2xl bg-brand-50 text-brand-500 dark:bg-brand-900/30">
-          <Icon className="size-5" strokeWidth={1.75} />
-        </span>
-        <h2 className="font-display text-2xl font-extrabold text-slate-900 dark:text-white">{title}</h2>
-      </div>
-      <p className="mt-3 text-[15px] text-slate-600 dark:text-slate-300">{text}</p>
-      {done && <Success>{done}</Success>}
-    </div>
-  );
-}
-
-function Success({ children }: { children: ReactNode }) {
-  return (
-    <p className="mt-4 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-      <CheckCircle2 className="size-5 shrink-0" /> {children}
-    </p>
-  );
-}
-
-function Waiting({ children }: { children: ReactNode }) {
-  return (
-    <p className="mt-4 flex items-center gap-2 rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-      <Loader2 className="size-4 shrink-0 animate-spin text-brand-500" /> {children}
-    </p>
-  );
-}
-
-function Code({ code }: { code: string }) {
-  return (
-    <div className="relative">
-      <pre className="overflow-x-auto rounded-2xl bg-slate-950 p-4 pt-12 text-[12.5px] leading-relaxed text-slate-200">{code}</pre>
-      <div className="absolute top-2.5 right-2.5">
-        <CopyButton text={code} />
-      </div>
-    </div>
-  );
-}
-
-function ShopifyStep({ done, onDone }: { done?: string; onDone: (label: string) => void }) {
-  const toast = useToast();
-  const [status, setStatus] = useState<{ connected: boolean; shop: string | null; oauth: boolean } | null>(null);
-  const [shop, setShop] = useState("");
-  const [token, setToken] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api.integrations.shopify
-      .status()
-      .then((r) => {
-        const connected = !!r.integration && r.integration.connected !== false;
-        setStatus({ connected, shop: r.integration?.shop_domain ?? null, oauth: r.oauth_available });
-        if (connected) onDone(`Boutique ${r.integration?.shop_domain ?? ""} connectée : clients et commandes en cours de synchronisation`);
-      })
-      .catch(() => setStatus({ connected: false, shop: null, oauth: false }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const domain = () => (shop.trim().includes(".") ? shop.trim() : `${shop.trim()}.myshopify.com`);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      if (status?.oauth) {
-        // Back to this screen after Shopify's authorisation page.
-        sessionStorage.setItem("missive_onboarding_return", "1");
-        window.location.href = await api.integrations.shopify.installUrl(domain());
-        return;
-      }
-      await api.integrations.shopify.connect({ shop_domain: domain(), access_token: token.trim() });
-      onDone(`Boutique ${domain()} connectée : clients et commandes en cours de synchronisation`);
-      setStatus((s) => (s ? { ...s, connected: true, shop: domain() } : s));
-    } catch (err) {
-      toast.error(err);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <>
-      <StepHead
-        icon={ShoppingBag}
-        title="Connecter Shopify"
-        text="Vos clients, leurs commandes et les paniers abandonnés arrivent automatiquement dans Missive, et restent à jour."
-        done={done}
-      />
-      {!status ? (
-        <Waiting>Vérification…</Waiting>
-      ) : status.connected ? null : (
-        <form onSubmit={(e) => void submit(e)} className="space-y-4">
-          <Field label="Adresse de votre boutique" htmlFor="ob-shop">
-            <div className="flex items-center rounded-xl ring-1 ring-slate-900/15 focus-within:ring-2 focus-within:ring-brand-500 dark:ring-white/15">
-              <input
-                id="ob-shop"
-                required
-                value={shop}
-                onChange={(e) => setShop(e.target.value.replace(/^https?:\/\//, ""))}
-                placeholder="ma-boutique"
-                className="h-11 min-w-0 flex-1 bg-transparent px-4 text-sm outline-none dark:text-white"
-                autoComplete="off"
-              />
-              {!shop.includes(".") && <span className="pr-4 text-sm text-slate-400">.myshopify.com</span>}
-            </div>
-          </Field>
-          {!status.oauth && (
-            <>
-              <Field label="Jeton d'accès Admin API" htmlFor="ob-token">
-                <Input id="ob-token" type="password" required value={token} onChange={(e) => setToken(e.target.value)} placeholder="shpat_…" autoComplete="off" />
-              </Field>
-              <ol className="space-y-1.5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-                <li>1. Dans Shopify : Paramètres › Applications › Développer des applications.</li>
-                <li>2. Créez une application « Missive ».</li>
-                <li>
-                  3. Donnez-lui les accès <code>read_customers</code>, <code>read_orders</code> et <code>read_checkouts</code>.
-                </li>
-                <li>4. Installez-la et collez ici le jeton Admin API.</li>
-              </ol>
-            </>
-          )}
-          <Button type="submit" size="lg" icon={Link2} loading={busy}>
-            {status.oauth ? "Connecter en 1 clic" : "Connecter la boutique"}
-          </Button>
-        </form>
-      )}
-    </>
-  );
-}
-
-function ApiStep({ done, onDone }: { done?: string; onDone: (label: string) => void }) {
-  const toast = useToast();
-  const [key, setKey] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [lang, setLang] = useState<"cURL" | "Node.js" | "PHP" | "Python">("cURL");
-  const baseline = useRef<number | null>(null);
-  const [firstEmail, setFirstEmail] = useState<string | null>(null);
-
-  useEffect(() => {
-    api.contacts
-      .list({ limit: 1 })
-      .then((r) => (baseline.current = r.total))
-      .catch(() => (baseline.current = 0));
-  }, []);
-
-  const received = usePoll(!!key && !done, async () => {
-    const r = await api.contacts.list({ limit: 1 });
-    if (baseline.current !== null && r.total > baseline.current) {
-      setFirstEmail(r.data[0]?.email ?? null);
-      return true;
-    }
-    return false;
-  });
-  useEffect(() => {
-    if (received) onDone(`Connexion réussie${firstEmail ? ` : ${firstEmail} est arrivé dans vos contacts` : ""}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [received]);
-
-  async function generate() {
-    setBusy(true);
-    try {
-      const created = await api.apiKeys.create("Mon site / logiciel");
-      setKey(created.key ?? null);
-    } catch (err) {
-      toast.error(err);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const k = key ?? "VOTRE_CLE";
-  const url = `${API_URL}/api/v1/contacts`;
-  const snippets = {
-    cURL: `curl -X POST ${url} \\
-  -H "Authorization: Bearer ${k}" \\
-  -H "Content-Type: application/json" \\
-  -d '{ "email": "camille@exemple.fr", "first_name": "Camille" }'`,
-    "Node.js": `await fetch("${url}", {
-  method: "POST",
-  headers: { Authorization: "Bearer ${k}", "Content-Type": "application/json" },
-  body: JSON.stringify({ email: client.email, first_name: client.prenom }),
-});`,
-    PHP: `$ch = curl_init("${url}");
-curl_setopt_array($ch, [
-  CURLOPT_POST => true,
-  CURLOPT_HTTPHEADER => ["Authorization: Bearer ${k}", "Content-Type: application/json"],
-  CURLOPT_POSTFIELDS => json_encode(["email" => $client["email"], "first_name" => $client["prenom"]]),
-]);
-curl_exec($ch);`,
-    Python: `import requests
-requests.post("${url}",
-  headers={"Authorization": "Bearer ${k}"},
-  json={"email": client.email, "first_name": client.prenom})`,
-  };
-
-  return (
-    <>
-      <StepHead
-        icon={Code2}
-        title="Brancher votre site ou votre logiciel"
-        text="Un seul appel quand un client s'inscrit ou achète chez vous : il arrive dans Missive et vos automatisations démarrent. N'importe quel langage fonctionne."
-        done={done}
-      />
-      {!key ? (
-        <div className="rounded-2xl bg-slate-50 p-5 dark:bg-slate-800/60">
-          <p className="text-sm text-slate-600 dark:text-slate-300">Étape 1 : créez la clé secrète de votre logiciel. Elle reste sur votre serveur, jamais dans une page web.</p>
-          <Button className="mt-4" icon={KeyRound} loading={busy} onClick={() => void generate()}>
-            Générer ma clé API
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex flex-col gap-2 rounded-2xl bg-slate-50 p-4 sm:flex-row sm:items-center dark:bg-slate-800/60">
-            <KeyRound className="size-4 shrink-0 text-brand-500" />
-            <code className="min-w-0 flex-1 truncate font-mono text-xs text-slate-900 dark:text-white">{key}</code>
-            <CopyButton text={key} />
-          </div>
-          <p className="text-xs text-slate-500">Copiez-la maintenant : elle ne sera plus affichée en entier. Vous la retrouverez dans Paramètres › Clés API.</p>
-          <div className="flex flex-wrap gap-1.5" role="tablist">
-            {(Object.keys(snippets) as Array<keyof typeof snippets>).map((l) => (
-              <button
-                key={l}
-                type="button"
-                role="tab"
-                aria-selected={lang === l}
-                onClick={() => setLang(l)}
-                className={cx("rounded-full px-3 py-1.5 text-xs font-semibold", lang === l ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "text-slate-500 hover:text-slate-900")}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-          <Code code={snippets[lang]} />
-          {!done && <Waiting>Envoyez un contact avec ce code : on vous confirme ici dès qu'il arrive.</Waiting>}
-        </div>
-      )}
-    </>
-  );
-}
-
-function AppStep({ done, onDone }: { done?: string; onDone: (label: string) => void }) {
-  const [appKey, setAppKey] = useState<string | null>(null);
-  const baseline = useRef<number | null>(null);
-
-  useEffect(() => {
-    api.push
-      .config()
-      .then((c) => {
-        setAppKey(c.app_key);
-        baseline.current = c.devices.total;
-      })
-      .catch(() => undefined);
-  }, []);
-
-  const received = usePoll(!!appKey && !done, async () => {
-    const c = await api.push.config();
-    return baseline.current !== null && c.devices.total > baseline.current;
-  });
-  useEffect(() => {
-    if (received) onDone("Premier téléphone enregistré : vous pouvez lui envoyer des notifications");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [received]);
-
-  const code = `npx expo install @missive/expo-push expo-notifications
-
-// App.tsx
-import { Missive, MissiveInbox, MissivePermissionPrompt } from "@missive/expo-push";
-
-Missive.init({ appKey: "${appKey ?? "msvapp_…"}", apiUrl: "${API_URL}" });
-
-// À la connexion du client
-await Missive.identify({ email: user.email });
-await Missive.requestPermission();`;
-
-  return (
-    <>
-      <StepHead
-        icon={Smartphone}
-        title="Brancher votre app mobile"
-        text="Collez ces lignes dans votre app React Native / Expo : notifications sur l'écran verrouillé, centre de notifications et écran de permission sont déjà construits."
-        done={done}
-      />
-      <div className="space-y-4">
-        {appKey ? <Code code={code} /> : <Waiting>Chargement de votre clé d'application…</Waiting>}
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          App native en Swift, Kotlin ou Flutter ? Elle s'enregistre avec un simple appel web : tout est détaillé dans{" "}
-          <Link to="/notifications" className="font-semibold text-brand-500">
-            Notifications push › Configuration
-          </Link>
-          .
-        </p>
-        {appKey && !done && <Waiting>Lancez l'app sur un téléphone : on vous confirme ici dès qu'il est enregistré.</Waiting>}
-      </div>
-    </>
-  );
-}
-
-function FileStep({ done, onDone }: { done?: string; onDone: (label: string) => void }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <StepHead
-        icon={FileSpreadsheet}
-        title="Importer vos contacts"
-        text="Exportez vos contacts depuis votre ancien outil (Excel, CSV, Mailchimp, Brevo…) : Missive reconnaît les colonnes email, prénom, nom et tags."
-        done={done}
-      />
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex w-full flex-col items-center gap-3 rounded-[22px] border-2 border-dashed border-slate-300 px-6 py-10 text-center transition hover:border-brand-500 hover:bg-brand-50/40 dark:border-slate-700"
-      >
-        <Upload className="size-7 text-brand-500" />
-        <span className="font-display text-lg font-bold text-slate-900 dark:text-white">{done ? "Importer un autre fichier" : "Choisir mon fichier"}</span>
-        <span className="text-sm text-slate-500">CSV ou copier-coller depuis Excel</span>
-      </button>
-      <ImportContactsModal
-        open={open}
-        onClose={() => setOpen(false)}
-        onImported={() => {
-          setOpen(false);
-          void api.contacts.list({ limit: 1 }).then((r) => onDone(`Import terminé : ${r.total.toLocaleString("fr-FR")} contact(s) dans Missive`));
-        }}
-      />
-    </>
   );
 }
 

@@ -48,6 +48,22 @@ const importSchema = z.union([
   z.object({ csv: z.string().min(1).max(20_000_000), trigger_automations: z.boolean().optional() }),
 ]);
 
+/** Orders from any shop, POS or back-office (Shopify sends its own through webhooks). */
+const orderSchema = z.object({
+  email: z.string().trim().min(1, "L'email est requis").max(254),
+  first_name: optionalText(100),
+  last_name: optionalText(100),
+  phone: optionalText(40),
+  order_id: z.string().trim().min(1, 'order_id est requis').max(100),
+  /** `created` = order placed (« Commande passée »), `fulfilled` = shipped (« Commande expédiée »). */
+  status: z.enum(['created', 'fulfilled']).default('created'),
+  total: z.number().nonnegative().optional(),
+  currency: z.string().trim().max(8).optional(),
+  tracking_number: z.string().trim().max(100).optional(),
+  tracking_url: z.string().trim().max(2000).optional(),
+  carrier: z.string().trim().max(100).optional(),
+});
+
 type Params = { Params: { id: string } };
 
 export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
@@ -120,6 +136,50 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       return r;
     });
     return reply.code(result.created ? 201 : 200).send({ ...result.contact, created: result.created });
+  });
+
+  app.post('/orders', async (request, reply) => {
+    const body = parse(orderSchema, request.body);
+    const accountId = request.accountId;
+    const result = transaction(db, () => {
+      const existing = findContactByEmail(db, accountId, normalizeEmail(body.email));
+      const identity = { email: body.email, first_name: body.first_name, last_name: body.last_name, phone: body.phone, source: 'api' as const };
+      if (body.status === 'fulfilled') {
+        const r = upsertContact(db, accountId, identity);
+        if (r.created) onCreated(accountId, r.contact);
+        const data = {
+          order_id: body.order_id,
+          tracking_number: body.tracking_number ?? null,
+          tracking_url: body.tracking_url ?? null,
+          carrier: body.carrier ?? null,
+          source: 'api',
+        };
+        recordEvent(db, accountId, r.contact.id, 'order_fulfilled', data);
+        fireTrigger(db, accountId, r.contact.id, 'order_fulfilled', data);
+        return { contact: r.contact, duplicate: false };
+      }
+      const duplicate =
+        scalar(db, "SELECT COUNT(*) FROM events WHERE account_id = ? AND type = 'order' AND json_extract(data, '$.order_id') = ?", accountId, body.order_id) > 0;
+      const total = body.total ?? 0;
+      const r = upsertContact(db, accountId, {
+        ...identity,
+        ...(duplicate
+          ? {}
+          : {
+              total_spent: Math.round(((existing?.total_spent ?? 0) + total) * 100) / 100,
+              orders_count: (existing?.orders_count ?? 0) + 1,
+              last_order_at: new Date().toISOString(),
+            }),
+      });
+      if (r.created) onCreated(accountId, r.contact);
+      if (!duplicate) {
+        const data = { order_id: body.order_id, total, currency: body.currency ?? null, source: 'api' };
+        recordEvent(db, accountId, r.contact.id, 'order', data);
+        fireTrigger(db, accountId, r.contact.id, 'order_created', data);
+      }
+      return { contact: r.contact, duplicate };
+    });
+    return reply.code(result.duplicate ? 200 : 201).send({ ok: true, contact_id: result.contact.id, duplicate: result.duplicate });
   });
 
   app.get<Params>('/contacts/:id', async (request) => {
