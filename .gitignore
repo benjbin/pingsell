@@ -6,3 +6,4 @@ dist/
 .expo/
 web-build/
 apps/api/uploads/
+.env.local
