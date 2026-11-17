@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { motion, useReducedMotion, useScroll, useSpring } from "motion/react";
 import {
   ArrowRight,
   BarChart3,
@@ -21,7 +22,11 @@ import {
   Tag,
 } from "lucide-react";
 import { BLOCKS, FAQ, LOGIN_URL, PRICING, SIGNUP_URL, monthlyPrice } from "./content";
-import { BrandMock, EditorMock, FlowMock, PhoneMock, ReportMock } from "./Mocks";
+import { BrandMock, FlowMock, PhoneMock, ReportMock } from "./Mocks";
+import { Hero } from "./sections/Hero";
+import { EditorDemo } from "./sections/EditorDemo";
+import { BrandShowcase } from "./sections/BrandShowcase";
+import { MagneticLink, useFinePointer } from "./sections/motion-kit";
 
 const NAV = [
   ["Fonctionnalités", "#fonctionnalites"],
@@ -68,17 +73,28 @@ function Logo({ light = false }: { light?: boolean }) {
 }
 
 function CTA({ children = "Essai gratuit", dark = false, className = "" }: { children?: React.ReactNode; dark?: boolean; className?: string }) {
+  const fine = useFinePointer();
+  const reduce = useReducedMotion() ?? false;
   return (
-    <a
+    <MagneticLink
       href={SIGNUP_URL}
-      className={`group inline-flex h-12 items-center justify-center gap-2 rounded-full px-6 font-display text-sm font-semibold transition ${
+      enabled={fine && !reduce}
+      className={`group relative inline-flex h-12 items-center justify-center overflow-hidden rounded-full px-6 font-display text-sm font-semibold transition-colors ${
         dark ? "bg-white text-slate-900 hover:bg-brand-50" : "bg-brand-500 text-white shadow-[0_10px_30px_-10px_rgba(20,92,255,0.7)] hover:bg-brand-600"
       } ${className}`}
     >
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 -skew-x-12 bg-white/30 blur-sm transition-transform duration-700 ease-out group-hover:translate-x-[450%]" />
       {children}
       <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-    </a>
+    </MagneticLink>
   );
+}
+
+/** Thin brand bar under the header showing reading progress. */
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 200, damping: 40, restDelta: 0.001 });
+  return <motion.div aria-hidden className="fixed inset-x-0 top-0 z-[60] h-[3px] origin-left bg-brand-500" style={{ scaleX }} />;
 }
 
 function Header() {
@@ -127,45 +143,6 @@ function Header() {
         </div>
       )}
     </header>
-  );
-}
-
-function Hero() {
-  return (
-    <section id="top" className="relative overflow-hidden pt-[72px]">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_50%_at_70%_20%,#dce6ff_0%,transparent_70%)]" />
-      <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 pt-14 pb-20 sm:px-6 lg:grid-cols-[1fr_1.15fr] lg:pt-24 lg:pb-28">
-        <div className="animate-rise">
-          <p className="eyebrow flex items-center gap-2">
-            <span className="size-1.5 rounded-full bg-brand-500" /> Emailing pour e-commerçants
-          </p>
-          <h1 className="display mt-5 text-[52px] leading-[0.88] sm:text-[72px] lg:text-[84px]">
-            Des emails
-            <br />
-            qui <em className="text-brand-500">vendent.</em>
-          </h1>
-          <p className="mt-6 max-w-md text-[17px] leading-relaxed text-slate-600">
-            Missive réunit un éditeur d'emails que vous personnalisez à votre image, vos données Shopify et des automatisations prêtes à l'emploi. Sans payer pour vos contacts qui dorment.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <CTA>Commencer gratuitement</CTA>
-            <a href="#editeur" className="inline-flex h-12 items-center justify-center rounded-full px-6 font-display text-sm font-semibold text-slate-900 ring-1 ring-slate-900/15 transition hover:ring-slate-900/40">
-              Voir l'éditeur
-            </a>
-          </div>
-          <ul className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
-            {[`${PRICING.freeEmails.toLocaleString("fr-FR")} emails offerts / mois`, "Sans carte bancaire", "Toutes les fonctionnalités"].map((t) => (
-              <li key={t} className="flex items-center gap-1.5">
-                <Check className="size-4 text-brand-500" /> {t}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="animate-rise [animation-delay:120ms]">
-          <EditorMock />
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -246,8 +223,7 @@ function Pillars() {
   );
 }
 
-function Editor() {
-  const row = [...BLOCKS, ...BLOCKS];
+function Personalisation() {
   const points = [
     [Palette, "Style de marque", "Enregistrez couleurs, polices et boutons une fois ; chaque nouvelle campagne part de votre style."],
     [Type, "Vos propres polices", "Choisissez dans Google Fonts ou importez vos fichiers de police, avec une police de secours pour les messageries qui ne les chargent pas."],
@@ -255,23 +231,14 @@ function Editor() {
     [Zap, "Personnalisation bloc par bloc", "Chaque bloc a ses réglages : marges, fond, couleurs, police, taille du texte, alignement."],
   ] as const;
   return (
-    <section id="editeur" className="overflow-hidden bg-slate-950 py-24 text-white lg:py-32">
+    <section className="overflow-hidden bg-slate-950 py-24 text-white lg:py-32">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <SectionHead
           light
-          eyebrow="L'éditeur"
-          title={<>À votre image, <em className="text-brand-400">jusqu'au détail.</em></>}
+          eyebrow="Personnalisation"
+          title={<>Réglé <em className="text-brand-400">au pixel près.</em></>}
           text="Pas besoin de graphiste ni de code. Glissez vos blocs, écrivez directement dans l'email, changez tout ce que vous voulez."
         />
-      </div>
-      <div className="reveal mt-12 overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_10%,#000_90%,transparent)]">
-        <div className="marquee flex w-max gap-2.5">
-          {row.map((b, i) => (
-            <span key={i} className="rounded-full bg-white/[0.07] px-4 py-2 text-sm font-medium whitespace-nowrap text-white/80 ring-1 ring-white/10">
-              {b}
-            </span>
-          ))}
-        </div>
       </div>
       <div className="mx-auto mt-16 grid max-w-6xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-2">
         <div className="grid gap-8 sm:grid-cols-2">
@@ -593,12 +560,15 @@ export function App() {
   useReveal();
   return (
     <>
+      <ScrollProgress />
       <Header />
       <main>
         <Hero />
         <Integrations />
         <Pillars />
-        <Editor />
+        <EditorDemo />
+        <BrandShowcase />
+        <Personalisation />
         <Shopify />
         <Reports />
         <TeamMobile />
