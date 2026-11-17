@@ -1,0 +1,51 @@
+# Pingsell on Coolify — "Docker Compose" build pack.
+# In Coolify, give each service its domain (api / app / www). Variables come from the Coolify UI.
+services:
+  api:
+    build:
+      context: ./apps/api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_PATH: /data/pingsell.db
+      UPLOAD_DIR: /data/uploads
+      PUBLIC_URL: ${PUBLIC_URL:?https://api.votre-domaine}
+      WEB_URL: ${WEB_URL:?https://app.votre-domaine}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-log}
+      AWS_REGION: ${AWS_REGION:-eu-west-3}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-}
+      PUSH_MODE: ${PUSH_MODE:-live}
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY:-}
+      SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET:-}
+    volumes:
+      - pingsell-data:/data
+    expose:
+      - "4000"
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        VITE_API_URL: ${PUBLIC_URL}
+        VITE_SITE_URL: ${SITE_URL:-}
+    restart: unless-stopped
+    depends_on:
+      - api
+    expose:
+      - "80"
+
+  site:
+    build:
+      context: ./apps/site
+      args:
+        VITE_APP_URL: ${WEB_URL}
+        VITE_API_URL: ${PUBLIC_URL}/api/v1
+    restart: unless-stopped
+    expose:
+      - "80"
+
+volumes:
+  pingsell-data:
