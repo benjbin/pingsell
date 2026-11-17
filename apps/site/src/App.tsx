@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { motion, useReducedMotion, useScroll, useSpring } from "motion/react";
 import {
   ArrowRight,
+  ChevronDown,
+  Globe,
   BarChart3,
   Check,
   Code2,
@@ -187,13 +189,14 @@ function Header() {
         </nav>
 
         <div className="ml-auto hidden items-center gap-2 sm:flex lg:ml-0">
+          <LangMenu />
+          <span aria-hidden className="mx-1 h-5 w-px bg-slate-900/10" />
           <a
             href={LOGIN_URL}
             className="rounded-full px-4 py-2 text-[14px] font-semibold text-slate-900 transition-colors hover:bg-slate-900/[0.05]"
           >
             {t("Se connecter", "Log in")}
           </a>
-          <LangSwitch />
           <CTA className="h-10 px-5" />
         </div>
 
@@ -247,6 +250,64 @@ function Header() {
 }
 
 /** FR / EN switch: a small segmented pill matching the floating header. Switching reloads the page. */
+/** Desktop language picker: globe + current code, opens a small menu. */
+function LangMenu() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== "Escape") return;
+      if (e instanceof MouseEvent && (e.target as HTMLElement).closest("[data-lang-menu]")) return;
+      setOpen(false);
+    };
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", close);
+    };
+  }, [open]);
+  return (
+    <div data-lang-menu className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={t("Langue : français", "Language: English")}
+        className="flex h-10 items-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-slate-600 transition-colors hover:bg-slate-900/[0.05] hover:text-slate-900"
+      >
+        <Globe className="size-4" strokeWidth={1.75} />
+        <span className="uppercase">{LANG}</span>
+        <ChevronDown className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`} strokeWidth={2} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute top-full right-0 mt-2 w-44 rounded-2xl bg-white p-1.5 shadow-[0_18px_50px_-18px_rgba(11,33,74,0.45)] ring-1 ring-slate-900/[0.08]"
+        >
+          {LANGS.map((l) => (
+            <button
+              key={l}
+              type="button"
+              role="menuitemradio"
+              aria-checked={LANG === l}
+              lang={l}
+              onClick={() => setLang(l)}
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-slate-50 ${
+                LANG === l ? "font-semibold text-slate-900" : "text-slate-600"
+              }`}
+            >
+              {l === "fr" ? "Français" : "English"}
+              {LANG === l && <Check className="size-4 text-brand-500" strokeWidth={2.5} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LangSwitch() {
   return (
     <div role="group" aria-label={t("Langue", "Language")} className="flex items-center rounded-full bg-slate-900/[0.05] p-0.5 ring-1 ring-slate-900/[0.06]">
