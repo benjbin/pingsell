@@ -57,7 +57,10 @@ const orderSchema = z.object({
   order_id: z.string().trim().min(1, 'order_id est requis').max(100),
   /** `created` = order placed (« Commande passée »), `fulfilled` = shipped (« Commande expédiée »). */
   status: z.enum(['created', 'fulfilled']).default('created'),
-  total: z.number().nonnegative().optional(),
+  /** Accepts 59.9, "59.90" or "59,90" (POS and PHP back-ends often send strings). */
+  total: z
+    .preprocess((v) => (typeof v === 'string' && v.trim() !== '' ? Number(v.trim().replace(',', '.')) : v), z.number().nonnegative().finite())
+    .optional(),
   currency: z.string().trim().max(8).optional(),
   tracking_number: z.string().trim().max(100).optional(),
   tracking_url: z.string().trim().max(2000).optional(),
@@ -145,8 +148,21 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       const existing = findContactByEmail(db, accountId, normalizeEmail(body.email));
       const identity = { email: body.email, first_name: body.first_name, last_name: body.last_name, phone: body.phone, source: 'api' as const };
       if (body.status === 'fulfilled') {
-        const r = upsertContact(db, accountId, identity);
-        if (r.created) onCreated(accountId, r.contact);
+        // Like Shopify: a shipment never creates (and opts in) a marketing contact.
+        if (!existing) return { contact: null, duplicate: false, skipped: true };
+        const tracking = body.tracking_number ?? null;
+        const already =
+          scalar(
+            db,
+            `SELECT COUNT(*) FROM events WHERE account_id = ? AND contact_id = ? AND type = 'order_fulfilled'
+               AND json_extract(data, '$.order_id') = ? AND IFNULL(json_extract(data, '$.tracking_number'), '') = ?`,
+            accountId,
+            existing.id,
+            body.order_id,
+            tracking ?? '',
+          ) > 0;
+        if (already) return { contact: existing, duplicate: true, skipped: false };
+        const r = { contact: existing };
         const data = {
           order_id: body.order_id,
           tracking_number: body.tracking_number ?? null,
@@ -156,7 +172,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
         };
         recordEvent(db, accountId, r.contact.id, 'order_fulfilled', data);
         fireTrigger(db, accountId, r.contact.id, 'order_fulfilled', data);
-        return { contact: r.contact, duplicate: false };
+        return { contact: r.contact, duplicate: false, skipped: false };
       }
       const duplicate =
         scalar(db, "SELECT COUNT(*) FROM events WHERE account_id = ? AND type = 'order' AND json_extract(data, '$.order_id') = ?", accountId, body.order_id) > 0;
@@ -177,9 +193,16 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
         recordEvent(db, accountId, r.contact.id, 'order', data);
         fireTrigger(db, accountId, r.contact.id, 'order_created', data);
       }
-      return { contact: r.contact, duplicate };
+      return { contact: r.contact, duplicate, skipped: false };
     });
-    return reply.code(result.duplicate ? 200 : 201).send({ ok: true, contact_id: result.contact.id, duplicate: result.duplicate });
+    if (result.skipped) {
+      return reply.code(200).send({
+        ok: true,
+        skipped: true,
+        message: "Contact inconnu : envoyez d'abord la commande (status « created ») ou créez le contact, puis l'expédition.",
+      });
+    }
+    return reply.code(result.duplicate ? 200 : 201).send({ ok: true, contact_id: result.contact!.id, duplicate: result.duplicate });
   });
 
   app.get<Params>('/contacts/:id', async (request) => {

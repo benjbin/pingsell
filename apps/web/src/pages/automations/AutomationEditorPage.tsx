@@ -198,7 +198,7 @@ function EmailStepEditor({
 
 function InsertStep({ onInsert }: { onInsert: (s: AutomationStep) => void }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-2">
+    <div className="flex flex-wrap items-center justify-center gap-2 py-2">
       <Button variant="secondary" size="sm" icon={Clock} onClick={() => onInsert(newWaitStep())}>
         Attente
       </Button>

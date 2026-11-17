@@ -13,6 +13,8 @@ paul.martin@exemple.fr,Paul,Martin,newsletter`;
 /** Minimal CSV preview parser (quotes aware) — the API does the real parsing. */
 function previewRows(csv: string, max = 5): string[][] {
   const lines = csv.split(/\r?\n/).filter((l) => l.trim()).slice(0, max + 1);
+  // A comma header means ";" separates tags inside a cell; otherwise the file is ";"-delimited.
+  const sep = (lines[0] ?? "").includes(",") ? "," : (lines[0] ?? "").includes("\t") ? "\t" : ";";
   return lines.map((line) => {
     const cells: string[] = [];
     let cur = "";
@@ -24,7 +26,7 @@ function previewRows(csv: string, max = 5): string[][] {
           cur += '"';
           i++;
         } else quoted = !quoted;
-      } else if ((ch === "," || ch === ";") && !quoted) {
+      } else if (ch === sep && !quoted) {
         cells.push(cur);
         cur = "";
       } else cur += ch;
@@ -42,7 +44,7 @@ function errorList(result: ImportResult): Array<string | ImportErrorDetail> {
   return result.error_details ?? (Array.isArray(result.errors) ? result.errors : []);
 }
 
-export function ImportContactsModal({ open, onClose, onImported }: { open: boolean; onClose: () => void; onImported: () => void }) {
+export function ImportContactsModal({ open, onClose, onImported }: { open: boolean; onClose: () => void; onImported: (result: ImportResult) => void }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [csv, setCsv] = useState("");
@@ -70,7 +72,7 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
     try {
       const res = await api.contacts.importContacts({ csv });
       setResult(res);
-      onImported();
+      onImported(res);
       toast.success("Import terminé", `${res.created} créés, ${res.updated} mis à jour`);
     } catch (err) {
       toast.error(err);

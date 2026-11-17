@@ -36,11 +36,11 @@ export const CAMPAIGN_STATUS: Record<CampaignStatus, { label: string; tone: Tone
 export const TRIGGERS: Record<AutomationTrigger, { label: string; description: string }> = {
   contact_created: { label: "Nouveau contact", description: "Quand un contact est créé (formulaire, import, API, Shopify)." },
   tag_added: { label: "Tag ajouté", description: "Quand un tag précis est ajouté à un contact." },
-  order_created: { label: "Commande passée", description: "Quand un client passe commande sur Shopify." },
+  order_created: { label: "Commande passée", description: "Quand un client passe commande (Shopify, ou votre site, caisse ou back-office via l'API)." },
   cart_abandoned: { label: "Panier abandonné", description: "Quand un panier Shopify reste sans commande pendant 1 h." },
   order_fulfilled: {
     label: "Commande expédiée",
-    description: "Quand Shopify marque la commande comme expédiée. Transactionnel : atteint aussi les désabonnés marketing.",
+    description: "Quand la commande est expédiée (Shopify ou API). Transactionnel : atteint aussi les désabonnés marketing.",
   },
   app_signed_in: { label: "Première connexion à l'app", description: "La première fois que le client se connecte dans votre app mobile." },
   push_subscribed: { label: "Notifications activées", description: "Quand le client active les notifications sur son premier appareil." },

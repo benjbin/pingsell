@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
   ArrowLeft,
@@ -259,7 +259,8 @@ interface Template {
   icon: LucideIcon;
   title: string;
   text: string;
-  needs?: SourceId[];
+  /** Every group must be connected; within a group, any source will do. */
+  needs?: SourceId[][];
   input: (brand: string) => AutomationInput;
 }
 
@@ -286,7 +287,7 @@ const TEMPLATES: Template[] = [
     icon: ShoppingBag,
     title: "Panier abandonné",
     text: "Une relance 1 h après, puis une seconde le lendemain si rien n'est commandé.",
-    needs: ["shopify"],
+    needs: [["shopify"]],
     input: () => ({
       name: "Relance panier abandonné",
       trigger: "cart_abandoned",
@@ -303,7 +304,7 @@ const TEMPLATES: Template[] = [
     icon: Mail,
     title: "Merci pour votre commande",
     text: "Un remerciement juste après chaque achat.",
-    needs: ["shopify"],
+    needs: [["shopify", "api"]],
     input: () => ({
       name: "Merci pour votre commande",
       trigger: "order_created",
@@ -315,7 +316,7 @@ const TEMPLATES: Template[] = [
     icon: BellRing,
     title: "Commande expédiée",
     text: "Une notification sur le téléphone du client dès l'expédition.",
-    needs: ["shopify", "app"],
+    needs: [["shopify", "api"], ["app"]],
     input: () => ({
       name: "Commande expédiée",
       trigger: "order_fulfilled",
@@ -327,7 +328,7 @@ const TEMPLATES: Template[] = [
     icon: Smartphone,
     title: "Bienvenue dans l'app",
     text: "Une notification à la première connexion d'un client dans votre app.",
-    needs: ["app"],
+    needs: [["app"]],
     input: () => ({
       name: "Bienvenue dans l'app",
       trigger: "app_signed_in",
@@ -338,20 +339,22 @@ const TEMPLATES: Template[] = [
 
 function ScenarioStep({ selected, brand, onBack, onFinish }: { selected: SourceId[]; brand: string; onBack: () => void; onFinish: () => void }) {
   const toast = useToast();
-  const available = TEMPLATES.filter((t) => !t.needs || t.needs.every((n) => selected.includes(n)));
+  const available = TEMPLATES.filter((t) => !t.needs || t.needs.every((group) => group.some((n) => selected.includes(n))));
   const [chosen, setChosen] = useState<string[]>(() => available.map((t) => t.id));
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<string[] | null>(null);
+  // Templates already saved, so a retry after a failure never creates them twice.
+  const saved = useRef<Map<string, string>>(new Map());
 
   async function create() {
     setBusy(true);
-    const names: string[] = [];
     try {
       for (const t of available.filter((x) => chosen.includes(x.id))) {
+        if (saved.current.has(t.id)) continue;
         const a = await api.automations.create(t.input(brand));
-        names.push(a.name);
+        saved.current.set(t.id, a.name);
       }
-      setCreated(names);
+      setCreated([...saved.current.values()]);
     } catch (err) {
       toast.error(err);
     } finally {
@@ -369,7 +372,7 @@ function ScenarioStep({ selected, brand, onBack, onFinish }: { selected: SourceI
           C'est <em className="text-brand-500">branché.</em>
         </h1>
         <p className="mt-4 text-[17px] text-slate-600 dark:text-slate-300">
-          {created.length ? `${created.length} scénario(s) actif(s) : ${created.join(", ")}. Les textes se modifient à tout moment dans Automatisations.` : "Vous pourrez créer vos scénarios dans Automatisations."}
+          {created.length ? `${created.length > 1 ? `${created.length} scénarios actifs` : "1 scénario actif"} : ${created.join(", ")}. Les textes se modifient à tout moment dans Automatisations.` : "Vous pourrez créer vos scénarios dans Automatisations."}
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Button size="lg" onClick={onFinish}>

@@ -33,7 +33,7 @@ const TOOLS: Array<{ id: ToolId; icon: LucideIcon; title: string; text: string; 
   { id: "backoffice", icon: LayoutDashboard, title: "Back-office / ERP", text: "Commandes de tous vos canaux et leur suivi.", how: "API · 5 min", api: "backoffice" },
   { id: "app", icon: Smartphone, title: "App iOS & Android", text: "Notifications push et centre de notifications.", how: "SDK" },
   { id: "file", icon: FileSpreadsheet, title: "Fichier Excel / CSV", text: "Mailchimp, Brevo, Klaviyo, tableur…", how: "Import · 1 min" },
-  { id: "other", icon: Wrench, title: "Un autre outil", text: "Tout ce qui sait faire un appel web.", how: "API" },
+  { id: "other", icon: Wrench, title: "Un autre outil", text: "Tout ce qui sait faire un appel web.", how: "API", api: "other" },
 ];
 
 const IDS = TOOLS.map((t) => t.id);
@@ -79,7 +79,7 @@ export function IntegrationsPage() {
 
   function badge(t: (typeof TOOLS)[number]): string | null {
     const s = status.data;
-    if (done[t.id]) return "Connecté";
+    if (done[t.id]) return t.id === "file" ? "Importé" : "Connecté";
     if (!s) return null;
     if (t.id === "shopify") return s.shopify ? "Connectée" : null;
     if (t.id === "app") return s.devices ? `${s.devices.toLocaleString("fr-FR")} appareil${s.devices > 1 ? "s" : ""}` : null;
@@ -153,7 +153,7 @@ export function IntegrationsPage() {
             </button>
             <div className="max-w-3xl">
               {tool.id === "shopify" && <ShopifyGuide done={done.shopify} onDone={mark("shopify")} />}
-              {tool.api && <ApiGuide key={tool.id} kind={tool.api} done={done[tool.id]} onDone={mark(tool.id)} onUseFile={() => open("file")} />}
+              {tool.api && <ApiGuide key={tool.id} kind={tool.api} done={done[tool.id]} onDone={mark(tool.id)} onUseFile={() => open("file")} onKeyCreated={() => void status.reload()} />}
               {tool.id === "app" && <AppGuide done={done.app} onDone={mark("app")} />}
               {tool.id === "file" && <FileGuide done={done.file} onDone={mark("file")} />}
             </div>

@@ -136,7 +136,8 @@ export function processPushResends(db: DatabaseSync): number {
             AND NOT EXISTS (
               SELECT 1 FROM push_messages o WHERE o.push_campaign_id = m.push_campaign_id AND o.opened_at IS NOT NULL
                  AND (o.device_id = m.device_id OR (m.contact_id IS NOT NULL AND o.contact_id = m.contact_id)))
-            AND NOT EXISTS (SELECT 1 FROM app_inbox i WHERE i.id = m.inbox_id AND i.read_at IS NOT NULL)`,
+            AND NOT EXISTS (SELECT 1 FROM app_inbox i WHERE i.id = m.inbox_id AND i.read_at IS NOT NULL)
+            AND (ct.id IS NULL OR ct.status = 'subscribed')`,
         c.id,
         threshold,
       );
@@ -254,7 +255,7 @@ export function sendTransactionalPush(
     db,
     `SELECT d.id AS device_id, d.contact_id, c.email, c.first_name, c.last_name
        FROM push_devices d JOIN contacts c ON c.id = d.contact_id
-      WHERE d.account_id = ? AND d.contact_id = ? AND d.active = 1`,
+      WHERE d.account_id = ? AND d.contact_id = ? AND d.active = 1 AND c.status != 'complained'`,
     accountId,
     contactId,
   );

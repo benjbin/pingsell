@@ -374,7 +374,10 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
   app.patch<Params>('/push/campaigns/:id', async (request) => {
     const current = findCampaign(request.accountId, request.params.id);
     if (current.status !== 'draft') throw badRequest('Seul un brouillon peut être modifié');
-    const body = parse(campaignSchema.partial(), request.body);
+    // `.partial()` still applies `.default()`s: keep only the fields actually sent.
+    const sent = new Set(Object.keys((request.body ?? {}) as object));
+    const parsed = parse(campaignSchema.partial(), request.body);
+    const body = Object.fromEntries(Object.entries(parsed).filter(([k]) => sent.has(k))) as typeof parsed;
     const merged = {
       ...current,
       ...body,

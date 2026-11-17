@@ -278,5 +278,5 @@ export function exitConditionMet(
       ) > 0
     );
   }
-  return scalar(db, "SELECT COUNT(*) FROM events WHERE contact_id = ? AND type = 'order' AND created_at >= ?", contactId, since) > 0;
+  return scalar(db, "SELECT COUNT(*) FROM events WHERE contact_id = ? AND type = 'order' AND created_at > ?", contactId, since) > 0;
 }

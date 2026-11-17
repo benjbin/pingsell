@@ -246,11 +246,14 @@ class MissiveClient {
     }
 
     const prompt = await this.request<{ prompt: PromptSettings }>("GET", "/push/app/config").then((r) => r.prompt).catch(() => null);
+    // The funnel (shown → accepted → granted) only counts customers who actually saw the screen.
+    let shown = false;
     if (prompt?.enabled && this.promptListeners.size) {
       if (!options.force && !(await this.promptDue(prompt))) {
         return { ok: false, reason: "not_now", message: "Écran de pré-permission déjà proposé récemment" };
       }
       this.track("shown");
+      shown = true;
       const accepted = await new Promise<boolean>((resolve) => {
         this.promptAnswer = resolve;
         this.promptListeners.forEach((l) => l(prompt));
@@ -265,8 +268,8 @@ class MissiveClient {
       this.track("accepted");
     }
     const result = await this.register(options);
-    if (result.ok) this.track("granted");
-    else if (result.reason === "permission_denied") this.track("denied");
+    if (shown && result.ok) this.track("granted");
+    else if (shown && !result.ok && result.reason === "permission_denied") this.track("denied");
     return result;
   }
 

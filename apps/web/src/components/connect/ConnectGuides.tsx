@@ -141,7 +141,7 @@ function Tabs<T extends string>({ value, options, onChange, label }: { value: T;
 }
 
 function Hint({ children }: { children: ReactNode }) {
-  return <div className="rounded-2xl bg-brand-50/70 px-4 py-3 text-sm text-slate-700 dark:bg-brand-900/20 dark:text-slate-200">{children}</div>;
+  return <div className="rounded-2xl bg-brand-50/70 px-4 py-3 text-sm text-slate-700 dark:bg-brand-500/15 dark:text-slate-200">{children}</div>;
 }
 
 function Kbd({ children }: { children: ReactNode }) {
@@ -420,7 +420,7 @@ const EVENTS: Record<EventId, { label: string; path: string; body: Record<string
     label: "Commande expédiée",
     path: "/orders",
     body: { email: "camille@exemple.fr", order_id: "CMD-1042", status: "fulfilled", carrier: "Colissimo", tracking_number: "6A12345678901", tracking_url: "https://suivi.exemple.fr/6A12345678901" },
-    effect: "Lance « Commande expédiée ». C'est un message transactionnel : il atteint aussi les clients désabonnés du marketing.",
+    effect: "Lance « Commande expédiée » pour un client déjà connu (envoyez d'abord la commande). C'est un message transactionnel : il atteint aussi les clients désabonnés du marketing. Le même envoi répété n'est compté qu'une fois.",
   },
   tag: {
     label: "Ajouter un tag",
@@ -502,10 +502,28 @@ requests.post(
   }
 }
 
-export function ApiGuide({ done, onDone, kind = "other", onUseFile }: GuideProps & { kind?: ApiKind; onUseFile?: () => void }) {
+const keyStore = (kind: ApiKind) => `missive_api_key_${kind}`;
+
+/** The full key is shown only once: keep it for this browser session so switching guides doesn't lose it. */
+function loadKey(kind: ApiKind): { id: string; key: string } | null {
+  try {
+    const raw = sessionStorage.getItem(keyStore(kind));
+    return raw ? (JSON.parse(raw) as { id: string; key: string }) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function ApiGuide({
+  done,
+  onDone,
+  kind = "other",
+  onUseFile,
+  onKeyCreated,
+}: GuideProps & { kind?: ApiKind; onUseFile?: () => void; onKeyCreated?: () => void }) {
   const toast = useToast();
   const meta = KINDS[kind];
-  const [key, setKey] = useState<{ id: string; key: string } | null>(null);
+  const [key, setKey] = useState<{ id: string; key: string } | null>(() => loadKey(kind));
   const [busy, setBusy] = useState(false);
   const [event, setEvent] = useState<EventId>(meta.events[0]);
   const [lang, setLang] = useState<Lang>("cURL");
@@ -517,10 +535,7 @@ export function ApiGuide({ done, onDone, kind = "other", onUseFile }: GuideProps
   });
   useEffect(() => {
     if (!received) return;
-    void api.contacts
-      .list({ limit: 1 })
-      .then((r) => onDone(`Premier appel reçu${r.data[0]?.email ? ` : ${r.data[0].email} est dans vos contacts` : ""}. C'est branché !`))
-      .catch(() => onDone("Premier appel reçu. C'est branché !"));
+    onDone("Premier appel reçu de votre outil. Vérifiez le contact dans Contacts : c'est branché !");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [received]);
 
@@ -528,7 +543,16 @@ export function ApiGuide({ done, onDone, kind = "other", onUseFile }: GuideProps
     setBusy(true);
     try {
       const created = await api.apiKeys.create(meta.label);
-      if (created.key) setKey({ id: created.id, key: created.key });
+      if (created.key) {
+        const k = { id: created.id, key: created.key };
+        setKey(k);
+        try {
+          sessionStorage.setItem(keyStore(kind), JSON.stringify(k));
+        } catch {
+          /* private mode */
+        }
+        onKeyCreated?.();
+      }
     } catch (err) {
       toast.error(err);
     } finally {
@@ -614,6 +638,7 @@ export function AppGuide({ done, onDone }: GuideProps) {
   const [appKey, setAppKey] = useState<string | null>(null);
   const [devices, setDevices] = useState<number | null>(null);
   const [stack, setStack] = useState<"expo" | "native">("expo");
+  const [failed, setFailed] = useState(false);
   const baseline = useRef<number | null>(null);
 
   useEffect(() => {
@@ -624,7 +649,7 @@ export function AppGuide({ done, onDone }: GuideProps) {
         setDevices(c.devices.total);
         baseline.current = c.devices.total;
       })
-      .catch(() => undefined);
+      .catch(() => setFailed(true));
   }, []);
 
   const received = usePoll(!!appKey && !done, async () => {
@@ -693,6 +718,8 @@ await Missive.requestPermission();
               <p>Envoyez-lui une notification de test depuis Notifications push.</p>
             ) : appKey ? (
               <Waiting>Lancez l'app sur un téléphone et acceptez les notifications : on vous confirme ici dès qu'il est enregistré.</Waiting>
+            ) : failed ? (
+              <p className="text-red-600 dark:text-red-400">Impossible de charger votre clé d'application. Rechargez la page.</p>
             ) : (
               <Waiting>Chargement de votre clé d'application…</Waiting>
             )}
@@ -788,9 +815,10 @@ export function FileGuide({ done, onDone }: GuideProps) {
       <ImportContactsModal
         open={open}
         onClose={() => setOpen(false)}
-        onImported={() => {
+        onImported={(r) => {
           setOpen(false);
-          void api.contacts.list({ limit: 1 }).then((r) => onDone(`Import terminé : ${r.total.toLocaleString("fr-FR")} contact(s) dans Missive`));
+          const n = (x: number) => x.toLocaleString("fr-FR");
+          onDone(`Import terminé : ${n(r.created)} contact${r.created > 1 ? "s" : ""} ajouté${r.created > 1 ? "s" : ""}, ${n(r.updated)} mis à jour`);
         }}
       />
     </>

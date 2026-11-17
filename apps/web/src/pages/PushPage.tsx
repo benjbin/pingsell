@@ -437,7 +437,7 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
                 </Button>
               </div>
               <Button type="submit" variant="accent" icon={Send} loading={sending} disabled={!count}>
-                Envoyer à {count === null ? "…" : formatNumber(count)} appareil{count === 1 ? "" : "s"}
+                Envoyer à {count === null ? "…" : formatNumber(count)} appareil{count === null || count <= 1 ? "" : "s"}
               </Button>
             </div>
           </form>
@@ -1294,7 +1294,7 @@ function TransactionalCard() {
             <Package className="mt-0.5 size-4 shrink-0 text-brand-500" /> Sans code avec Shopify : créez une automatisation « Commande expédiée » avec une étape push.
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Créez la clé secrète dans Réglages › Clés API. Ne l'utilisez jamais dans l'app mobile. Réponse <code>404</code> si le contact n'existe pas.
+            Créez la clé secrète dans Paramètres › Clés API. Ne l'utilisez jamais dans l'app mobile. Réponse <code>404</code> si le contact n'existe pas.
           </p>
         </div>
         <div className="relative min-w-0">
