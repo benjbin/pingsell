@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { all, get, newId, now, run, transaction } from '../db.js';
 import type { Deps } from '../deps.js';
 import { badRequest, conflict, forbidden, notFound, parse } from '../lib/http.js';
-import { createSession, hashPassword, publicUser, type Role, type UserRow } from '../services/auth.js';
+import { createSession, hashPassword, publicUser, verifyPassword, type Role, type UserRow } from '../services/auth.js';
 import { normalizeEmail } from '../services/contacts.js';
 
 const INVITE_DAYS = 7;
@@ -187,6 +187,20 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
     run(db, 'UPDATE accounts SET name = ? WHERE id = ?', body.name, request.accountId);
     const row = get<{ id: string; name: string; email: string; created_at: string }>(db, 'SELECT id, name, email, created_at FROM accounts WHERE id = ?', request.accountId)!;
     return { account: row };
+  });
+}
+
+/** Owner only: permanently delete the account and everything in it (contacts, campaigns, team…). */
+export async function accountDeletionRoutes(app: FastifyInstance, { db }: Deps) {
+  app.post('/account/delete', async (request, reply) => {
+    if (!request.userId) throw forbidden('La suppression du compte se fait depuis une session, pas avec une clé API');
+    const user = get<UserRow>(db, 'SELECT * FROM users WHERE id = ? AND account_id = ?', request.userId, request.accountId);
+    if (user?.role !== 'owner') throw forbidden('Seul le propriétaire peut supprimer le compte');
+    const body = parse(z.object({ password: z.string().min(1, 'Saisissez votre mot de passe') }), request.body);
+    if (!verifyPassword(body.password, user.password_hash)) throw badRequest('Mot de passe incorrect');
+    // Every table references accounts with ON DELETE CASCADE.
+    run(db, 'DELETE FROM accounts WHERE id = ?', request.accountId);
+    return reply.code(204).send();
   });
 }
 

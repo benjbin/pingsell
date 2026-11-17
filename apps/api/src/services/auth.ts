@@ -69,12 +69,12 @@ export function createApiKey(db: DatabaseSync, accountId: string, label: string,
 }
 
 /** Resolves a bearer token (session token or `msv_` API key) to an account (and user, for sessions). */
-export function resolveToken(db: DatabaseSync, token: string): { accountId: string; userId: string } | undefined {
+export function resolveToken(db: DatabaseSync, token: string): { accountId: string; userId: string; apiKeyId?: string } | undefined {
   if (token.startsWith('msv_')) {
     const row = get<{ id: string; account_id: string }>(db, 'SELECT id, account_id FROM api_keys WHERE key = ?', token);
     if (!row) return undefined;
-    run(db, 'UPDATE api_keys SET last_used_at = ? WHERE id = ?', now(), row.id);
-    return { accountId: row.account_id, userId: '' };
+    // `last_used_at` is set once the call succeeds (see `markApiKeyUsed`).
+    return { accountId: row.account_id, userId: '', apiKeyId: row.id };
   }
   // Sessions of a removed member disappear with the user (ON DELETE CASCADE).
   const row = get<{ account_id: string; user_id: string | null }>(db, 'SELECT account_id, user_id FROM sessions WHERE token = ?', token);
@@ -98,6 +98,14 @@ export function makeRequireAuth(db: DatabaseSync): preHandlerHookHandler {
     }
     request.accountId = auth.accountId;
     request.userId = auth.userId;
+    request.apiKeyId = auth.apiKeyId;
+  };
+}
+
+/** onResponse hook: a key counts as "used" only by a call that succeeded (the guides rely on it). */
+export function makeMarkApiKeyUsed(db: DatabaseSync) {
+  return async function markApiKeyUsed(request: FastifyRequest, reply: FastifyReply) {
+    if (request.apiKeyId && reply.statusCode < 400) run(db, 'UPDATE api_keys SET last_used_at = ? WHERE id = ?', now(), request.apiKeyId);
   };
 }
 

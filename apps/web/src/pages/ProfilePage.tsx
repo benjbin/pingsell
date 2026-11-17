@@ -544,7 +544,71 @@ export function ProfilePage() {
         {user && <ProfileCard key={user.id + user.email} user={user} />}
         <PasswordCard />
         <AccountCard key={account?.name} />
+        {user?.role === "owner" && <DeleteAccountCard accountName={account?.name ?? ""} />}
       </div>
     </>
+  );
+}
+
+/** Owner only: permanent deletion, confirmed by typing the shop name and the password. */
+function DeleteAccountCard({ accountName }: { accountName: string }) {
+  const { logout } = useAuth();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ready = name.trim() === accountName.trim() && password.length > 0;
+
+  async function remove(e: FormEvent) {
+    e.preventDefault();
+    if (!ready) return;
+    setBusy(true);
+    try {
+      await api.account.remove(password);
+      try {
+        sessionStorage.clear();
+      } catch {
+        /* ignore */
+      }
+      logout();
+    } catch (err) {
+      toast.error(err);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="ring-red-200 dark:ring-red-900/50">
+      <CardHeader title="Supprimer le compte" description="Supprime définitivement la boutique, ses contacts, campagnes, automatisations, notifications et l'équipe." />
+      <div className="flex flex-col gap-3 p-5 pt-0 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-500 dark:text-slate-400">Cette action est irréversible. Pensez à exporter vos contacts avant.</p>
+        <Button variant="ghost" icon={Trash2} onClick={() => setOpen(true)} className="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">
+          Supprimer le compte
+        </Button>
+      </div>
+      <Modal open={open} onClose={() => !busy && setOpen(false)} title="Supprimer définitivement le compte ?">
+        <form onSubmit={(e) => void remove(e)} className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Toutes les données de <span className="font-semibold text-slate-900 dark:text-white">{accountName}</span> seront effacées et les membres de l'équipe perdront
+            l'accès. Impossible de revenir en arrière.
+          </p>
+          <Field label={`Tapez « ${accountName} » pour confirmer`} htmlFor="del-name">
+            <Input id="del-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+          </Field>
+          <Field label="Votre mot de passe" htmlFor="del-pw">
+            <Input id="del-pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)} disabled={busy}>
+              Annuler
+            </Button>
+            <Button type="submit" variant="danger" disabled={!ready} loading={busy} icon={Trash2}>
+              Supprimer définitivement
+            </Button>
+          </div>
+        </form>
+      </Modal>
+    </Card>
   );
 }

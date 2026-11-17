@@ -114,12 +114,16 @@ export function AutomationsPage() {
                     </div>
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Déclencheur : {triggerLabel(a)}</p>
                     <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">
-                      <span className="inline-flex items-center gap-1">
-                        <Mail className="size-3.5" /> {emails} email{emails > 1 ? "s" : ""}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="size-3.5" /> {waits} attente{waits > 1 ? "s" : ""}
-                      </span>
+                      {emails > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Mail className="size-3.5" /> {emails} email{emails > 1 ? "s" : ""}
+                        </span>
+                      )}
+                      {waits > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="size-3.5" /> {waits} attente{waits > 1 ? "s" : ""}
+                        </span>
+                      )}
                       {pushes > 0 && (
                         <span className="inline-flex items-center gap-1">
                           <BellRing className="size-3.5" /> {pushes} push
@@ -133,10 +137,18 @@ export function AutomationsPage() {
                     <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{formatNumber(a.runs_active)}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">en cours</p>
                   </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{formatNumber(a.emails_sent)}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">emails envoyés</p>
-                  </div>
+                  {(emails > 0 || pushes === 0) && (
+                    <div className="text-center">
+                      <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{formatNumber(a.emails_sent)}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">emails envoyés</p>
+                    </div>
+                  )}
+                  {pushes > 0 && (
+                    <div className="text-center">
+                      <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{formatNumber(a.push_sent)}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">push envoyés</p>
+                    </div>
+                  )}
                   <div className="ml-auto flex gap-1">
                     <Button
                       variant={a.status === "active" ? "secondary" : "primary"}

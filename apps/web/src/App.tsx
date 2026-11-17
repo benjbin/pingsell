@@ -54,11 +54,11 @@ function ApiUnreachable({ message, onRetry, onLogout }: { message: string; onRet
 }
 
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { account, initializing, bootError, retryBoot, logout } = useAuth();
+  const { account, initializing, bootError, retryBoot, logout, signedOut } = useAuth();
   const location = useLocation();
   if (initializing) return <FullScreenLoader />;
   if (!account && bootError) return <ApiUnreachable message={bootError} onRetry={retryBoot} onLogout={logout} />;
-  if (!account) return <Navigate to="/connexion" replace state={{ from: location.pathname }} />;
+  if (!account) return <Navigate to="/connexion" replace state={signedOut ? undefined : { from: location.pathname }} />;
   return children;
 }
 

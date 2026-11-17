@@ -7,12 +7,12 @@ import type { Deps } from './deps.js';
 import type { IntegrationContext } from './integrations/context.js';
 import { registerShopify } from './integrations/shopify/index.js';
 import { HttpError, formatZodError } from './lib/http.js';
-import { makeRequireAuth } from './services/auth.js';
+import { makeMarkApiKeyUsed, makeRequireAuth } from './services/auth.js';
 import { fireTrigger } from './services/automations.js';
 import { recordEvent, upsertContact } from './services/contacts.js';
 import type { EmailProvider } from './services/mailer.js';
 import { accountRoutes, authRoutes } from './routes/auth.js';
-import { invitationRoutes, teamRoutes } from './routes/team.js';
+import { accountDeletionRoutes, invitationRoutes, teamRoutes } from './routes/team.js';
 import { apiKeyRoutes } from './routes/apiKeys.js';
 import { contactRoutes } from './routes/contacts.js';
 import { segmentRoutes } from './routes/segments.js';
@@ -126,6 +126,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
 
   const requireAuth = makeRequireAuth(db);
+  app.addHook('onResponse', makeMarkApiKeyUsed(db));
   const deps: Deps = { db, config, provider, requireAuth, kickWorker: options.kickWorker ?? (() => {}) };
 
   // Public routes: tracking, health.
@@ -152,6 +153,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         await integrationRoutes(priv, deps);
         await libraryRoutes(priv, deps);
         await teamRoutes(priv, deps);
+        await accountDeletionRoutes(priv, deps);
         await pushRoutes(priv, deps);
       });
     },

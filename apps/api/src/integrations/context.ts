@@ -40,6 +40,8 @@ declare module 'fastify' {
     accountId: string;
     /** Set by `requireAuth` for session tokens ("" for API keys, which act as the account). */
     userId: string;
+    /** Set by `requireAuth` when the caller used a secret API key. */
+    apiKeyId?: string;
     /** Raw request body as received, for every JSON request (webhook HMAC verification). */
     rawBody?: string;
   }

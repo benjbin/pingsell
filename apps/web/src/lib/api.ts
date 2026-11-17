@@ -182,6 +182,8 @@ export const api = {
   },
   account: {
     rename: (name: string) => patch<{ account: Account }>("/account", { name }).then((r) => r.account),
+    /** Owner only, permanent: deletes the account and all its data. */
+    remove: (password: string) => post<void>("/account/delete", { password }),
   },
   team: {
     get: () => get<TeamResponse>("/team"),

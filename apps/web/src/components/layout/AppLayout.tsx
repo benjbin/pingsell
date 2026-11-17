@@ -105,7 +105,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       {usage && (
-        <div className="mx-4 mb-4 rounded-[20px] bg-white/[0.06] p-5">
+        <div className="mx-4 mb-4 rounded-[20px] bg-white/[0.06] p-5 [@media(max-height:860px)]:hidden">
           <div className="flex items-baseline justify-between">
             <p className="font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/50 uppercase">Ce mois</p>
             <p className="text-[11px] text-white/50">{formatNumber(usage.contacts)} contacts</p>

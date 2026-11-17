@@ -17,6 +17,8 @@ interface AuthCtx {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  /** true after an explicit sign-out: the next person to log in starts on the dashboard, not on the last page. */
+  signedOut: boolean;
   refresh: () => Promise<void>;
   /** Starts a session from an auth response (e.g. an accepted invitation). */
   adopt: (res: AuthResponse) => Promise<void>;
@@ -33,13 +35,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [initializing, setInitializing] = useState<boolean>(() => !!getToken());
   const [bootError, setBootError] = useState<string | null>(null);
 
-  const logout = useCallback(() => {
+  const [signedOut, setSignedOut] = useState(false);
+  // Session expired or revoked: keep the page, so the same person returns to it after logging in.
+  const clear = useCallback(() => {
     setToken(null);
     setAccount(null);
     setUser(null);
     setUsage(null);
     setBootError(null);
   }, []);
+  const logout = useCallback(() => {
+    setSignedOut(true);
+    clear();
+  }, [clear]);
 
   const refresh = useCallback(async () => {
     const me = await api.me();
@@ -48,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsage(me.usage);
   }, []);
 
-  useEffect(() => onUnauthorized(logout), [logout]);
+  useEffect(() => onUnauthorized(clear), [clear]);
 
   const boot = useCallback(() => {
     if (!getToken()) {
@@ -60,11 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh()
       .catch((err: unknown) => {
         // Only an explicit auth failure ends the session; network errors keep the token.
-        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) logout();
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) clear();
         else setBootError(errorMessage(err));
       })
       .finally(() => setInitializing(false));
-  }, [refresh, logout]);
+  }, [refresh, clear]);
 
   useEffect(() => boot(), [boot]);
 
@@ -72,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string) => {
       const res = await api.auth.login({ email, password });
       setToken(res.token);
+      setSignedOut(false);
       setAccount(res.account);
       setUser(res.user);
       await refresh().catch(() => undefined);
@@ -102,8 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const canManage = !user || user.role !== "editor";
   const value = useMemo(
-    () => ({ account, user, canManage, usage, initializing, bootError, retryBoot: boot, login, register, logout, refresh, adopt, setUser, setAccount }),
-    [account, user, canManage, usage, initializing, bootError, boot, login, register, logout, refresh, adopt],
+    () => ({ account, user, canManage, usage, initializing, bootError, retryBoot: boot, login, register, logout, signedOut, refresh, adopt, setUser, setAccount }),
+    [account, user, canManage, usage, initializing, bootError, boot, login, register, logout, signedOut, refresh, adopt],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
