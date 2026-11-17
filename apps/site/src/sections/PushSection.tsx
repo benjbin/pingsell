@@ -66,8 +66,8 @@ const PROVIDERS = [
 const FEATURES = [
   {
     icon: Megaphone,
-    title: "Campagnes push",
-    text: "Titre, texte, image et un lien qui ouvre la bonne page de votre app. À tous vos utilisateurs, à un segment ou à un tag, avec aperçu iPhone et Android et un test sur votre appareil avant l'envoi.",
+    title: "Écran verrouillé et dans l'app",
+    text: "Sur l'écran verrouillé avec son et badge, et en même temps dans le centre de notifications de votre app. Un lien ouvre la bonne page ; segment, tag ou toute la base, avec test avant envoi.",
   },
   {
     icon: Workflow,
@@ -77,7 +77,7 @@ const FEATURES = [
   {
     icon: ChartColumn,
     title: "Statistiques",
-    text: "Envoyées, échecs et ouvertures remontées par votre app. Les jetons invalides sont nettoyés automatiquement.",
+    text: "Envoyées, ouvertures et lectures dans l'app. Un SDK React Native / Expo prêt à intégrer, et des jetons invalides nettoyés tout seuls.",
   },
 ] as const;
 

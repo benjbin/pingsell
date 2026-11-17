@@ -24,6 +24,8 @@ export const stepSchema = z.discriminatedUnion('type', [
     body: z.string().trim().min(1).max(500),
     url: z.string().trim().max(2000).nullable().optional(),
     image_url: z.string().trim().url().max(2000).nullable().optional(),
+    /** Also add it to the notification centre inside the app (default: yes). */
+    in_app: z.boolean().optional(),
   }),
 ]);
 export const stepsSchema = z.array(stepSchema).min(1).max(50);
@@ -180,7 +182,7 @@ export function processDueRuns(db: DatabaseSync, config: AppConfig, limit = 200)
         }
         if (step.type === 'push') {
           // Contacts without the app simply skip this step.
-          queuePushForContact(db, automation.account_id, contact.id, step, automation.id);
+          queuePushForContact(db, automation.account_id, contact.id, step, automation.id, step.in_app === false ? ['push'] : ['push', 'in_app']);
           continue;
         }
         createMessage(db, config, {

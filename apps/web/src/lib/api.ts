@@ -38,6 +38,7 @@ import type {
   PushContent,
   PushDevice,
   PushAudience,
+  PushChannel,
 } from "./types";
 
 export const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:4000";
@@ -249,9 +250,12 @@ export const api = {
     config: () => get<PushConfig>("/push/config"),
     saveConfig: (input: PushConfigInput) => put<PushConfig>("/push/config", input),
     rotateAppKey: () => post<PushConfig>("/push/config/rotate-app-key"),
+    setIdentityRequired: (required: boolean) => put<PushConfig>("/push/config/identity", { required }),
+    rotateIdentitySecret: () => post<PushConfig>("/push/config/rotate-identity-secret"),
     devices: (page = 1, limit = 50) => get<Paginated<PushDevice>>("/push/devices", { page, limit }),
     removeDevice: (id: string) => del(`/push/devices/${id}`),
-    test: (deviceId: string, content: PushContent) => post<{ ok: boolean }>("/push/test", { device_id: deviceId, ...content }),
+    test: (deviceId: string, content: PushContent, channels: PushChannel[]) =>
+      post<{ ok: boolean }>("/push/test", { device_id: deviceId, ...content, channels }),
     audienceCount: (audience: PushAudience) => post<{ devices: number }>("/push/audience-count", { audience }),
     campaigns: () => get<Paginated<PushCampaign>>("/push/campaigns", { limit: 100 }).then((r) => r.data),
     campaign: (id: string) => get<PushCampaign>(`/push/campaigns/${id}`),

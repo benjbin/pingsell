@@ -52,7 +52,7 @@ const keyed = (step: AutomationStep): KeyedStep => ({ key: `s${++keySeq}`, step 
 
 const newEmailStep = (): AutomationStep => ({ type: "email", subject: "", html: DEFAULT_EMAIL_HTML });
 const newWaitStep = (): AutomationStep => ({ type: "wait", hours: 24 });
-const newPushStep = (): AutomationStep => ({ type: "push", title: "", body: "", url: "" });
+const newPushStep = (): AutomationStep => ({ type: "push", title: "", body: "", url: "", in_app: true });
 
 type PushStep = Extract<AutomationStep, { type: "push" }>;
 
@@ -68,6 +68,10 @@ function PushStepEditor({ step, onChange }: { step: PushStep; onChange: (s: Push
       <Field label="Lien à l'ouverture (optionnel)" hint="Envoyée sur tous les appareils du contact enregistrés dans votre application.">
         <Input value={step.url ?? ""} onChange={(e) => onChange({ ...step, url: e.target.value })} placeholder="https://… ou monapp://panier" />
       </Field>
+      <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+        <input type="checkbox" className="size-4 accent-brand-500" checked={step.in_app !== false} onChange={(e) => onChange({ ...step, in_app: e.target.checked })} />
+        Garder aussi la notification dans l'app (centre de notifications)
+      </label>
     </div>
   );
 }

@@ -1,0 +1,15 @@
+{
+  "name": "@missive/expo-push",
+  "version": "0.1.0",
+  "description": "Missive pour React Native / Expo : notifications sur l'écran verrouillé, centre de notifications dans l'app, bannière et badge.",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "license": "UNLICENSED",
+  "private": true,
+  "peerDependencies": {
+    "expo-constants": "*",
+    "expo-notifications": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

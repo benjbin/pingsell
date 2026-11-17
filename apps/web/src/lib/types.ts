@@ -284,7 +284,7 @@ export type AutomationTrigger = "contact_created" | "tag_added" | "order_created
 export type AutomationStep =
   | { type: "wait"; hours: number }
   | { type: "email"; subject: string; html: string }
-  | { type: "push"; title: string; body: string; url?: string | null; image_url?: string | null };
+  | { type: "push"; title: string; body: string; url?: string | null; image_url?: string | null; in_app?: boolean };
 
 export interface Automation {
   id: string;
@@ -386,6 +386,7 @@ export interface PushConfig {
   fcm: { configured: boolean; project_id?: string; client_email?: string };
   apns: { configured: boolean; key_id?: string; team_id?: string; bundle_id?: string; production?: boolean };
   expo: { configured: boolean; has_access_token?: boolean };
+  identity: { secret: string; required: boolean };
   devices: {
     total: number;
     ios: number;
@@ -424,7 +425,11 @@ export interface PushContent {
   url?: string | null;
 }
 
+/** "push" = system notification (lock screen), "in_app" = notification centre inside the app. */
+export type PushChannel = "push" | "in_app";
+
 export interface PushCampaignStats {
+  in_app: { total: number; read: number; read_rate: number };
   total: number;
   sent: number;
   failed: number;
@@ -437,6 +442,7 @@ export interface PushCampaign extends PushContent {
   id: string;
   name: string;
   audience: PushAudience;
+  channels: PushChannel[];
   status: "draft" | "sending" | "sent";
   created_at: string;
   updated_at: string;
@@ -444,4 +450,4 @@ export interface PushCampaign extends PushContent {
   stats: PushCampaignStats;
 }
 
-export type PushCampaignInput = PushContent & { name: string; audience: PushAudience };
+export type PushCampaignInput = PushContent & { name: string; audience: PushAudience; channels: PushChannel[] };

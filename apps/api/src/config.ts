@@ -40,7 +40,7 @@ export interface AppConfig {
   shopifyApiKey?: string;
   shopifyApiSecret?: string;
   push: {
-    /** 'log' = nothing leaves the machine (default in development), 'live' = real FCM / APNs / Expo calls. */
+    /** 'live' (default) = real FCM / APNs / Expo calls, 'log' = nothing leaves the machine (local tests). */
     mode: 'log' | 'live';
     fcmUrl: string;
     apnsProductionUrl: string;
@@ -73,7 +73,7 @@ function loadConfig(): AppConfig {
     shopifyApiKey: optional('SHOPIFY_API_KEY'),
     shopifyApiSecret: optional('SHOPIFY_API_SECRET'),
     push: {
-      mode: str('PUSH_MODE', process.env.NODE_ENV === 'production' ? 'live' : 'log').toLowerCase() === 'live' ? 'live' : 'log',
+      mode: str('PUSH_MODE', 'live').toLowerCase() === 'log' ? 'log' : 'live',
       fcmUrl: str('PUSH_FCM_URL', 'https://fcm.googleapis.com').replace(/\/+$/, ''),
       apnsProductionUrl: str('PUSH_APNS_URL', 'https://api.push.apple.com').replace(/\/+$/, ''),
       apnsSandboxUrl: str('PUSH_APNS_SANDBOX_URL', 'https://api.sandbox.push.apple.com').replace(/\/+$/, ''),

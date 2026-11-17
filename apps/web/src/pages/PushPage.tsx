@@ -6,6 +6,9 @@ import {
   Copy,
   FlaskConical,
   Image as ImageIcon,
+  Inbox,
+  Lock,
+  ShieldCheck,
   Link2,
   RefreshCw,
   Send,
@@ -17,7 +20,7 @@ import {
 import { API_URL, api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { cx, formatDateTime, formatNumber, formatRelative } from "../lib/format";
-import type { PushAudience, PushCampaign, PushConfig, PushDevice } from "../lib/types";
+import type { PushAudience, PushCampaign, PushChannel, PushConfig, PushDevice } from "../lib/types";
 import {
   Badge,
   Button,
@@ -115,9 +118,15 @@ interface Draft {
   image_url: string;
   url: string;
   audience: PushAudience;
+  channels: PushChannel[];
 }
 
-const EMPTY: Draft = { name: "", title: "", body: "", image_url: "", url: "", audience: { type: "all" } };
+const EMPTY: Draft = { name: "", title: "", body: "", image_url: "", url: "", audience: { type: "all" }, channels: ["push", "in_app"] };
+
+const CHANNEL_OPTIONS: Array<{ value: PushChannel; label: string; description: string; icon: typeof Lock }> = [
+  { value: "push", label: "Écran verrouillé", description: "Notification système : écran verrouillé, bannière et son, même app fermée.", icon: Lock },
+  { value: "in_app", label: "Dans l'app", description: "Centre de notifications de votre app, avec badge des non-lues sur l'icône.", icon: Inbox },
+];
 
 function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
   const toast = useToast();
@@ -128,7 +137,7 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
 
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [count, setCount] = useState<number | null>(null);
-  const [platform, setPlatform] = useState<"ios" | "android">("ios");
+  const [platform, setPlatform] = useState<"ios" | "android" | "in_app">("ios");
   const [sending, setSending] = useState(false);
   const [testDevice, setTestDevice] = useState("");
   const [testing, setTesting] = useState(false);
@@ -170,7 +179,7 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
     e.preventDefault();
     setSending(true);
     try {
-      const created = await api.push.createCampaign({ name: draft.name.trim() || draft.title.replace(/\{\{[^}]*\}\}[\s,]*/g, "").trim() || "Notification push", audience: draft.audience, ...content() });
+      const created = await api.push.createCampaign({ name: draft.name.trim() || draft.title.replace(/\{\{[^}]*\}\}[\s,]*/g, "").trim() || "Notification push", audience: draft.audience, channels: draft.channels, ...content() });
       await api.push.sendCampaign(created.id);
       toast.success("Notification en cours d'envoi", `${formatNumber(count ?? 0)} appareil(s) ciblé(s).`);
       setDraft(EMPTY);
@@ -190,7 +199,7 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
     }
     setTesting(true);
     try {
-      await api.push.test(testDevice, content());
+      await api.push.test(testDevice, content(), draft.channels);
       toast.success("Test envoyé", "La notification arrive sur l'appareil choisi dans quelques secondes.");
     } catch (err) {
       toast.error(err);
@@ -251,6 +260,40 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
                 <Input id="push-image" type="url" value={draft.image_url} onChange={(e) => set("image_url", e.target.value)} placeholder="https://…/visuel.jpg" />
               </Field>
             </div>
+
+            <fieldset>
+              <legend className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Où l'afficher ?</legend>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {CHANNEL_OPTIONS.map((o) => {
+                  const on = draft.channels.includes(o.value);
+                  return (
+                    <label
+                      key={o.value}
+                      className={cx(
+                        "flex cursor-pointer gap-3 rounded-2xl p-4 ring-1 transition",
+                        on ? "bg-brand-50/70 ring-brand-500 dark:bg-brand-900/20" : "ring-slate-900/10 hover:ring-slate-900/30 dark:ring-white/10",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 size-4 accent-brand-500"
+                        checked={on}
+                        onChange={(e) => {
+                          const next = e.target.checked ? [...draft.channels, o.value] : draft.channels.filter((c) => c !== o.value);
+                          if (next.length) set("channels", next);
+                        }}
+                      />
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-white">
+                          <o.icon className="size-4" /> {o.label}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{o.description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Audience" htmlFor="push-audience">
@@ -330,12 +373,17 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
                 options={[
                   { value: "ios", label: "iOS" },
                   { value: "android", label: "Android" },
+                  { value: "in_app", label: "App" },
                 ]}
               />
             }
           />
           <div className="flex flex-1 items-center justify-center p-6">
-            <PhonePreview platform={platform} title={draft.title} body={draft.body} image={draft.image_url} />
+            {platform === "in_app" ? (
+              <InAppPreview title={draft.title} body={draft.body} image={draft.image_url} />
+            ) : (
+              <PhonePreview platform={platform} title={draft.title} body={draft.body} image={draft.image_url} />
+            )}
           </div>
         </Card>
       </div>
@@ -355,7 +403,7 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
           <EmptyState icon={BellRing} title="Aucune notification envoyée" description="Vos campagnes push et leurs statistiques apparaîtront ici." />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-[760px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-900/10 text-xs text-slate-500 dark:border-white/10 dark:text-slate-400">
                   <th className="px-6 py-3 font-medium">Notification</th>
@@ -363,6 +411,7 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
                   <th className="px-3 py-3 text-right font-medium">Envoyées</th>
                   <th className="px-3 py-3 text-right font-medium">Échecs</th>
                   <th className="px-3 py-3 text-right font-medium">Ouvertures</th>
+                  <th className="px-3 py-3 text-right font-medium">Lues dans l'app</th>
                   <th className="px-6 py-3" />
                 </tr>
               </thead>
@@ -372,7 +421,12 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
                     <td className="max-w-0 px-6 py-3">
                       <p className="truncate font-medium text-slate-900 dark:text-white">{c.name}</p>
                       <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                        {c.title} · {formatDateTime(c.sent_at ?? c.created_at)}
+                        {c.channels.includes("push") && c.channels.includes("in_app")
+                          ? "Écran verrouillé + app"
+                          : c.channels.includes("push")
+                            ? "Écran verrouillé"
+                            : "Dans l'app"}{" "}
+                        · {formatDateTime(c.sent_at ?? c.created_at)}
                       </p>
                     </td>
                     <td className="px-3 py-3">
@@ -389,7 +443,23 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
                     <td className="px-3 py-3 text-right tabular-nums">{formatNumber(c.stats.sent)}</td>
                     <td className={cx("px-3 py-3 text-right tabular-nums", c.stats.failed > 0 && "text-red-600 dark:text-red-400")}>{formatNumber(c.stats.failed)}</td>
                     <td className="px-3 py-3 text-right tabular-nums">
-                      {formatNumber(c.stats.opened)} <span className="text-xs text-slate-500">({c.stats.open_rate.toLocaleString("fr-FR")} %)</span>
+                      {c.channels.includes("push") ? (
+                        <>
+                          {formatNumber(c.stats.opened)} <span className="text-xs text-slate-500">({c.stats.open_rate.toLocaleString("fr-FR")} %)</span>
+                        </>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums">
+                      {c.channels.includes("in_app") ? (
+                        <>
+                          {formatNumber(c.stats.in_app.read)} / {formatNumber(c.stats.in_app.total)}{" "}
+                          <span className="text-xs text-slate-500">({c.stats.in_app.read_rate.toLocaleString("fr-FR")} %)</span>
+                        </>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-3 text-right">
                       {c.status !== "sending" && (
@@ -462,6 +532,41 @@ function PhonePreview({ platform, title, body, image }: { platform: "ios" | "and
             <ImageIcon className="absolute size-5 text-slate-400" />
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function InAppPreview({ title, body, image }: { title: string; body: string; image: string }) {
+  const t = previewTags(title) || "Titre de la notification";
+  const b = previewTags(body) || "Le texte de votre notification s'affiche ici.";
+  return (
+    <div className="relative h-[480px] w-[260px] overflow-hidden rounded-[44px] border-[7px] border-slate-900 bg-white shadow-xl" aria-label="Aperçu dans l'app">
+      <div className="absolute top-2 left-1/2 h-5 w-20 -translate-x-1/2 rounded-full bg-slate-900" />
+      <div className="flex items-center justify-between px-4 pt-10 pb-3">
+        <p className="font-display text-lg font-bold text-slate-900">Notifications</p>
+        <span className="relative flex size-8 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+          <BellRing className="size-4" />
+          <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">1</span>
+        </span>
+      </div>
+      <div className="space-y-2 px-3">
+        <div className="relative rounded-2xl bg-brand-50 p-3 text-[12px] ring-1 ring-brand-200">
+          <span className="absolute top-3.5 right-3 size-2 rounded-full bg-brand-500" />
+          <p className="pr-4 font-semibold text-slate-900">{t}</p>
+          <p className="mt-0.5 line-clamp-3 text-slate-600">{b}</p>
+          {image.trim() && <img src={image} alt="" className="mt-2 h-20 w-full rounded-lg object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />}
+          <p className="mt-1.5 text-[10px] text-slate-400">À l'instant</p>
+        </div>
+        {[
+          ["Votre commande est expédiée", "Suivez votre colis en un clic."],
+          ["Bienvenue !", "Activez les notifications pour ne rien manquer."],
+        ].map(([a, c]) => (
+          <div key={a} className="rounded-2xl bg-slate-50 p-3 text-[12px] opacity-70">
+            <p className="font-semibold text-slate-700">{a}</p>
+            <p className="mt-0.5 text-slate-500">{c}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -650,29 +755,41 @@ function SetupTab({ config, onSaved }: { config: PushConfig; onSaved: (c: PushCo
     }
   }
 
+  const [lang, setLang] = useState<"sdk" | "http">("sdk");
   const snippet = useMemo(
-    () => `// Au démarrage de l'app, une fois le jeton de notification obtenu
-await fetch("${API_URL}/api/v1/push/app/devices", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer ${config.app_key}",
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    token: pushToken,            // FCM, APNs ou ExponentPushToken[…]
-    platform: "ios",             // ou "android"
-    email: user?.email,          // lie l'appareil au contact Missive
-    app_version: "2.4.0",
-  }),
-});
+    () =>
+      lang === "sdk"
+        ? `// React Native / Expo — SDK Missive (dossier sdk/expo du dépôt)
+import { Missive, MissiveInbox, useMissiveInbox } from "@missive/expo-push";
 
-// À l'ouverture d'une notification (statistiques d'ouverture)
-await fetch("${API_URL}/api/v1/push/app/opened", {
-  method: "POST",
-  headers: { "Authorization": "Bearer ${config.app_key}", "Content-Type": "application/json" },
-  body: JSON.stringify({ message_id: data.missive_message_id }),
-});`,
-    [config.app_key],
+Missive.init({ appKey: "${config.app_key}", apiUrl: "${API_URL}" });
+
+// Après la connexion du client : permission, jeton, écran verrouillé
+await Missive.register({ email: user.email, userHash: user.missiveHash });
+
+// À la déconnexion
+await Missive.logout();
+
+// Écran « Notifications » de votre app (centre de notifications)
+<MissiveInbox onOpen={(item) => item.url && Linking.openURL(item.url)} />
+
+// Pastille sur l'icône cloche
+const { unread } = useMissiveInbox();`
+        : `// Swift, Kotlin, Flutter… : 4 appels HTTP
+POST ${API_URL}/api/v1/push/app/devices          // enregistrer le jeton
+  Authorization: Bearer ${config.app_key}
+  { "token": "<jeton APNs / FCM / Expo>", "platform": "ios", "email": "…", "user_hash": "…" }
+
+GET  ${API_URL}/api/v1/push/app/inbox            // centre de notifications
+  Authorization: Bearer ${config.app_key}
+  X-Missive-Device: <jeton>
+  → { "data": [{ "id", "title", "body", "url", "read" }], "unread": 2 }
+
+POST ${API_URL}/api/v1/push/app/inbox/read       // { "ids": [...] } ou {} = tout lire
+POST ${API_URL}/api/v1/push/app/opened           // { "message_id": data.missive_message_id }
+
+// Android : créez le canal « missive » (importance haute, visibilité publique)`,
+    [config.app_key, lang],
   );
 
   return (
@@ -680,7 +797,7 @@ await fetch("${API_URL}/api/v1/push/app/opened", {
       <Card>
         <CardHeader
           title="1. Clé de votre application"
-          description="Clé publique à intégrer dans l'app iOS / Android. Elle permet seulement d'enregistrer des appareils et de signaler les ouvertures."
+          description="Clé publique à intégrer dans l'app iOS / Android : enregistrement des appareils, centre de notifications et ouvertures."
         />
         <div className="space-y-5 p-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -696,7 +813,18 @@ await fetch("${API_URL}/api/v1/push/app/opened", {
             <div className="absolute top-3 right-3">
               <CopyButton text={snippet} label="Copier le code" />
             </div>
-            <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 pr-36 text-[12.5px] leading-relaxed text-slate-200">{snippet}</pre>
+            <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 pt-14 text-[12.5px] leading-relaxed text-slate-200">{snippet}</pre>
+            <div className="absolute top-3 left-3">
+              <Segmented
+                value={lang}
+                onChange={setLang}
+                className="bg-white/10"
+                options={[
+                  { value: "sdk", label: "React Native / Expo" },
+                  { value: "http", label: "API HTTP" },
+                ]}
+              />
+            </div>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Fonctionne avec Swift, Kotlin, React Native, Flutter ou Expo. Depuis votre back-office, utilisez plutôt <code>POST /api/v1/push/devices</code> avec une clé API secrète.
@@ -704,6 +832,8 @@ await fetch("${API_URL}/api/v1/push/app/opened", {
           </p>
         </div>
       </Card>
+
+      <IdentityCard config={config} onSaved={onSaved} />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card>
@@ -828,5 +958,97 @@ await fetch("${API_URL}/api/v1/push/app/opened", {
         confirmLabel="Régénérer"
       />
     </div>
+  );
+}
+
+function IdentityCard({ config, onSaved }: { config: PushConfig; onSaved: (c: PushConfig) => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [show, setShow] = useState(false);
+  const [rotateOpen, setRotateOpen] = useState(false);
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      onSaved(await api.push.setIdentityRequired(!config.identity.required));
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rotate() {
+    setBusy(true);
+    try {
+      onSaved(await api.push.rotateIdentitySecret());
+      setRotateOpen(false);
+      toast.success("Nouvelle clé d'identité générée", "Mettez à jour votre serveur.");
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const backend = `// Sur VOTRE serveur (jamais dans l'app) — Node.js
+import { createHmac } from "node:crypto";
+const userHash = createHmac("sha256", process.env.MISSIVE_IDENTITY_SECRET)
+  .update(user.email.toLowerCase())
+  .digest("hex");
+// Renvoyez userHash à l'app avec la session du client.`;
+
+  return (
+    <Card>
+      <CardHeader
+        title="Vérification d'identité"
+        description="Empêche quiconque possède la clé publique de lire les notifications d'un autre client."
+        action={
+          config.identity.required ? (
+            <Badge tone="green" dot>
+              Activée
+            </Badge>
+          ) : (
+            <Badge tone="amber" dot>
+              Recommandée
+            </Badge>
+          )
+        }
+      />
+      <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2">
+        <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300">
+          <p>
+            Votre serveur signe l'email du client avec la clé secrète ci-dessous, et l'app envoie cette signature (<code>user_hash</code>) en enregistrant
+            l'appareil. Sans signature valide, l'appareil n'est pas rattaché au client.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <code className="min-w-0 flex-1 truncate rounded-xl bg-slate-100 px-4 py-2.5 font-mono text-xs text-slate-900 dark:bg-white/5 dark:text-white">
+              {show ? config.identity.secret : "msvid_" + "•".repeat(24)}
+            </code>
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setShow((v) => !v)}>
+                {show ? "Masquer" : "Afficher"}
+              </Button>
+              <CopyButton text={config.identity.secret} />
+              <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => setRotateOpen(true)} aria-label="Régénérer la clé d'identité" />
+            </div>
+          </div>
+          <Button variant={config.identity.required ? "secondary" : "primary"} icon={ShieldCheck} loading={busy} onClick={() => void toggle()}>
+            {config.identity.required ? "Désactiver la vérification" : "Exiger la vérification"}
+          </Button>
+        </div>
+        <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 text-[12px] leading-relaxed text-slate-200">{backend}</pre>
+      </div>
+      <ConfirmModal
+        open={rotateOpen}
+        onClose={() => setRotateOpen(false)}
+        onConfirm={rotate}
+        loading={busy}
+        danger
+        title="Régénérer la clé d'identité ?"
+        description="Les signatures calculées avec l'ancienne clé seront refusées : mettez votre serveur à jour en même temps."
+        confirmLabel="Régénérer"
+      />
+    </Card>
   );
 }

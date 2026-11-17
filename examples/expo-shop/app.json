@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Atelier Nord",
+    "slug": "missive-demo-shop",
+    "scheme": "ateliernord",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": { "bundleIdentifier": "fr.ateliernord.demo", "supportsTablet": false },
+    "android": { "package": "fr.ateliernord.demo" },
+    "plugins": [["expo-notifications", { "color": "#145cff" }]]
+  }
+}

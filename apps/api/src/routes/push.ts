@@ -8,7 +8,17 @@ import {
   apnsSchema,
   audienceDevices,
   audienceSchema,
+  channelsSchema,
+  deviceByToken,
   deviceSchema,
+  ensurePushConfig,
+  identityAllowed,
+  listInbox,
+  logoutDevice,
+  markInboxRead,
+  removeInboxItems,
+  rotateIdentitySecret,
+  setRequireIdentity,
   expoSchema,
   fcmSchema,
   markPushOpened,
@@ -37,11 +47,19 @@ const configSchema = z.object({
 const campaignSchema = pushContentSchema.extend({
   name: z.string().trim().min(1, 'Le nom est requis').max(200),
   audience: audienceSchema.default({ type: 'all' }),
+  channels: channelsSchema.default(['push', 'in_app']),
 });
 
 const tokenSchema = z.object({ token: z.string().trim().min(8).max(4096) });
 const openedSchema = z.object({ message_id: z.string().trim().min(1).max(64) });
-const testSchema = pushContentSchema.extend({ device_id: z.string().min(1) });
+const testSchema = pushContentSchema.extend({ device_id: z.string().min(1), channels: channelsSchema.default(['push', 'in_app']) });
+const inboxQuerySchema = z.object({
+  token: z.string().trim().min(8).max(4096).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  before: z.string().max(40).optional(),
+});
+const inboxReadSchema = tokenSchema.partial().extend({ ids: z.array(z.string().min(1).max(64)).max(200).optional() });
+const inboxRemoveSchema = tokenSchema.partial().extend({ ids: z.array(z.string().min(1).max(64)).min(1).max(200) });
 
 function parseFcm(raw: string): FcmCredentials {
   let json: unknown;
@@ -65,15 +83,62 @@ export async function pushAppRoutes(app: FastifyInstance, { db, kickWorker }: De
     return accountId;
   };
 
+  /** The device push token identifies the phone for its inbox (header `X-Missive-Device`, or `token`). */
+  const appDevice = (request: FastifyRequest, accountId: string, bodyToken?: string) => {
+    const token = String(request.headers['x-missive-device'] ?? bodyToken ?? '').trim();
+    if (!token) throw badRequest('Jeton de l’appareil manquant (en-tête X-Missive-Device)');
+    const device = deviceByToken(db, accountId, token);
+    if (!device) throw notFound('Appareil inconnu : enregistrez-le d’abord avec POST /push/app/devices');
+    return device;
+  };
+
   app.post('/push/app/devices', async (request, reply) => {
     const accountId = appAccount(request);
-    const result = registerDevice(db, accountId, parse(deviceSchema, request.body));
+    const input = parse(deviceSchema, request.body);
+    if (!identityAllowed(ensurePushConfig(db, accountId), input)) {
+      throw new HttpError(401, 'Signature d’identité (user_hash) manquante ou invalide');
+    }
+    const result = registerDevice(db, accountId, input);
     return reply.code(result.created ? 201 : 200).send({ id: result.device.id, provider: result.device.provider, linked: result.linked });
   });
 
   app.post('/push/app/devices/unregister', async (request) => {
     const accountId = appAccount(request);
     return { ok: unregisterDevice(db, accountId, parse(tokenSchema, request.body).token) };
+  });
+
+  // The customer signed out of the app: keep the device, drop the link to their contact.
+  app.post('/push/app/devices/logout', async (request) => {
+    const accountId = appAccount(request);
+    return { ok: logoutDevice(db, accountId, parse(tokenSchema, request.body).token) };
+  });
+
+  /* In-app notification centre */
+
+  app.get('/push/app/inbox', async (request) => {
+    const accountId = appAccount(request);
+    const q = parse(inboxQuerySchema, request.query);
+    return listInbox(db, accountId, appDevice(request, accountId, q.token), q.limit, q.before);
+  });
+
+  app.get('/push/app/inbox/unread', async (request) => {
+    const accountId = appAccount(request);
+    const q = parse(inboxQuerySchema, request.query);
+    return { unread: listInbox(db, accountId, appDevice(request, accountId, q.token), 1).unread };
+  });
+
+  app.post('/push/app/inbox/read', async (request) => {
+    const accountId = appAccount(request);
+    const body = parse(inboxReadSchema, request.body ?? {});
+    return { unread: markInboxRead(db, accountId, appDevice(request, accountId, body.token), body.ids) };
+  });
+
+  app.post('/push/app/inbox/delete', async (request) => {
+    const accountId = appAccount(request);
+    const body = parse(inboxRemoveSchema, request.body ?? {});
+    const device = appDevice(request, accountId, body.token);
+    const removed = removeInboxItems(db, accountId, device, body.ids);
+    return { removed, unread: markInboxRead(db, accountId, device, []) };
   });
 
   app.post('/push/app/opened', async (request) => {
@@ -104,6 +169,18 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
       apns: body.apns,
       expo: body.expo,
     });
+    return publicPushConfig(db, request.accountId, config);
+  });
+
+  app.put('/push/config/identity', async (request) => {
+    assertManager(request);
+    setRequireIdentity(db, request.accountId, parse(z.object({ required: z.boolean() }), request.body).required);
+    return publicPushConfig(db, request.accountId, config);
+  });
+
+  app.post('/push/config/rotate-identity-secret', async (request) => {
+    assertManager(request);
+    rotateIdentitySecret(db, request.accountId);
     return publicPushConfig(db, request.accountId, config);
   });
 
@@ -147,7 +224,7 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
 
   app.post('/push/test', async (request) => {
     const body = parse(testSchema, request.body);
-    if (!queueTestPush(db, request.accountId, body.device_id, body)) throw notFound('Appareil introuvable');
+    if (!queueTestPush(db, request.accountId, body.device_id, body, body.channels)) throw notFound('Appareil introuvable');
     kickWorker();
     return { ok: true };
   });
@@ -184,8 +261,8 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
     const timestamp = now();
     run(
       db,
-      `INSERT INTO push_campaigns (id, account_id, name, title, body, image_url, url, audience, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
+      `INSERT INTO push_campaigns (id, account_id, name, title, body, image_url, url, audience, channels, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
       id,
       request.accountId,
       body.name,
@@ -194,6 +271,7 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
       body.image_url ?? null,
       body.url ?? null,
       JSON.stringify(body.audience),
+      JSON.stringify(body.channels),
       timestamp,
       timestamp,
     );
@@ -207,13 +285,14 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
     const merged = { ...current, ...body };
     run(
       db,
-      'UPDATE push_campaigns SET name = ?, title = ?, body = ?, image_url = ?, url = ?, audience = ?, updated_at = ? WHERE id = ?',
+      'UPDATE push_campaigns SET name = ?, title = ?, body = ?, image_url = ?, url = ?, audience = ?, channels = ?, updated_at = ? WHERE id = ?',
       merged.name,
       merged.title,
       merged.body,
       merged.image_url ?? null,
       merged.url ?? null,
       JSON.stringify(merged.audience),
+      JSON.stringify(merged.channels),
       now(),
       current.id,
     );

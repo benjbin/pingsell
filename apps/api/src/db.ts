@@ -291,6 +291,31 @@ const MIGRATIONS: string[] = [
   CREATE INDEX idx_push_messages_status ON push_messages(status, created_at);
   CREATE INDEX idx_push_messages_campaign ON push_messages(push_campaign_id);
   `,
+  // v7 — in-app notification centre (inbox inside the merchant's app), channels, identity verification.
+  `
+  ALTER TABLE push_campaigns ADD COLUMN channels TEXT NOT NULL DEFAULT '["push","in_app"]';
+  ALTER TABLE push_messages ADD COLUMN inbox_id TEXT;
+  ALTER TABLE push_config ADD COLUMN identity_secret TEXT;
+  ALTER TABLE push_config ADD COLUMN require_identity INTEGER NOT NULL DEFAULT 0;
+
+  CREATE TABLE app_inbox (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    contact_id TEXT REFERENCES contacts(id) ON DELETE CASCADE,
+    device_id TEXT REFERENCES push_devices(id) ON DELETE CASCADE,
+    push_campaign_id TEXT REFERENCES push_campaigns(id) ON DELETE CASCADE,
+    automation_id TEXT REFERENCES automations(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    image_url TEXT,
+    url TEXT,
+    created_at TEXT NOT NULL,
+    read_at TEXT
+  );
+  CREATE INDEX idx_app_inbox_contact ON app_inbox(account_id, contact_id, created_at);
+  CREATE INDEX idx_app_inbox_device ON app_inbox(account_id, device_id, created_at);
+  CREATE INDEX idx_app_inbox_campaign ON app_inbox(push_campaign_id);
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

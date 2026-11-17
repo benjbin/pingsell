@@ -1,4 +1,4 @@
-import { createSign, randomBytes, sign as cryptoSign } from 'node:crypto';
+import { createHash, createHmac, createSign, randomBytes, sign as cryptoSign, timingSafeEqual } from 'node:crypto';
 import { connect as http2Connect } from 'node:http2';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
@@ -35,9 +35,14 @@ export interface PushConfig {
   fcm: FcmCredentials | null;
   apns: ApnsCredentials | null;
   expo: ExpoCredentials | null;
+  /** HMAC key used by the merchant's backend to sign user identities (`user_hash`). */
+  identity_secret: string;
+  /** When true, the app must send a valid `user_hash` to link a device to an email / contact. */
+  require_identity: boolean;
 }
 
 const newAppKey = () => `msvapp_${randomBytes(18).toString('base64url')}`;
+const newIdentitySecret = () => `msvid_${randomBytes(24).toString('base64url')}`;
 
 /** Push settings of an account; created on first access (with its public app key). */
 export function ensurePushConfig(db: DatabaseSync, accountId: string): PushConfig {
@@ -46,12 +51,48 @@ export function ensurePushConfig(db: DatabaseSync, accountId: string): PushConfi
     run(db, 'INSERT INTO push_config (account_id, app_key, updated_at) VALUES (?, ?, ?)', accountId, newAppKey(), now());
     row = get(db, 'SELECT * FROM push_config WHERE account_id = ?', accountId)!;
   }
+  let identitySecret = row.identity_secret ? String(row.identity_secret) : '';
+  if (!identitySecret) {
+    identitySecret = newIdentitySecret();
+    run(db, 'UPDATE push_config SET identity_secret = ? WHERE account_id = ?', identitySecret, accountId);
+  }
   return {
     app_key: String(row.app_key),
     fcm: parseJson<FcmCredentials | null>(row.fcm, null),
     apns: parseJson<ApnsCredentials | null>(row.apns, null),
     expo: parseJson<ExpoCredentials | null>(row.expo, null),
+    identity_secret: identitySecret,
+    require_identity: Number(row.require_identity) === 1,
   };
+}
+
+export function rotateIdentitySecret(db: DatabaseSync, accountId: string): void {
+  ensurePushConfig(db, accountId);
+  run(db, 'UPDATE push_config SET identity_secret = ?, updated_at = ? WHERE account_id = ?', newIdentitySecret(), now(), accountId);
+}
+
+export function setRequireIdentity(db: DatabaseSync, accountId: string, required: boolean): void {
+  ensurePushConfig(db, accountId);
+  run(db, 'UPDATE push_config SET require_identity = ?, updated_at = ? WHERE account_id = ?', required ? 1 : 0, now(), accountId);
+}
+
+/** HMAC-SHA256 (hex) of the email (lower-cased) or contact id, computed by the merchant's backend. */
+export function identityHash(secret: string, identity: string): string {
+  return createHmac('sha256', secret).update(identity).digest('hex');
+}
+
+/**
+ * Checks the identity proof sent by the app. Linking a device to someone requires a valid `user_hash`
+ * when the account enabled identity verification (otherwise anyone holding the public app key could
+ * read another customer's in-app notifications).
+ */
+export function identityAllowed(cfg: PushConfig, input: Pick<DeviceInput, 'email' | 'contact_id' | 'user_hash'>): boolean {
+  const identity = input.contact_id?.trim() || input.email?.trim().toLowerCase();
+  if (!identity || !cfg.require_identity) return true;
+  if (!input.user_hash) return false;
+  const expected = Buffer.from(identityHash(cfg.identity_secret, identity));
+  const given = Buffer.from(input.user_hash.trim().toLowerCase());
+  return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
 export function rotateAppKey(db: DatabaseSync, accountId: string): string {
@@ -95,6 +136,7 @@ export function publicPushConfig(db: DatabaseSync, accountId: string, config: Ap
       ? { configured: true, key_id: cfg.apns.key_id, team_id: cfg.apns.team_id, bundle_id: cfg.apns.bundle_id, production: cfg.apns.production }
       : { configured: false },
     expo: { configured: true, has_access_token: !!cfg.expo?.access_token },
+    identity: { secret: cfg.identity_secret, required: cfg.require_identity },
     devices: {
       total: count(() => true),
       ios: count((d) => d.platform === 'ios'),
@@ -120,6 +162,8 @@ export const deviceSchema = z.object({
   email: z.string().trim().max(254).optional(),
   contact_id: z.string().trim().max(64).optional(),
   app_version: z.string().trim().max(40).optional(),
+  /** HMAC-SHA256(identity_secret, email | contact_id), required when identity verification is on. */
+  user_hash: z.string().trim().max(128).optional(),
 });
 export type DeviceInput = z.output<typeof deviceSchema>;
 
@@ -160,11 +204,13 @@ export function registerDevice(db: DatabaseSync, accountId: string, input: Devic
   if (existing) {
     run(
       db,
-      `UPDATE push_devices SET platform = ?, provider = ?, app_version = COALESCE(?, app_version), contact_id = COALESCE(?, contact_id),
-              active = 1, last_seen_at = ? WHERE id = ?`,
+      `UPDATE push_devices SET platform = ?, provider = ?, app_version = COALESCE(?, app_version),
+              contact_id = CASE WHEN ? THEN ? ELSE contact_id END, active = 1, last_seen_at = ? WHERE id = ?`,
       input.platform,
       provider,
       input.app_version ?? null,
+      // A new identity replaces the previous one (another customer signed in on this phone).
+      input.email || input.contact_id ? 1 : 0,
       contactId,
       timestamp,
       existing.id,
@@ -198,6 +244,80 @@ export function unregisterDevice(db: DatabaseSync, accountId: string, token: str
   return run(db, 'UPDATE push_devices SET active = 0 WHERE account_id = ? AND token = ?', accountId, token) > 0;
 }
 
+/** The customer signed out: the device stays reachable but is no longer linked to them. */
+export function logoutDevice(db: DatabaseSync, accountId: string, token: string): boolean {
+  return run(db, 'UPDATE push_devices SET contact_id = NULL, last_seen_at = ? WHERE account_id = ? AND token = ?', now(), accountId, token) > 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* In-app notification centre                                                 */
+/* -------------------------------------------------------------------------- */
+
+export function deviceByToken(db: DatabaseSync, accountId: string, token: string) {
+  return get<{ id: string; contact_id: string | null }>(db, 'SELECT id, contact_id FROM push_devices WHERE account_id = ? AND token = ?', accountId, token);
+}
+
+/** Inbox scope of a device: its own messages plus, when signed in, every message of its contact. */
+function inboxScope(device: { id: string; contact_id: string | null }): { sql: string; params: SQLInputValue[] } {
+  return device.contact_id
+    ? { sql: '(device_id = ? OR contact_id = ?)', params: [device.id, device.contact_id] }
+    : { sql: 'device_id = ?', params: [device.id] };
+}
+
+export function inboxUnread(db: DatabaseSync, accountId: string, device: { id: string; contact_id: string | null }): number {
+  const scope = inboxScope(device);
+  return scalar(db, `SELECT COUNT(*) FROM app_inbox WHERE account_id = ? AND read_at IS NULL AND ${scope.sql}`, accountId, ...scope.params);
+}
+
+export function listInbox(db: DatabaseSync, accountId: string, device: { id: string; contact_id: string | null }, limit = 50, before?: string) {
+  const scope = inboxScope(device);
+  const rows = all(
+    db,
+    `SELECT id, title, body, image_url, url, created_at, read_at FROM app_inbox
+      WHERE account_id = ? AND ${scope.sql}${before ? ' AND created_at < ?' : ''}
+      ORDER BY created_at DESC LIMIT ?`,
+    accountId,
+    ...scope.params,
+    ...(before ? [before] : []),
+    limit,
+  );
+  return {
+    data: rows.map((r) => ({
+      id: String(r.id),
+      title: String(r.title),
+      body: String(r.body),
+      image_url: (r.image_url as string | null) ?? null,
+      url: (r.url as string | null) ?? null,
+      created_at: String(r.created_at),
+      read: !!r.read_at,
+    })),
+    unread: inboxUnread(db, accountId, device),
+  };
+}
+
+/** Marks inbox items as read (all of them when `ids` is omitted). Returns the remaining unread count. */
+export function markInboxRead(db: DatabaseSync, accountId: string, device: { id: string; contact_id: string | null }, ids?: string[]): number {
+  const scope = inboxScope(device);
+  if (ids && !ids.length) return inboxUnread(db, accountId, device);
+  run(
+    db,
+    `UPDATE app_inbox SET read_at = ? WHERE account_id = ? AND read_at IS NULL AND ${scope.sql}${
+      ids ? ` AND id IN (${ids.map(() => '?').join(',')})` : ''
+    }`,
+    now(),
+    accountId,
+    ...scope.params,
+    ...(ids ?? []),
+  );
+  return inboxUnread(db, accountId, device);
+}
+
+export function removeInboxItems(db: DatabaseSync, accountId: string, device: { id: string; contact_id: string | null }, ids: string[]): number {
+  if (!ids.length) return 0;
+  const scope = inboxScope(device);
+  return run(db, `DELETE FROM app_inbox WHERE account_id = ? AND ${scope.sql} AND id IN (${ids.map(() => '?').join(',')})`, accountId, ...scope.params, ...ids);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Messages, campaigns, audiences                                             */
 /* -------------------------------------------------------------------------- */
@@ -216,6 +336,14 @@ export const pushContentSchema = z.object({
   url: z.string().trim().max(2000).nullable().optional(),
 });
 export type PushContent = z.output<typeof pushContentSchema>;
+
+/** `push` = system notification (lock screen, notification centre); `in_app` = notification centre inside the app. */
+export const CHANNELS = ['push', 'in_app'] as const;
+export type PushChannel = (typeof CHANNELS)[number];
+export const channelsSchema = z
+  .array(z.enum(CHANNELS))
+  .min(1, 'Choisissez au moins un canal : écran verrouillé ou dans l’app')
+  .transform((list) => [...new Set(list)]);
 
 interface Recipient {
   device_id: string;
@@ -259,11 +387,12 @@ function insertPushMessage(
   r: Recipient,
   content: PushContent,
   refs: { campaignId?: string | null; automationId?: string | null },
+  inboxId: string | null,
 ): void {
   run(
     db,
-    `INSERT INTO push_messages (id, account_id, push_campaign_id, automation_id, device_id, contact_id, title, body, image_url, url, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
+    `INSERT INTO push_messages (id, account_id, push_campaign_id, automation_id, device_id, contact_id, title, body, image_url, url, status, created_at, inbox_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
     newId(),
     accountId,
     refs.campaignId ?? null,
@@ -275,7 +404,61 @@ function insertPushMessage(
     content.image_url ?? null,
     content.url ?? null,
     now(),
+    inboxId,
   );
+}
+
+/**
+ * Fans content out to recipients: one in-app inbox entry per person (per contact, or per anonymous
+ * device) and one system push per device. Returns the number of push messages queued.
+ */
+export function queueContent(
+  db: DatabaseSync,
+  accountId: string,
+  recipients: Recipient[],
+  content: PushContent,
+  refs: { campaignId?: string | null; automationId?: string | null },
+  channels: readonly PushChannel[],
+  scope: 'contact' | 'device' = 'contact',
+): { pushes: number; inbox: number } {
+  const groups = new Map<string, Recipient[]>();
+  for (const r of recipients) {
+    const key = scope === 'contact' && r.contact_id ? `c:${r.contact_id}` : `d:${r.device_id}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+  let pushes = 0;
+  let inbox = 0;
+  const timestamp = now();
+  for (const [key, members] of groups) {
+    const first = members[0];
+    let inboxId: string | null = null;
+    if (channels.includes('in_app')) {
+      inboxId = newId();
+      const byContact = key.startsWith('c:');
+      run(
+        db,
+        `INSERT INTO app_inbox (id, account_id, contact_id, device_id, push_campaign_id, automation_id, title, body, image_url, url, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        inboxId,
+        accountId,
+        byContact ? first.contact_id : null,
+        byContact ? null : first.device_id,
+        refs.campaignId ?? null,
+        refs.automationId ?? null,
+        personalise(content.title, first),
+        personalise(content.body, first),
+        content.image_url ?? null,
+        content.url ?? null,
+        timestamp,
+      );
+      inbox++;
+    }
+    if (channels.includes('push')) {
+      for (const r of members) insertPushMessage(db, accountId, r, content, refs, inboxId);
+      pushes += members.length;
+    }
+  }
+  return { pushes, inbox };
 }
 
 /** Queues a push to every active device of a contact (automation step). Returns the number of devices. */
@@ -285,6 +468,7 @@ export function queuePushForContact(
   contactId: string,
   content: PushContent,
   automationId: string | null,
+  channels: readonly PushChannel[] = CHANNELS,
 ): number {
   const recipients = all<Recipient>(
     db,
@@ -294,12 +478,18 @@ export function queuePushForContact(
     accountId,
     contactId,
   );
-  for (const r of recipients) insertPushMessage(db, accountId, r, content, { automationId });
+  queueContent(db, accountId, recipients, content, { automationId }, channels);
   return recipients.length;
 }
 
 /** Queues a single test push to one device (sent on the next worker tick). */
-export function queueTestPush(db: DatabaseSync, accountId: string, deviceId: string, content: PushContent): boolean {
+export function queueTestPush(
+  db: DatabaseSync,
+  accountId: string,
+  deviceId: string,
+  content: PushContent,
+  channels: readonly PushChannel[] = CHANNELS,
+): boolean {
   const r = get<Recipient>(
     db,
     `SELECT d.id AS device_id, d.contact_id, c.email, c.first_name, c.last_name
@@ -308,7 +498,8 @@ export function queueTestPush(db: DatabaseSync, accountId: string, deviceId: str
     accountId,
   );
   if (!r) return false;
-  insertPushMessage(db, accountId, r, content, {});
+  // A test only lands in this device's inbox, never in the whole contact's history.
+  queueContent(db, accountId, [r], content, {}, channels, 'device');
   return true;
 }
 
@@ -321,6 +512,7 @@ export function serializePushCampaign(row: Row) {
     image_url: (row.image_url as string | null) ?? null,
     url: (row.url as string | null) ?? null,
     audience: parseJson<PushAudience>(row.audience, { type: 'all' }),
+    channels: parseJson<PushChannel[]>(row.channels, [...CHANNELS]),
     status: row.status as 'draft' | 'sending' | 'sent',
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
@@ -339,7 +531,15 @@ export function pushCampaignStats(db: DatabaseSync, campaignId: string) {
   );
   const sent = Number(row?.sent ?? 0);
   const opened = Number(row?.opened ?? 0);
+  const inbox = get<{ total: number; read: number }>(
+    db,
+    'SELECT COUNT(*) AS total, SUM(read_at IS NOT NULL) AS read FROM app_inbox WHERE push_campaign_id = ?',
+    campaignId,
+  );
+  const inboxTotal = Number(inbox?.total ?? 0);
+  const inboxRead = Number(inbox?.read ?? 0);
   return {
+    in_app: { total: inboxTotal, read: inboxRead, read_rate: inboxTotal ? Math.round((inboxRead / inboxTotal) * 1000) / 10 : 0 },
     total: Number(row?.total ?? 0),
     sent,
     failed: Number(row?.failed ?? 0),
@@ -353,16 +553,19 @@ export function pushCampaignStats(db: DatabaseSync, campaignId: string) {
 export function queuePushCampaigns(db: DatabaseSync): number {
   const campaigns = all(
     db,
-    `SELECT * FROM push_campaigns c WHERE c.status = 'sending' AND NOT EXISTS (SELECT 1 FROM push_messages m WHERE m.push_campaign_id = c.id)`,
+    `SELECT * FROM push_campaigns c WHERE c.status = 'sending'
+        AND NOT EXISTS (SELECT 1 FROM push_messages m WHERE m.push_campaign_id = c.id)
+        AND NOT EXISTS (SELECT 1 FROM app_inbox i WHERE i.push_campaign_id = c.id)`,
   ).map(serializePushCampaign);
   let queued = 0;
   for (const c of campaigns) {
     transaction(db, () => {
       const accountId = String(get<{ account_id: string }>(db, 'SELECT account_id FROM push_campaigns WHERE id = ?', c.id)!.account_id);
       const recipients = audienceDevices(db, accountId, c.audience);
-      for (const r of recipients) insertPushMessage(db, accountId, r, c, { campaignId: c.id });
-      if (!recipients.length) run(db, "UPDATE push_campaigns SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ?", now(), now(), c.id);
-      queued += recipients.length;
+      const result = queueContent(db, accountId, recipients, c, { campaignId: c.id }, c.channels);
+      // In-app only (or nobody): nothing to deliver through Apple / Google, the campaign is done.
+      if (!result.pushes) run(db, "UPDATE push_campaigns SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ?", now(), now(), c.id);
+      queued += result.pushes;
     });
   }
   return queued;
@@ -382,7 +585,18 @@ export function finalizePushCampaigns(db: DatabaseSync): void {
 
 /** Records an open reported by the app (idempotent). */
 export function markPushOpened(db: DatabaseSync, accountId: string, messageId: string): boolean {
-  return run(db, 'UPDATE push_messages SET opened_at = COALESCE(opened_at, ?) WHERE id = ? AND account_id = ?', now(), messageId, accountId) > 0;
+  const timestamp = now();
+  const changed = run(db, 'UPDATE push_messages SET opened_at = COALESCE(opened_at, ?) WHERE id = ? AND account_id = ?', timestamp, messageId, accountId) > 0;
+  // Opening the notification also reads it in the in-app notification centre.
+  run(
+    db,
+    'UPDATE app_inbox SET read_at = COALESCE(read_at, ?) WHERE account_id = ? AND id = (SELECT inbox_id FROM push_messages WHERE id = ? AND account_id = ?)',
+    timestamp,
+    accountId,
+    messageId,
+    accountId,
+  );
+  return changed;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -396,6 +610,21 @@ export interface PushPayload {
   body: string;
   imageUrl: string | null;
   url: string | null;
+  /** In-app inbox entry linked to this notification, if any. */
+  inboxId?: string | null;
+  /** Unread in-app notifications, shown as the app icon badge. */
+  badge?: number;
+}
+
+/** Android notification channel the SDK creates (high importance, visible on the lock screen). */
+export const ANDROID_CHANNEL_ID = 'missive';
+
+function payloadData(p: PushPayload): Record<string, string> {
+  const data: Record<string, string> = { missive_message_id: p.messageId };
+  if (p.inboxId) data.missive_inbox_id = p.inboxId;
+  if (p.url) data.url = p.url;
+  if (p.imageUrl) data.image_url = p.imageUrl;
+  return data;
 }
 
 export type PushOutcome = { ok: true; providerId: string } | { ok: false; error: string; invalidToken: boolean };
@@ -406,7 +635,8 @@ const fcmTokens = new Map<string, { token: string; expiresAt: number }>();
 
 /** OAuth2 access token for the FCM HTTP v1 API, from a Google service account (JWT bearer grant). */
 async function fcmAccessToken(creds: FcmCredentials): Promise<string> {
-  const cached = fcmTokens.get(creds.client_email);
+  const cacheKey = `${creds.client_email}:${createHash('sha256').update(creds.private_key).digest('base64url')}`;
+  const cached = fcmTokens.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
   const iat = Math.floor(Date.now() / 1000);
   const unsigned = `${b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))}.${b64url(
@@ -426,14 +656,13 @@ async function fcmAccessToken(creds: FcmCredentials): Promise<string> {
   });
   const data = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error_description?: string };
   if (!res.ok || !data.access_token) throw new Error(`Authentification Firebase refusée : ${data.error_description ?? res.status}`);
-  fcmTokens.set(creds.client_email, { token: data.access_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 });
+  fcmTokens.set(cacheKey, { token: data.access_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 });
   return data.access_token;
 }
 
 async function sendFcm(config: AppConfig, creds: FcmCredentials, p: PushPayload): Promise<PushOutcome> {
   const accessToken = await fcmAccessToken(creds);
-  const data: Record<string, string> = { missive_message_id: p.messageId };
-  if (p.url) data.url = p.url;
+  const data = payloadData(p);
   const res = await fetch(`${config.push.fcmUrl}/v1/projects/${encodeURIComponent(creds.project_id)}/messages:send`, {
     method: 'POST',
     headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
@@ -442,8 +671,22 @@ async function sendFcm(config: AppConfig, creds: FcmCredentials, p: PushPayload)
         token: p.token,
         notification: { title: p.title, body: p.body, ...(p.imageUrl ? { image: p.imageUrl } : {}) },
         data,
-        android: { priority: 'high' },
-        apns: { payload: { aps: { sound: 'default', 'mutable-content': 1 } }, ...(p.imageUrl ? { fcm_options: { image: p.imageUrl } } : {}) },
+        android: {
+          priority: 'high',
+          notification: {
+            channel_id: ANDROID_CHANNEL_ID,
+            visibility: 'PUBLIC', // full content on the lock screen
+            default_sound: true,
+            ...(p.badge !== undefined ? { notification_count: p.badge } : {}),
+          },
+        },
+        apns: {
+          headers: { 'apns-priority': '10', 'apns-push-type': 'alert' },
+          payload: {
+            aps: { sound: 'default', 'mutable-content': 1, 'thread-id': 'missive', ...(p.badge !== undefined ? { badge: p.badge } : {}) },
+          },
+          ...(p.imageUrl ? { fcm_options: { image: p.imageUrl } } : {}),
+        },
       },
     }),
   });
@@ -464,7 +707,8 @@ const apnsTokens = new Map<string, { token: string; issuedAt: number }>();
 
 /** Provider token for APNs (ES256 JWT, valid 1 h; refreshed every 50 min as Apple recommends). */
 function apnsJwt(creds: ApnsCredentials): string {
-  const cacheKey = `${creds.team_id}:${creds.key_id}`;
+  // The key itself is part of the cache key: replacing the .p8 must not reuse a token signed with the old one.
+  const cacheKey = `${creds.team_id}:${creds.key_id}:${createHash('sha256').update(creds.key_p8).digest('base64url')}`;
   const cached = apnsTokens.get(cacheKey);
   if (cached && Date.now() - cached.issuedAt < 50 * 60_000) return cached.token;
   const unsigned = `${b64url(JSON.stringify({ alg: 'ES256', kid: creds.key_id }))}.${b64url(
@@ -479,10 +723,15 @@ function apnsJwt(creds: ApnsCredentials): string {
 function sendApns(config: AppConfig, creds: ApnsCredentials, p: PushPayload): Promise<PushOutcome> {
   const origin = creds.production ? config.push.apnsProductionUrl : config.push.apnsSandboxUrl;
   const body = JSON.stringify({
-    aps: { alert: { title: p.title, body: p.body }, sound: 'default', 'mutable-content': 1 },
-    missive_message_id: p.messageId,
-    ...(p.url ? { url: p.url } : {}),
-    ...(p.imageUrl ? { image_url: p.imageUrl } : {}),
+    aps: {
+      alert: { title: p.title, body: p.body },
+      sound: 'default',
+      'mutable-content': 1,
+      'thread-id': 'missive',
+      'interruption-level': 'active',
+      ...(p.badge !== undefined ? { badge: p.badge } : {}),
+    },
+    ...payloadData(p),
   });
   return new Promise((resolve) => {
     const session = http2Connect(origin);
@@ -535,7 +784,10 @@ async function sendExpo(config: AppConfig, creds: ExpoCredentials | null, p: Pus
         title: p.title,
         body: p.body,
         sound: 'default',
-        data: { missive_message_id: p.messageId, ...(p.url ? { url: p.url } : {}) },
+        priority: 'high',
+        channelId: ANDROID_CHANNEL_ID,
+        ...(p.badge !== undefined ? { badge: p.badge } : {}),
+        data: payloadData(p),
         ...(p.imageUrl ? { richContent: { image: p.imageUrl } } : {}),
       },
     ]),
@@ -574,15 +826,17 @@ export async function sendPushBatch(db: DatabaseSync, config: AppConfig, limit: 
     id: string;
     account_id: string;
     device_id: string;
+    device_contact_id: string | null;
     token: string;
     provider: PushProvider;
     title: string;
     body: string;
     image_url: string | null;
     url: string | null;
+    inbox_id: string | null;
   }>(
     db,
-    `SELECT m.id, m.account_id, m.device_id, d.token, d.provider, m.title, m.body, m.image_url, m.url
+    `SELECT m.id, m.account_id, m.device_id, d.contact_id AS device_contact_id, d.token, d.provider, m.title, m.body, m.image_url, m.url, m.inbox_id
        FROM push_messages m JOIN push_devices d ON d.id = m.device_id
       WHERE m.status = 'queued' ORDER BY m.created_at LIMIT ?`,
     limit,
@@ -601,6 +855,8 @@ export async function sendPushBatch(db: DatabaseSync, config: AppConfig, limit: 
       body: m.body,
       imageUrl: m.image_url,
       url: m.url,
+      inboxId: m.inbox_id,
+      badge: inboxUnread(db, m.account_id, { id: m.device_id, contact_id: m.device_contact_id }),
     });
     if (outcome.ok) {
       run(db, "UPDATE push_messages SET status = 'sent', provider_id = ?, error = NULL, sent_at = ? WHERE id = ?", outcome.providerId, now(), m.id);
