@@ -19,6 +19,10 @@ import {
   Loader2,
   Monitor,
   Palette,
+  Baseline,
+  Highlighter,
+  BadgeCheck,
+  Sparkles,
   Plus,
   Redo2,
   RemoveFormatting,
@@ -36,11 +40,19 @@ import { cx } from "../../lib/format";
 import type { Asset } from "../../lib/types";
 import { Button, Segmented } from "../ui/primitives";
 import { Modal } from "../ui/Overlay";
+import { api } from "../../lib/api";
+import { useToast } from "../ui/Toast";
 import { BlockInspector, ThemeInspector } from "./inspector";
 import { DND_ASSET, useUploader } from "./media";
 import {
   BLOCK_LIBRARY,
   MERGE_TAGS,
+  applyBrandKit,
+  brandBlock,
+  googleFontsHref,
+  parseBrandKit,
+  usedWebFonts,
+  type BrandKit,
   cloneBlock,
   createBlock,
   extractPlain,
@@ -167,6 +179,9 @@ export function EmailBuilder(props: EmailBuilderProps) {
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [insertAt, setInsertAt] = useState<number | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [kit, setKit] = useState<BrandKit | null>(null);
+  const [kitSaving, setKitSaving] = useState(false);
+  const toast = useToast();
   const dragFrom = useRef<number | null>(null);
   const designRef = useRef(design);
   designRef.current = design;
@@ -174,6 +189,51 @@ export function EmailBuilder(props: EmailBuilderProps) {
   const selected = design.blocks.find((b) => b.id === selectedId) ?? null;
   const setBlocks = (blocks: Block[], key?: string) => commit({ ...designRef.current, blocks }, key);
   const setTheme = (patch: Partial<Theme>) => commit({ ...designRef.current, theme: { ...designRef.current.theme, ...patch } }, `theme:${Object.keys(patch).join(",")}`);
+
+  useEffect(() => {
+    api.brandKit
+      .get()
+      .then((raw) => setKit(parseBrandKit(raw)))
+      .catch(() => undefined);
+  }, []);
+
+  // Load the web fonts used by the design so the canvas matches the email.
+  const fontsHref = googleFontsHref(usedWebFonts(design));
+  useEffect(() => {
+    if (!fontsHref) return;
+    let link = document.querySelector<HTMLLinkElement>(`link[data-email-fonts="${CSS.escape(fontsHref)}"]`);
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = fontsHref;
+      link.dataset.emailFonts = fontsHref;
+      document.head.appendChild(link);
+    }
+  }, [fontsHref]);
+
+  async function saveBrandKit() {
+    const d = designRef.current;
+    const logo = d.blocks.find((b) => b.type === "logo");
+    const footer = d.blocks.find((b) => b.type === "footer");
+    const social = d.blocks.find((b) => b.type === "social");
+    const next: BrandKit = {
+      theme: d.theme,
+      logoUrl: logo?.type === "logo" && logo.imageUrl ? logo.imageUrl : kit?.logoUrl,
+      logoHeight: logo?.type === "logo" ? logo.height : kit?.logoHeight,
+      footerText: footer?.type === "footer" ? footer.text : kit?.footerText,
+      socials: social?.type === "social" ? social.links : kit?.socials,
+    };
+    setKitSaving(true);
+    try {
+      await api.brandKit.save(JSON.stringify(next));
+      setKit(next);
+      toast.success("Style de marque enregistré", "Il s'appliquera à vos prochains emails.");
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setKitSaving(false);
+    }
+  }
 
   // Lock page scroll behind the full-screen workspace.
   useEffect(() => {
@@ -185,7 +245,7 @@ export function EmailBuilder(props: EmailBuilderProps) {
   }, []);
 
   function insert(type: BlockType, at?: number, patch?: Partial<Block>) {
-    const block = { ...createBlock(type, brand), ...patch } as Block;
+    const block = { ...createBlock(type, brand, kit), ...patch } as Block;
     const blocks = [...designRef.current.blocks];
     const selIndex = selectedId ? blocks.findIndex((b) => b.id === selectedId) : -1;
     const footer = blocks.findIndex((b) => b.type === "footer");
@@ -330,7 +390,7 @@ export function EmailBuilder(props: EmailBuilderProps) {
     setDropIndex(null);
   }
 
-  const canvasWidth = device === "desktop" ? 600 : 375;
+  const canvasWidth = device === "desktop" ? design.theme.width : 375;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-100 dark:bg-slate-950">
@@ -444,7 +504,8 @@ export function EmailBuilder(props: EmailBuilderProps) {
                 disabled={disabled}
                 onPreset={(p) => {
                   // Push current state so the preset can be undone.
-                  commit(p.build(brand));
+                  const built = p.build(brand);
+                  commit({ ...built, blocks: built.blocks.map((b) => brandBlock(b, kit)) });
                   props.onApplyPreset(p);
                   setSelectedId(null);
                 }}
@@ -477,10 +538,19 @@ export function EmailBuilder(props: EmailBuilderProps) {
           <div className="mx-auto px-4 py-8 sm:px-10" style={{ width: canvasWidth + 80, maxWidth: "100%" }}>
             <Envelope {...props} width={canvasWidth} />
 
-            <div className="rounded-[28px] p-5 shadow-[0_30px_80px_-40px_rgba(11,33,74,0.45)] transition-[width] duration-300 sm:p-8" style={{ background: design.theme.background }}>
+            <div
+              className="rounded-[28px] px-3 shadow-[0_30px_80px_-40px_rgba(11,33,74,0.45)] transition-[width] duration-300"
+              style={{ background: design.theme.background, paddingTop: Math.max(12, design.theme.outerPad), paddingBottom: Math.max(12, design.theme.outerPad) }}
+            >
               <div
                 className="relative mx-auto overflow-hidden transition-[width] duration-300"
-                style={{ width: canvasWidth - (device === "mobile" ? 0 : 0), maxWidth: "100%", background: design.theme.surface, borderRadius: device === "mobile" ? 0 : 20 }}
+                style={{
+                  width: canvasWidth,
+                  maxWidth: "100%",
+                  background: design.theme.surface,
+                  borderRadius: device === "mobile" ? 0 : design.theme.cardRadius,
+                  border: design.theme.borderWidth ? `${design.theme.borderWidth}px solid ${design.theme.borderColor}` : undefined,
+                }}
               >
                 {design.blocks.length === 0 && (
                   <div className={cx("px-8 py-24 text-center text-sm", dropIndex === 0 ? "text-brand-500" : "text-slate-400")}>
@@ -570,9 +640,42 @@ export function EmailBuilder(props: EmailBuilderProps) {
           </div>
           <fieldset disabled={disabled} className="min-h-0 flex-1 overflow-y-auto">
             {selected ? (
-              <BlockInspector key={selected.id} block={selected} onChange={(patch) => update(selected.id, patch, `${selected.id}:${Object.keys(patch).join(",")}`)} />
+              <BlockInspector key={selected.id} block={selected} theme={design.theme} onChange={(patch) => update(selected.id, patch, `${selected.id}:${Object.keys(patch).join(",")}`)} />
             ) : (
-              <ThemeInspector theme={design.theme} onChange={setTheme} />
+              <ThemeInspector
+                theme={design.theme}
+                onChange={setTheme}
+                brandActions={
+                  <div className="space-y-2 border-b border-slate-900/[0.07] px-5 py-4 dark:border-white/[0.07]">
+                    <div className="flex items-start gap-2.5">
+                      <BadgeCheck className="mt-0.5 size-4 shrink-0 text-brand-500" />
+                      <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold text-slate-900 dark:text-white">Style de marque.</span>{" "}
+                        {kit ? "Vos couleurs, polices, logo et pied de page sont appliqués aux nouveaux emails." : "Enregistrez ce style (couleurs, polices, logo, réseaux, pied de page) pour le retrouver dans chaque nouvel email."}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="secondary" icon={BadgeCheck} loading={kitSaving} onClick={() => void saveBrandKit()} className="flex-1">
+                        {kit ? "Mettre à jour" : "Enregistrer"}
+                      </Button>
+                      {kit && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          icon={Sparkles}
+                          onClick={() => {
+                            commit(applyBrandKit(designRef.current, kit));
+                            toast.success("Style de marque appliqué");
+                          }}
+                          className="flex-1"
+                        >
+                          Appliquer
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                }
+              />
             )}
           </fieldset>
         </aside>
@@ -796,7 +899,7 @@ function CanvasBlock(props: {
       {/* Exact email markup, with editable fields */}
       <div ref={ref} className="cursor-default [&_[data-edit]]:cursor-text [&_[data-edit]:focus]:bg-brand-500/[0.06]" dangerouslySetInnerHTML={{ __html: html }} />
 
-      {selected && richFocus && !disabled && <RichToolbar root={ref} onCommitted={(el) => props.onCommit(el)} />}
+      {selected && richFocus && !disabled && <RichToolbar root={ref} theme={theme} onCommitted={(el) => props.onCommit(el)} />}
 
       {!disabled && (
         <>
@@ -880,8 +983,9 @@ function QuickInsert({ onPick }: { onPick: (t: BlockType) => void }) {
 }
 
 /** Floating formatting toolbar for rich text fields. Uses the browser's editing commands. */
-function RichToolbar({ root, onCommitted }: { root: React.RefObject<HTMLDivElement | null>; onCommitted: (el: HTMLElement) => void }) {
+function RichToolbar({ root, theme, onCommitted }: { root: React.RefObject<HTMLDivElement | null>; theme: Theme; onCommitted: (el: HTMLElement) => void }) {
   const [linkMode, setLinkMode] = useState(false);
+  const [pop, setPop] = useState<null | "color" | "highlight" | "size">(null);
   const [url, setUrl] = useState("https://");
   const [tagsOpen, setTagsOpen] = useState(false);
   const saved = useRef<{ range: Range; el: HTMLElement } | null>(null);
@@ -924,6 +1028,49 @@ function RichToolbar({ root, onCommitted }: { root: React.RefObject<HTMLDivEleme
     onCommitted(s.el);
     saved.current = null;
   }
+
+  /** Remember the selection before a popover steals focus. */
+  function remember() {
+    const sel = document.getSelection();
+    const el = activeField();
+    if (sel && sel.rangeCount && el) saved.current = { range: sel.getRangeAt(0).cloneRange(), el };
+  }
+
+  /** Wrap the current (or remembered) selection in a styled span. Empty value = remove that style. */
+  function wrapStyle(prop: "color" | "backgroundColor" | "fontSize", value: string) {
+    let el = activeField();
+    const sel = document.getSelection();
+    if (!el && saved.current) {
+      el = saved.current.el;
+      el.focus();
+      sel?.removeAllRanges();
+      sel?.addRange(saved.current.range);
+    }
+    if (!el || !sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed || !el.contains(range.commonAncestorContainer)) return;
+    const span = document.createElement("span");
+    span.appendChild(range.extractContents());
+    span.querySelectorAll<HTMLElement>("span:not([data-tag]), font").forEach((n) => (n.style[prop] = ""));
+    if (value) span.style[prop] = value;
+    range.insertNode(span);
+    const r = document.createRange();
+    r.selectNodeContents(span);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    saved.current = { range: r.cloneRange(), el };
+    setPop(null);
+  }
+
+  const swatches = [...new Set([theme.text, theme.body || theme.text, theme.accent, "#FFFFFF", "#000000", "#E11D48", "#F59E0B", "#10B981", "#145CFF", "#7C3AED"].map((c) => c.toUpperCase()))];
+  const highlights = ["#FEF08A", "#BBF7D0", "#BFDBFE", "#FBCFE8", "#FED7AA", theme.accent.toUpperCase()];
+  const sizes = [
+    { label: "Petit", value: "13px" },
+    { label: "Normal", value: "" },
+    { label: "Grand", value: "20px" },
+    { label: "Très grand", value: "26px" },
+    { label: "Énorme", value: "36px" },
+  ];
 
   function insertTag(tag: string, label: string) {
     run(
@@ -975,6 +1122,46 @@ function RichToolbar({ root, onCommitted }: { root: React.RefObject<HTMLDivEleme
           <RtBtn icon={Underline} label="Souligné (⌘U)" onMouseDown={keep} onClick={() => run("underline")} />
           <RtBtn icon={Strikethrough} label="Barré" onMouseDown={keep} onClick={() => run("strikeThrough")} />
           <span className="mx-1 h-4 w-px bg-white/20" />
+          <div className="relative">
+            <RtBtn icon={Baseline} label="Couleur du texte" onMouseDown={keep} onClick={() => (remember(), setPop(pop === "color" ? null : "color"))} />
+            {pop === "color" && (
+              <ColorPop swatches={swatches} onPick={(c) => wrapStyle("color", c)} onClear={() => wrapStyle("color", "")} clearLabel="Couleur par défaut" />
+            )}
+          </div>
+          <div className="relative">
+            <RtBtn icon={Highlighter} label="Surligner" onMouseDown={keep} onClick={() => (remember(), setPop(pop === "highlight" ? null : "highlight"))} />
+            {pop === "highlight" && (
+              <ColorPop swatches={highlights} onPick={(c) => wrapStyle("backgroundColor", c)} onClear={() => wrapStyle("backgroundColor", "")} clearLabel="Sans surlignage" />
+            )}
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={keep}
+              onClick={() => (remember(), setPop(pop === "size" ? null : "size"))}
+              className="rounded-full px-2 py-1 font-display text-[11px] font-bold hover:bg-white/15"
+              title="Taille du texte"
+            >
+              Aa
+            </button>
+            {pop === "size" && (
+              <div className="absolute top-full left-0 mt-1.5 w-36 rounded-xl bg-white p-1 text-slate-800 shadow-xl ring-1 ring-slate-900/10">
+                {sizes.map((z) => (
+                  <button
+                    key={z.label}
+                    type="button"
+                    onMouseDown={keep}
+                    onClick={() => wrapStyle("fontSize", z.value)}
+                    className="block w-full rounded-lg px-2.5 py-1.5 text-left hover:bg-slate-100"
+                    style={{ fontSize: z.value ? Math.min(20, parseInt(z.value)) : 14 }}
+                  >
+                    {z.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <span className="mx-1 h-4 w-px bg-white/20" />
           <RtBtn icon={Link2} label="Lien" onMouseDown={keep} onClick={startLink} />
           <RtBtn icon={Link2Off} label="Retirer le lien" onMouseDown={keep} onClick={() => run("unlink")} />
           <RtBtn icon={RemoveFormatting} label="Effacer la mise en forme" onMouseDown={keep} onClick={() => run("removeFormat")} />
@@ -1016,6 +1203,33 @@ export function normalizeUrl(raw: string): string {
   if (!u || /^https?:\/\/$/i.test(u)) return "";
   if (!/^(https?:|mailto:|tel:|\{\{)/i.test(u)) u = /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(u) ? `mailto:${u}` : `https://${u}`;
   return u;
+}
+
+/** Swatch popover with a custom color picker (applied on change, not on every drag frame). */
+function ColorPop({ swatches, onPick, onClear, clearLabel }: { swatches: string[]; onPick: (c: string) => void; onClear: () => void; clearLabel: string }) {
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    const onChange = () => onPick(el.value.toUpperCase());
+    el.addEventListener("change", onChange);
+    return () => el.removeEventListener("change", onChange);
+  }, [onPick]);
+  return (
+    <div className="absolute top-full left-0 mt-1.5 w-52 rounded-xl bg-white p-2.5 text-slate-800 shadow-xl ring-1 ring-slate-900/10">
+      <div className="grid grid-cols-6 gap-1.5">
+        {swatches.map((c) => (
+          <button key={c} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(c)} className="size-6 rounded-full ring-1 ring-slate-900/15 transition hover:scale-110" style={{ background: c }} title={c} aria-label={c} />
+        ))}
+        <label className="relative flex size-6 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-[conic-gradient(red,yellow,lime,cyan,blue,magenta,red)] ring-1 ring-slate-900/15" title="Couleur personnalisée">
+          <input ref={input} type="color" className="absolute inset-0 cursor-pointer opacity-0" />
+        </label>
+      </div>
+      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onClear} className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-xs text-slate-500 hover:bg-slate-100">
+        {clearLabel}
+      </button>
+    </div>
+  );
 }
 
 function RtBtn({ icon: Icon, label, onClick, onMouseDown }: { icon: LucideIcon; label: string; onClick: () => void; onMouseDown: (e: React.MouseEvent) => void }) {

@@ -144,6 +144,7 @@ const get = <T>(path: string, query?: Query) => request<T>("GET", path, undefine
 const post = <T>(path: string, body?: unknown) => request<T>("POST", path, body ?? {});
 const patch = <T>(path: string, body: unknown) => request<T>("PATCH", path, body);
 const del = <T = void>(path: string) => request<T>("DELETE", path);
+const put = <T>(path: string, body: unknown) => request<T>("PUT", path, body);
 
 export interface ContactQuery {
   search?: string;
@@ -225,6 +226,11 @@ export const api = {
     list: () => get<{ data: Asset[] }>("/assets").then((r) => r.data),
     upload: (input: { filename: string; data: string; width?: number; height?: number }) => post<Asset>("/assets", input),
     remove: (id: string) => del(`/assets/${id}`),
+  },
+
+  brandKit: {
+    get: () => get<{ brand_kit: string | null }>("/brand-kit").then((r) => r.brand_kit),
+    save: (brandKit: string | null) => put<{ brand_kit: string | null }>("/brand-kit", { brand_kit: brandKit }),
   },
 
   emailTemplates: {

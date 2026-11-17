@@ -192,6 +192,8 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX idx_email_templates_account ON email_templates(account_id, updated_at);
   `,
+  // v4 — brand kit: default email style (theme, logo, socials, footer) per account
+  `ALTER TABLE accounts ADD COLUMN brand_kit TEXT;`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

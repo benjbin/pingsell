@@ -13,7 +13,7 @@ import { useToast } from "../../components/ui/Toast";
 import { AiGeneratePanel } from "../../components/AiGeneratePanel";
 import { EmailPreview, renderMergeTags } from "../../components/EmailPreview";
 import { EmailBuilder } from "../../components/email-builder/EmailBuilder";
-import { PRESETS, parseDesign, renderEmail, serializeDesign, type Design, type Preset } from "../../components/email-builder/model";
+import { PRESETS, applyBrandKit, parseBrandKit, parseDesign, renderEmail, serializeDesign, type Design, type Preset } from "../../components/email-builder/model";
 
 interface FormState {
   name: string;
@@ -99,6 +99,28 @@ export function CampaignEditorPage() {
   const [sending, setSending] = useState(false);
   const [recipients, setRecipients] = useState<number | null>(null);
 
+  // New campaign: start from the account's brand kit (theme, logo, socials, footer) if one is saved.
+  const designTouched = useRef(false);
+  useEffect(() => {
+    if (id) return;
+    let cancelled = false;
+    api.brandKit
+      .get()
+      .then((raw) => {
+        const kit = parseBrandKit(raw);
+        if (!kit || cancelled) return;
+        setForm((f) => {
+          const d = parseDesign(f.design);
+          if (!d || designTouched.current) return f;
+          return { ...f, design: serializeDesign(applyBrandKit(d, kit)) };
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   useEffect(() => {
     if (campaign.data) {
       const f = toForm(campaign.data);
@@ -119,11 +141,13 @@ export function CampaignEditorPage() {
   const html = useMemo(() => (visual && design ? renderEmail(design, form.preheader) : form.html), [visual, design, form.preheader, form.html]);
 
   function onDesignChange(d: Design) {
+    designTouched.current = true;
     setForm((f) => ({ ...f, design: serializeDesign(d) }));
   }
 
   /** Apply a preset. When `withDesign` is false the editor already swapped the blocks (with undo). */
   function applyPreset(p: Preset, withDesign = true) {
+    designTouched.current = true;
     setForm((f) => ({
       ...f,
       design: withDesign ? serializeDesign(p.build(brand)) : f.design,

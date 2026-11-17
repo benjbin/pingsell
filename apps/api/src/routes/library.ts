@@ -25,6 +25,10 @@ const uploadSchema = z.object({
   height: z.number().int().positive().max(20000).optional(),
 });
 
+const brandKitSchema = z.object({
+  brand_kit: z.string().max(200_000).nullable(),
+});
+
 const templateSchema = z.object({
   name: z.string().trim().min(1, 'Donnez un nom au modèle').max(120),
   design: z.string().min(2).max(2_000_000),
@@ -132,6 +136,25 @@ export async function libraryRoutes(app: FastifyInstance, { db, config }: Deps) 
       /* already gone */
     }
     return reply.code(204).send();
+  });
+
+  // --- Brand kit (default email style) -------------------------------------------
+  app.get('/brand-kit', async (request) => {
+    const row = get<{ brand_kit: string | null }>(db, 'SELECT brand_kit FROM accounts WHERE id = ?', request.accountId);
+    return { brand_kit: row?.brand_kit ?? null };
+  });
+
+  app.put('/brand-kit', async (request) => {
+    const body = parse(brandKitSchema, request.body);
+    if (body.brand_kit) {
+      try {
+        JSON.parse(body.brand_kit);
+      } catch {
+        throw badRequest('Style de marque invalide');
+      }
+    }
+    run(db, 'UPDATE accounts SET brand_kit = ? WHERE id = ?', body.brand_kit, request.accountId);
+    return { brand_kit: body.brand_kit };
   });
 
   // --- Saved email templates ----------------------------------------------------
