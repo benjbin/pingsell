@@ -1,0 +1,13 @@
+{
+  "name": "missive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Missive — plateforme d'email marketing (monorepo sans workspaces : chaque app a ses propres node_modules)",
+  "scripts": {
+    "install:all": "npm --prefix apps/api install && npm --prefix apps/web install && npm --prefix apps/mobile install",
+    "seed": "npm --prefix apps/api run seed",
+    "dev": "npx --yes concurrently@10.0.6 --kill-others-on-fail --names api,web --prefix-colors magenta,cyan \"npm --prefix apps/api run dev\" \"npm --prefix apps/web run dev\"",
+    "build": "npm --prefix apps/api run typecheck && npm --prefix apps/web run build && npm --prefix apps/mobile run typecheck",
+    "typecheck": "npm --prefix apps/api run typecheck && npm --prefix apps/web run typecheck && npm --prefix apps/mobile run typecheck"
+  }
+}

@@ -1,0 +1,255 @@
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { all, parseJson, run, scalar, transaction, type SQLInputValue } from '../db.js';
+import type { Deps } from '../deps.js';
+import { csvToContacts } from '../lib/csv.js';
+import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString } from '../lib/http.js';
+import { cancelRunsForContact, fireTrigger } from '../services/automations.js';
+import {
+  CONTACT_STATUSES,
+  findContact,
+  findContactByEmail,
+  isValidEmail,
+  normalizeEmail,
+  normalizeTags,
+  recordEvent,
+  serializeContact,
+  updateContactColumns,
+  upsertContact,
+  type Contact,
+} from '../services/contacts.js';
+import { compileRules, loadSegmentRules } from '../services/segments.js';
+import { serializeMessage } from '../services/messages.js';
+
+const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
+
+const contactInputSchema = z.object({
+  email: z.string().trim().min(1, "L'email est requis").max(254),
+  first_name: optionalText(100),
+  last_name: optionalText(100),
+  phone: optionalText(40),
+  tags: z.array(z.string().max(64)).max(100).optional(),
+  attributes: z.record(z.string(), z.unknown()).optional(),
+  status: z.enum(CONTACT_STATUSES).optional(),
+});
+
+const patchSchema = contactInputSchema.partial();
+
+const tagsSchema = z.object({
+  add: z.array(z.string().max(64)).max(100).optional(),
+  remove: z.array(z.string().max(64)).max(100).optional(),
+});
+
+const importSchema = z.union([
+  z.object({
+    contacts: z.array(z.record(z.string(), z.unknown())).max(50_000),
+    trigger_automations: z.boolean().optional(),
+  }),
+  z.object({ csv: z.string().min(1).max(20_000_000), trigger_automations: z.boolean().optional() }),
+]);
+
+type Params = { Params: { id: string } };
+
+export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
+  /** Records `tag_added` events + fires automations for each newly added tag. */
+  const onTagsAdded = (accountId: string, contactId: string, tags: string[]) => {
+    for (const tag of tags) {
+      recordEvent(db, accountId, contactId, 'tag_added', { tag });
+      fireTrigger(db, accountId, contactId, 'tag_added', { tag });
+    }
+  };
+
+  const onCreated = (accountId: string, contact: Contact, triggers = true) => {
+    recordEvent(db, accountId, contact.id, 'contact_created', { source: contact.source });
+    if (triggers) fireTrigger(db, accountId, contact.id, 'contact_created', { source: contact.source });
+  };
+
+  app.get('/contacts', async (request) => {
+    const p = pagination(request.query);
+    const where: string[] = ['account_id = ?'];
+    const params: SQLInputValue[] = [request.accountId];
+
+    const search = queryString(request.query, 'search');
+    if (search) {
+      const like = `%${search.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+      where.push(
+        `(LOWER(email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(first_name, '')) LIKE ? ESCAPE '\\'
+          OR LOWER(COALESCE(last_name, '')) LIKE ? ESCAPE '\\'
+          OR LOWER(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) LIKE ? ESCAPE '\\')`,
+      );
+      params.push(like, like, like, like);
+    }
+    const tag = queryString(request.query, 'tag');
+    if (tag) {
+      where.push('EXISTS (SELECT 1 FROM json_each(contacts.tags) WHERE LOWER(json_each.value) = ?)');
+      params.push(tag.toLowerCase());
+    }
+    const status = queryString(request.query, 'status');
+    if (status) {
+      if (!(CONTACT_STATUSES as readonly string[]).includes(status)) throw badRequest('Statut inconnu');
+      where.push('status = ?');
+      params.push(status);
+    }
+    const segmentId = queryString(request.query, 'segment_id');
+    if (segmentId) {
+      const rules = loadSegmentRules(db, request.accountId, segmentId);
+      if (!rules) throw notFound('Segment introuvable');
+      const compiled = compileRules(rules);
+      where.push(compiled.sql);
+      params.push(...compiled.params);
+    }
+
+    const whereSql = where.join(' AND ');
+    const total = scalar(db, `SELECT COUNT(*) FROM contacts WHERE ${whereSql}`, ...params);
+    const rows = all(
+      db,
+      `SELECT * FROM contacts WHERE ${whereSql} ORDER BY created_at DESC, id LIMIT ? OFFSET ?`,
+      ...params,
+      p.limit,
+      p.offset,
+    );
+    return listResponse(rows.map(serializeContact), total, p);
+  });
+
+  app.post('/contacts', async (request, reply) => {
+    const body = parse(contactInputSchema, request.body);
+    const result = transaction(db, () => {
+      const r = upsertContact(db, request.accountId, { ...body, source: 'api' });
+      if (r.created) onCreated(request.accountId, r.contact);
+      onTagsAdded(request.accountId, r.contact.id, r.created ? r.contact.tags : r.addedTags);
+      return r;
+    });
+    return reply.code(result.created ? 201 : 200).send({ ...result.contact, created: result.created });
+  });
+
+  app.get<Params>('/contacts/:id', async (request) => {
+    const contact = findContact(db, request.accountId, request.params.id);
+    if (!contact) throw notFound('Contact introuvable');
+    const events = all(
+      db,
+      'SELECT id, type, data, created_at FROM events WHERE contact_id = ? AND account_id = ? ORDER BY created_at DESC LIMIT 50',
+      contact.id,
+      request.accountId,
+    ).map((e) => ({ id: e.id, type: e.type, data: parseJson(e.data, {}), created_at: e.created_at }));
+    const messages = all(
+      db,
+      'SELECT * FROM messages WHERE contact_id = ? AND account_id = ? ORDER BY created_at DESC LIMIT 20',
+      contact.id,
+      request.accountId,
+    ).map((m) => serializeMessage(m, false));
+    return { ...contact, events, messages };
+  });
+
+  app.patch<Params>('/contacts/:id', async (request) => {
+    const body = parse(patchSchema, request.body);
+    const existing = findContact(db, request.accountId, request.params.id);
+    if (!existing) throw notFound('Contact introuvable');
+
+    const updates: Record<string, SQLInputValue> = {};
+    if (body.email !== undefined) {
+      const email = normalizeEmail(body.email);
+      if (!isValidEmail(email)) throw badRequest('Adresse email invalide');
+      const other = findContactByEmail(db, request.accountId, email);
+      if (other && other.id !== existing.id) throw conflict('Un autre contact utilise déjà cette adresse email');
+      updates.email = email;
+    }
+    for (const key of ['first_name', 'last_name', 'phone'] as const) {
+      if (body[key] !== undefined) updates[key] = body[key] ? body[key] : null;
+    }
+    let addedTags: string[] = [];
+    if (body.tags !== undefined) {
+      const tags = normalizeTags(body.tags);
+      addedTags = tags.filter((t) => !existing.tags.includes(t));
+      updates.tags = JSON.stringify(tags);
+    }
+    if (body.attributes !== undefined) updates.attributes = JSON.stringify(body.attributes);
+    if (body.status !== undefined) updates.status = body.status;
+
+    transaction(db, () => {
+      updateContactColumns(db, existing.id, updates);
+      if (body.status && body.status !== 'subscribed') cancelRunsForContact(db, existing.id);
+      if (body.status === 'unsubscribed' && existing.status !== 'unsubscribed') {
+        recordEvent(db, request.accountId, existing.id, 'unsubscribe', { source: 'manual' });
+      }
+      onTagsAdded(request.accountId, existing.id, addedTags);
+    });
+    return findContact(db, request.accountId, existing.id);
+  });
+
+  app.delete<Params>('/contacts/:id', async (request, reply) => {
+    const contact = findContact(db, request.accountId, request.params.id);
+    if (!contact) throw notFound('Contact introuvable');
+    transaction(db, () => {
+      run(db, 'DELETE FROM events WHERE contact_id = ? AND account_id = ?', contact.id, request.accountId);
+      run(db, 'DELETE FROM contacts WHERE id = ?', contact.id);
+    });
+    return reply.code(204).send();
+  });
+
+  app.post<Params>('/contacts/:id/tags', async (request) => {
+    const body = parse(tagsSchema, request.body);
+    const contact = findContact(db, request.accountId, request.params.id);
+    if (!contact) throw notFound('Contact introuvable');
+    const remove = new Set(normalizeTags(body.remove));
+    const add = normalizeTags(body.add).filter((t) => !contact.tags.includes(t));
+    const tags = [...contact.tags.filter((t) => !remove.has(t)), ...add.filter((t) => !remove.has(t))];
+    transaction(db, () => {
+      updateContactColumns(db, contact.id, { tags: JSON.stringify(tags) });
+      onTagsAdded(request.accountId, contact.id, add.filter((t) => !remove.has(t)));
+    });
+    return findContact(db, request.accountId, contact.id);
+  });
+
+  app.post('/contacts/import', async (request) => {
+    const body = parse(importSchema, request.body);
+    const triggers = body.trigger_automations === true;
+    const inputs: { row: number; data: Record<string, unknown> }[] =
+      'csv' in body
+        ? csvToContacts(body.csv).map(({ row, ...data }) => ({ row, data }))
+        : body.contacts.map((data, i) => ({ row: i + 1, data }));
+    if (inputs.length > 50_000) throw badRequest('Import limité à 50 000 contacts par requête');
+
+    let created = 0;
+    let updated = 0;
+    const errorDetails: { row: number; email: string | null; error: string }[] = [];
+
+    transaction(db, () => {
+      for (const { row, data } of inputs) {
+        const parsed = contactInputSchema.safeParse(data);
+        if (!parsed.success) {
+          errorDetails.push({
+            row,
+            email: typeof data.email === 'string' ? data.email : null,
+            error: parsed.error.issues[0]?.message ?? 'Ligne invalide',
+          });
+          continue;
+        }
+        try {
+          const r = upsertContact(db, request.accountId, { ...parsed.data, source: 'import' });
+          if (r.created) {
+            created++;
+            onCreated(request.accountId, r.contact, triggers);
+          } else updated++;
+          if (triggers) onTagsAdded(request.accountId, r.contact.id, r.created ? r.contact.tags : r.addedTags);
+        } catch (err) {
+          errorDetails.push({ row, email: parsed.data.email, error: (err as Error).message });
+        }
+      }
+    });
+
+    return { created, updated, errors: errorDetails.length, error_details: errorDetails.slice(0, 100) };
+  });
+
+  app.get('/tags', async (request) => {
+    const rows = all<{ tag: string; count: number }>(
+      db,
+      `SELECT LOWER(j.value) AS tag, COUNT(DISTINCT c.id) AS count
+         FROM contacts c, json_each(c.tags) j
+        WHERE c.account_id = ?
+        GROUP BY LOWER(j.value)
+        ORDER BY count DESC, tag ASC`,
+      request.accountId,
+    );
+    return { data: rows.map((r) => ({ tag: r.tag, count: Number(r.count) })) };
+  });
+}

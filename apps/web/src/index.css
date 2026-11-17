@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Missive — « Encre & Signal »
+ * Papier crème, noir d'encre, un seul accent vermillon.
+ * Titres en serif éditorial (Instrument Serif), interface en Geist, chiffres en Geist Mono.
+ * La palette « slate » est volontairement redéfinie en neutres chauds : toute l'app en hérite.
+ */
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Neutres chauds (papier → encre) */
+  --color-slate-50: #f8f7f3;
+  --color-slate-100: #efede6;
+  --color-slate-200: #e3e0d6;
+  --color-slate-300: #cfcabd;
+  --color-slate-400: #a29d90;
+  --color-slate-500: #79746a;
+  --color-slate-600: #5b5850;
+  --color-slate-700: #3f3d38;
+  --color-slate-800: #282723;
+  --color-slate-900: #181816;
+  --color-slate-950: #0e0e0c;
+
+  /* Signal — vermillon */
+  --color-brand-50: #fff3ee;
+  --color-brand-100: #ffe3d8;
+  --color-brand-200: #ffc4ad;
+  --color-brand-300: #ff9c79;
+  --color-brand-400: #ff7148;
+  --color-brand-500: #ff4d1c;
+  --color-brand-600: #e83c0b;
+  --color-brand-700: #bf2f08;
+  --color-brand-800: #97270c;
+  --color-brand-900: #7a230f;
+  --color-brand-950: #421005;
+
+  /* Les anciens dégradés fuchsia deviennent du sable */
+  --color-fuchsia-50: #f8f3e8;
+  --color-fuchsia-500: #c9b48a;
+  --color-fuchsia-950: #2a2418;
+
+  --color-paper: #f3f1ea;
+  --color-ink: #0e0e0c;
+
+  --animate-fade-in: fade-in 180ms ease-out;
+  --animate-slide-in-right: slide-in-right 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-slide-in-left: slide-in-left 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-pop-in: pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-rise: rise 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes slide-in-left {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-paper text-slate-950 antialiased dark:bg-ink dark:text-slate-100;
+    font-feature-settings: "ss01", "cv11";
+  }
+  ::selection {
+    @apply bg-brand-500 text-white;
+  }
+  :focus-visible {
+    outline-color: var(--color-brand-500);
+  }
+}
+
+@layer utilities {
+  /* Grain papier, très léger */
+  .grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E");
+  }
+  .eyebrow {
+    @apply font-mono text-[10.5px] font-medium tracking-[0.16em] text-slate-500 uppercase dark:text-slate-400;
+  }
+  .display {
+    @apply font-display font-normal tracking-[-0.02em];
+  }
+}

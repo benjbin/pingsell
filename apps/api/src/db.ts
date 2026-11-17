@@ -1,0 +1,240 @@
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+
+export type { DatabaseSync, SQLInputValue };
+export type Row = Record<string, unknown>;
+
+/**
+ * Ordered list of schema migrations. Each entry is applied once, tracked by
+ * `PRAGMA user_version`. Never edit an applied migration: append a new one.
+ */
+const MIGRATIONS: string[] = [
+  /* 1 — initial schema (SPEC.md "Data model") */ `
+  CREATE TABLE accounts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE sessions (
+    token TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_sessions_account ON sessions(account_id);
+
+  CREATE TABLE api_keys (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    key TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_used_at TEXT
+  );
+  CREATE INDEX idx_api_keys_account ON api_keys(account_id);
+
+  CREATE TABLE contacts (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    first_name TEXT,
+    last_name TEXT,
+    phone TEXT,
+    tags TEXT NOT NULL DEFAULT '[]',
+    attributes TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'subscribed'
+      CHECK (status IN ('subscribed','unsubscribed','bounced','complained')),
+    source TEXT NOT NULL DEFAULT 'manual'
+      CHECK (source IN ('manual','import','shopify','api')),
+    external_id TEXT,
+    total_spent REAL NOT NULL DEFAULT 0,
+    orders_count INTEGER NOT NULL DEFAULT 0,
+    last_order_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (account_id, email)
+  );
+  CREATE INDEX idx_contacts_account_status ON contacts(account_id, status);
+  CREATE INDEX idx_contacts_account_created ON contacts(account_id, created_at);
+  CREATE INDEX idx_contacts_external ON contacts(account_id, external_id);
+
+  CREATE TABLE segments (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    rules TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_segments_account ON segments(account_id);
+
+  CREATE TABLE campaigns (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    subject TEXT NOT NULL DEFAULT '',
+    preheader TEXT,
+    from_name TEXT,
+    from_email TEXT,
+    html TEXT,
+    segment_id TEXT REFERENCES segments(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'draft'
+      CHECK (status IN ('draft','scheduled','sending','sent','failed')),
+    scheduled_at TEXT,
+    sent_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_campaigns_account_status ON campaigns(account_id, status);
+
+  CREATE TABLE automations (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    trigger TEXT NOT NULL
+      CHECK (trigger IN ('contact_created','tag_added','order_created','cart_abandoned')),
+    trigger_config TEXT NOT NULL DEFAULT '{}',
+    steps TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_automations_account_trigger ON automations(account_id, trigger, status);
+
+  -- contact_id is nullable: test sends may target addresses that are not contacts,
+  -- and deleting a contact keeps its message history for statistics.
+  CREATE TABLE messages (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL,
+    automation_id TEXT REFERENCES automations(id) ON DELETE SET NULL,
+    contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL,
+    to_email TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    html TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sent','failed','bounced')),
+    provider_id TEXT,
+    error TEXT,
+    sent_at TEXT,
+    opened_at TEXT,
+    clicked_at TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_messages_status_created ON messages(status, created_at);
+  CREATE INDEX idx_messages_campaign ON messages(campaign_id);
+  CREATE INDEX idx_messages_automation ON messages(automation_id);
+  CREATE INDEX idx_messages_contact ON messages(contact_id);
+  CREATE INDEX idx_messages_account_sent ON messages(account_id, sent_at);
+
+  CREATE TABLE events (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    contact_id TEXT,
+    type TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_events_contact ON events(contact_id, created_at);
+  CREATE INDEX idx_events_account_type ON events(account_id, type, created_at);
+
+  CREATE TABLE automation_runs (
+    id TEXT PRIMARY KEY,
+    automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    step_index INTEGER NOT NULL DEFAULT 0,
+    next_run_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','cancelled')),
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_runs_due ON automation_runs(status, next_run_at);
+  CREATE INDEX idx_runs_automation_contact ON automation_runs(automation_id, contact_id);
+
+  CREATE TABLE integrations (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    shop_domain TEXT,
+    access_token TEXT,
+    status TEXT NOT NULL DEFAULT 'connected',
+    config TEXT NOT NULL DEFAULT '{}',
+    last_sync_at TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (account_id, provider)
+  );
+  `,
+  // v2 — visual editor: block design (JSON) stored next to the rendered HTML
+  `ALTER TABLE campaigns ADD COLUMN design TEXT;`,
+];
+
+export function openDatabase(path: string): DatabaseSync {
+  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+  const db = new DatabaseSync(path);
+  db.exec('PRAGMA journal_mode = WAL;');
+  db.exec('PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA busy_timeout = 5000;');
+  migrate(db);
+  return db;
+}
+
+export function migrate(db: DatabaseSync): void {
+  const current = Number((db.prepare('PRAGMA user_version').get() as Row).user_version ?? 0);
+  for (let version = current; version < MIGRATIONS.length; version++) {
+    transaction(db, () => {
+      db.exec(MIGRATIONS[version]);
+      db.exec(`PRAGMA user_version = ${version + 1}`);
+    });
+  }
+}
+
+let txDepth = 0;
+
+/** Runs `fn` inside a transaction (nested calls join the outer transaction). */
+export function transaction<T>(db: DatabaseSync, fn: () => T): T {
+  if (txDepth > 0) return fn();
+  db.exec('BEGIN IMMEDIATE');
+  txDepth++;
+  try {
+    const result = fn();
+    db.exec('COMMIT');
+    return result;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  } finally {
+    txDepth--;
+  }
+}
+
+export function all<T = Row>(db: DatabaseSync, sql: string, ...params: SQLInputValue[]): T[] {
+  return db.prepare(sql).all(...params) as T[];
+}
+
+export function get<T = Row>(db: DatabaseSync, sql: string, ...params: SQLInputValue[]): T | undefined {
+  return db.prepare(sql).get(...params) as T | undefined;
+}
+
+export function run(db: DatabaseSync, sql: string, ...params: SQLInputValue[]): number {
+  return Number(db.prepare(sql).run(...params).changes);
+}
+
+export function scalar(db: DatabaseSync, sql: string, ...params: SQLInputValue[]): number {
+  const row = db.prepare(sql).get(...params) as Row | undefined;
+  if (!row) return 0;
+  const value = Object.values(row)[0];
+  return typeof value === 'number' ? value : Number(value ?? 0);
+}
+
+export function parseJson<T>(value: unknown, fallback: T): T {
+  if (typeof value !== 'string' || value === '') return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export const now = (): string => new Date().toISOString();
+export const newId = (): string => crypto.randomUUID();

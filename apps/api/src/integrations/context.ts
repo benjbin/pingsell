@@ -1,0 +1,44 @@
+import type { DatabaseSync } from 'node:sqlite';
+import type { preHandlerHookHandler } from 'fastify';
+
+/**
+ * Contract between the core API and integration modules (see SPEC.md
+ * "Core ↔ Shopify module interface"). Do not change this shape.
+ */
+export interface IntegrationContext {
+  db: DatabaseSync; // node:sqlite
+  requireAuth: preHandlerHookHandler; // sets request.accountId
+  upsertContact(
+    accountId: string,
+    input: {
+      email: string;
+      first_name?: string;
+      last_name?: string;
+      phone?: string;
+      tags?: string[];
+      source?: string;
+      external_id?: string;
+      total_spent?: number;
+      orders_count?: number;
+      last_order_at?: string;
+      status?: string;
+    },
+  ): { contact: any; created: boolean };
+  recordEvent(accountId: string, contactId: string, type: string, data?: object): void;
+  fireTrigger(
+    accountId: string,
+    contactId: string,
+    trigger: 'contact_created' | 'tag_added' | 'order_created' | 'cart_abandoned',
+    data?: object,
+  ): void;
+  config: { publicUrl: string; shopifyApiKey?: string; shopifyApiSecret?: string };
+}
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    /** Set by `requireAuth` for authenticated routes. */
+    accountId: string;
+    /** Raw request body as received, for every JSON request (webhook HMAC verification). */
+    rawBody?: string;
+  }
+}
