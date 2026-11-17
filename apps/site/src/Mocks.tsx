@@ -3,7 +3,7 @@ import { Clock, ShoppingCart, Sparkles, Ticket, Mail, Star } from "lucide-react"
 /** Automation flow: abandoned cart. */
 export function FlowMock() {
   const steps = [
-    { icon: ShoppingCart, title: "Panier abandonné", text: "Déclencheur Shopify", tone: "bg-brand-500 text-white" },
+    { icon: ShoppingCart, title: "Panier abandonné", text: "Déclencheur boutique", tone: "bg-brand-500 text-white" },
     { icon: Clock, title: "Attendre 1 heure", text: "Laisser le temps de revenir", tone: "bg-white text-slate-900" },
     { icon: Mail, title: "« Vous avez oublié quelque chose »", text: "Email avec le contenu du panier", tone: "bg-white text-slate-900" },
     { icon: Clock, title: "Attendre 24 heures", text: "", tone: "bg-white text-slate-900" },

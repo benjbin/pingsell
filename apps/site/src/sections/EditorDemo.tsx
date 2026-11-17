@@ -492,7 +492,7 @@ export function EditorDemo() {
           <ul aria-label="Suivi après l'envoi" className="relative z-20 -mt-6 hidden justify-center gap-3 sm:flex">
             <ResultChip icon={Eye} label="Ouvertures" delay={1.1} reduce={reduce} color={color.hex} beat={beat} />
             <ResultChip icon={MousePointerClick} label="Clics" delay={1.25} reduce={reduce} color={color.hex} beat={beat} />
-            <ResultChip icon={ShoppingBag} label="CA Shopify" delay={1.4} reduce={reduce} color={color.hex} beat={beat} />
+            <ResultChip icon={ShoppingBag} label="CA généré" delay={1.4} reduce={reduce} color={color.hex} beat={beat} />
           </ul>
         </motion.div>
       </div>

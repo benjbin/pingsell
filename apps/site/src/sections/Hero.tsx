@@ -82,7 +82,7 @@ export function Hero() {
           </h1>
 
           <motion.p {...enter(0.45)} className="mt-6 max-w-md text-[17px] leading-relaxed text-slate-600">
-            Emails, notifications push et automatisations, branchés sur les outils que vous utilisez déjà : Shopify en un clic, votre site, votre CRM ou votre app en
+            Emails, notifications push et automatisations, branchés sur les outils que vous utilisez déjà : votre site, votre CRM ou votre app en
             quelques lignes. Pingsell s'adapte à votre façon de travailler.
           </motion.p>
 

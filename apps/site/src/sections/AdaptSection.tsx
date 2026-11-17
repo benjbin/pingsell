@@ -20,9 +20,9 @@ import {
 
 const EASE = [0.2, 0.8, 0.2, 1] as const;
 
-/** Everything that can feed Pingsell today (Shopify connector, CSV import, REST API, mobile SDK). */
+/** Everything that can feed Pingsell today (store connector, CSV import, REST API, mobile SDK). */
 const SOURCES: Array<{ icon: LucideIcon; label: string; how: string }> = [
-  { icon: ShoppingBag, label: "Shopify", how: "1 clic" },
+  { icon: ShoppingBag, label: "Votre boutique en ligne", how: "Sans code" },
   { icon: Globe, label: "Votre site", how: "API" },
   { icon: Contact, label: "Votre CRM", how: "API" },
   { icon: Smartphone, label: "Votre app iOS & Android", how: "SDK" },
@@ -37,8 +37,8 @@ const PATHS = [
     icon: MousePointerClick,
     badge: "1 clic",
     title: "Sans une ligne de code",
-    text: "Connectez Shopify : clients, commandes et paniers arrivent tout seuls. Ou importez votre fichier de contacts.",
-    points: ["Shopify connecté en un clic", "Import Excel / CSV", "Scénarios prêts à l'emploi"],
+    text: "Connectez votre boutique : clients, commandes et paniers arrivent tout seuls. Ou importez votre fichier de contacts.",
+    points: ["Boutique connectée sans code", "Import Excel / CSV", "Scénarios prêts à l'emploi"],
   },
   {
     icon: Code2,
@@ -58,7 +58,7 @@ const PATHS = [
 
 const STEPS = [
   ["Créez votre compte", "Gratuit, sans carte bancaire."],
-  ["Branchez votre source", "Shopify, un fichier ou quelques lignes de code."],
+  ["Branchez votre source", "Votre boutique, un fichier ou quelques lignes de code."],
   ["Activez un scénario", "Bienvenue, panier abandonné, commande expédiée : ça tourne."],
 ] as const;
 
@@ -152,7 +152,7 @@ export function AdaptSection() {
               Pingsell s'adapte à vous. <em className="text-brand-500">Pas l'inverse.</em>
             </h2>
             <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-slate-600">
-              Boutique Shopify, site sur mesure, CRM, logiciel de caisse, app mobile ou simple fichier Excel : vous gardez vos outils et votre façon de travailler. Pingsell se
+              Boutique en ligne, site sur mesure, CRM, logiciel de caisse, app mobile ou simple fichier Excel : vous gardez vos outils et votre façon de travailler. Pingsell se
               branche dessus, en un clic ou en quelques lignes.
             </p>
 
@@ -212,7 +212,7 @@ export function AdaptSection() {
         </div>
 
         <div className="reveal mt-8 flex flex-col items-center justify-center gap-3 text-center sm:flex-row sm:gap-6">
-          <p className="text-[15px] text-slate-600">Pas de développeur ? Shopify et l'import suffisent pour démarrer.</p>
+          <p className="text-[15px] text-slate-600">Pas de développeur ? La connexion sans code et l'import suffisent pour démarrer.</p>
           <a href="#integration" className="group inline-flex items-center gap-1.5 font-display text-sm font-bold text-brand-500">
             Voir l'API et les exemples de code <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
           </a>

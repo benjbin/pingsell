@@ -253,7 +253,7 @@ export function EditorStage({ step, reduce, onInView }: { step: number; reduce: 
               <Notif left={10} top={302} w={196} icon={Eye} label="Ouvertures" tone="light">
                 <Counter to={46.2} decimals={1} suffix=" %" play={false} final />
               </Notif>
-              <Notif left={10} top={376} w={206} icon={ShoppingBag} label="Commande · Shopify" tone="dark">
+              <Notif left={10} top={376} w={206} icon={ShoppingBag} label="Commande · votre boutique" tone="dark">
                 <Counter to={1240} prefix="+" suffix=" €" play={false} final />
               </Notif>
             </>
@@ -628,7 +628,7 @@ function Results() {
       >
         <Counter to={7.9} decimals={1} suffix=" %" delay={0.55} play />
       </Notif>
-      <Notif left={150} top={334} w={232} icon={ShoppingBag} label="Nouvelles commandes · via Shopify" tone="dark" animated delay={0.9}>
+      <Notif left={150} top={334} w={232} icon={ShoppingBag} label="Nouvelles commandes · votre site" tone="dark" animated delay={0.9}>
         <Counter to={1240} prefix="+" suffix=" €" delay={1} play />
       </Notif>
     </>

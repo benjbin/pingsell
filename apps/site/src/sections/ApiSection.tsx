@@ -160,7 +160,7 @@ export function ApiSection() {
             {[
               [KeyRound, "Clés API sécurisées, créées et révoquées en un clic depuis vos réglages"],
               [Repeat, "Désinscriptions respectées : un contact désinscrit le reste, partout"],
-              [ShoppingBag, "Sur Shopify ? La connexion native se fait sans une ligne de code"],
+              [ShoppingBag, "Boutique en ligne ? La connexion native se fait sans une ligne de code"],
             ].map(([Icon, t]) => {
               const I = Icon as typeof KeyRound;
               return (

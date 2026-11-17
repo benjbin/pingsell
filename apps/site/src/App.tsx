@@ -262,7 +262,7 @@ function Pillars() {
       icon: Target,
       n: "02",
       title: "Cibler",
-      text: "Segmentez par tags, statut, achats ou date d'inscription. Avec Shopify, vos clients et leurs commandes arrivent tout seuls.",
+      text: "Segmentez par tags, statut, achats ou date d'inscription. Branchez votre site : vos clients et leurs commandes arrivent tout seuls.",
     },
     {
       icon: Workflow,
@@ -327,7 +327,7 @@ function Personalisation() {
   );
 }
 
-function Shopify() {
+function Boutique() {
   const flows = [
     [Heart, "Bienvenue", "à l'inscription"],
     [Gift, "Merci pour votre commande", "après un achat"],
@@ -335,12 +335,12 @@ function Shopify() {
     [Tag, "Tag ajouté", "à n'importe quel contact"],
   ] as const;
   return (
-    <section id="shopify" className="mx-auto max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
+    <section id="boutique" className="mx-auto max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
       <div className="grid items-center gap-14 lg:grid-cols-2">
         <div>
           <SectionHead
-            eyebrow="Shopify & automatisations"
-            title={<>Branchez votre boutique, <em className="text-brand-500">en un clic.</em></>}
+            eyebrow="Votre site & automatisations"
+            title={<>Branchez votre site, <em className="text-brand-500">sans y passer la semaine.</em></>}
             text="Vos clients et leurs commandes se synchronisent. Déclenchez les bons emails au bon moment, et suivez le chiffre d'affaires généré directement dans vos rapports."
           />
           <div className="mt-10 grid gap-3 sm:grid-cols-2">
@@ -358,7 +358,7 @@ function Shopify() {
           </div>
           <p className="reveal mt-6 flex items-start gap-2 text-sm text-slate-500">
             <Code2 className="mt-0.5 size-4 shrink-0 text-brand-500" />
-            Pas sur Shopify ? L'API Pingsell se branche sur votre back-office pour ajouter des contacts et déclencher des scénarios.
+            Site sur mesure, plateforme e-commerce ou back-office maison : l'API Pingsell ajoute vos contacts et déclenche vos scénarios.
           </p>
         </div>
         <div className="reveal rounded-[28px] bg-[radial-gradient(#c3cddf_1px,transparent_1px)] bg-slate-50 bg-[size:16px_16px] p-6 ring-1 ring-slate-900/[0.06] sm:p-10">
@@ -380,7 +380,7 @@ function Reports() {
           <SectionHead
             eyebrow="Rapports"
             title={<>Sachez ce qui <em className="text-brand-500">rapporte.</em></>}
-            text="Ouvertures, clics, désinscriptions, et le chiffre d'affaires Shopify sur votre tableau de bord. Vous voyez quelles campagnes marchent, et vous refaites celles-là."
+            text="Ouvertures, clics, désinscriptions, et le chiffre d'affaires de votre boutique sur votre tableau de bord. Vous voyez quelles campagnes marchent, et vous refaites celles-là."
           />
           <ul className="reveal mt-8 space-y-3">
             {["Statistiques par campagne et par lien", "Désinscriptions prises en compte immédiatement", "Tableau de bord du mois en un coup d'œil"].map((t) => (
@@ -444,11 +444,11 @@ function TeamMobile() {
 function Why() {
   const rows = [
     ["Facturation", "Au nombre de contacts, même inactifs", "Aux emails réellement envoyés"],
-    ["Formule gratuite", "Très limitée, sans vraie personnalisation", "Éditeur complet, vos polices et Shopify inclus"],
+    ["Formule gratuite", "Très limitée, sans vraie personnalisation", "Éditeur complet, vos polices et la connexion à votre site inclus"],
     ["Automatisations", "Réservées aux formules les plus chères", `Incluses dès ${PRO_FROM} € par mois`],
     ["Équipe", "Chaque utilisateur en plus est payant", "3 utilisateurs en Pro, illimités en Business"],
     ["Personnalisation", "Modèles figés, polices limitées", "Vos couleurs, vos polices, bloc par bloc"],
-    ["E-commerce", "Intégrations à configurer", "Shopify en un clic + API"],
+    ["E-commerce", "Intégrations à configurer", "Votre site branché sans code ou par API"],
   ];
   return (
     <section className="bg-slate-50 py-24 lg:py-32">
@@ -537,8 +537,8 @@ const FOOTER_COLUMNS: Array<{ title: string; links: Array<[string, string]> }> =
   {
     title: "Intégrations",
     links: [
-      ["Shopify", "#shopify"],
-      ["Votre boutique", "#adapte"],
+      ["Votre site", "#boutique"],
+      ["Toutes vos sources", "#adapte"],
       ["API & SDK", "#integration"],
     ],
   },
@@ -617,7 +617,7 @@ export function App() {
         <EditorDemo />
         <BrandShowcase />
         <Personalisation />
-        <Shopify />
+        <Boutique />
         <ApiSection />
         <PushSection />
         <Reports />

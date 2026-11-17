@@ -96,7 +96,7 @@ const FEATURES = [
   {
     icon: Truck,
     title: "Push transactionnel",
-    text: "Un appel à /push/send prévient tout de suite un client, retrouvé par son email, même désinscrit du marketing. Ou sans code avec Shopify : « Commande expédiée », suivi compris.",
+    text: "Un appel à /push/send prévient tout de suite un client, retrouvé par son email, même désinscrit du marketing. Ou sans code depuis votre boutique : « Commande expédiée », suivi compris.",
   },
 ] as const;
 
