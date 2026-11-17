@@ -9,7 +9,7 @@ export const API_URL = (import.meta.env.VITE_API_URL ?? `${APP_URL}/api/v1`).rep
  * Pricing — 3 SaaS plans. Contacts are unlimited in every plan; paid plans are priced by monthly email volume.
  * ⚠️ Prices and plan contents to validate before going live (the app does not enforce plan limits yet).
  */
-export const PRICING = { freeEmails: 3000, yearlyDiscount: 0.2 };
+export const PRICING = { freeEmails: 5000, yearlyDiscount: 0.2 };
 
 /** Monthly email volumes offered on the paid plans. */
 export const VOLUMES = [10_000, 20_000, 50_000, 100_000, 250_000, 500_000, 1_000_000] as const;
@@ -35,7 +35,7 @@ export const PLANS: Plan[] = [
     prices: null,
     featuresTitle: "Pour démarrer :",
     features: [
-      "3 000 emails par mois",
+      "5 000 emails par mois, sans plafond quotidien",
       "Contacts illimités",
       `Éditeur complet, 30 blocs`,
       "Style de marque et vos polices",
@@ -49,7 +49,7 @@ export const PLANS: Plan[] = [
     id: "pro",
     name: "Pro",
     tagline: "Pour les boutiques qui veulent automatiser leurs ventes.",
-    prices: { 10000: 19, 20000: 29, 50000: 59, 100000: 99, 250000: 199, 500000: 349, 1000000: 599 },
+    prices: { 10000: 9, 20000: 15, 50000: 29, 100000: 45, 250000: 99, 500000: 179, 1000000: 299 },
     featuresTitle: "Tout Gratuit, plus :",
     features: [
       "Automatisations : bienvenue, après achat, panier abandonné",
@@ -64,7 +64,7 @@ export const PLANS: Plan[] = [
     id: "business",
     name: "Business",
     tagline: "Pour les équipes, les agences et les gros volumes.",
-    prices: { 10000: 49, 20000: 69, 50000: 119, 100000: 189, 250000: 349, 500000: 599, 1000000: 999 },
+    prices: { 10000: 25, 20000: 39, 50000: 59, 100000: 89, 250000: 179, 500000: 299, 1000000: 499 },
     featuresTitle: "Tout Pro, plus :",
     features: ["Utilisateurs illimités", "Rôles administrateur et éditeur", "Support prioritaire", "Aide à la migration de vos contacts"],
     cta: "Choisir Business",
@@ -80,7 +80,8 @@ export function planPrice(plan: Plan, volume: Volume, yearly: boolean): number {
 
 /** Plan comparison table: [label, Gratuit, Pro, Business]; true/false render as check/dash. */
 export const PLAN_TABLE: Array<[string, string | boolean, string | boolean, string | boolean]> = [
-  ["Emails par mois", "3 000", "10 000 à 1 million", "10 000 à 1 million"],
+  ["Emails par mois", "5 000", "10 000 à 1 million", "10 000 à 1 million"],
+  ["Plafond d'envoi quotidien", "Aucun", "Aucun", "Aucun"],
   ["Contacts", "Illimités", "Illimités", "Illimités"],
   ["Éditeur glisser-déposer, 30 blocs", true, true, true],
   ["Style de marque et polices personnalisées", true, true, true],
@@ -131,7 +132,7 @@ export const BLOCKS = [
 export const FAQ: Array<{ q: string; a: string }> = [
   {
     q: "Faut-il une carte bancaire pour commencer ?",
-    a: "Non. Les 3 000 premiers emails de chaque mois sont offerts : vous créez votre compte, importez vos contacts et envoyez votre première campagne sans rien payer.",
+    a: "Non. Les 5 000 premiers emails de chaque mois sont offerts : vous créez votre compte, importez vos contacts et envoyez votre première campagne sans rien payer.",
   },
   {
     q: "Quelle formule choisir ?",

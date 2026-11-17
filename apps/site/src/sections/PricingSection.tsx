@@ -14,6 +14,7 @@ export function PricingSection() {
   const [vi, setVi] = useState(1);
   const volume = VOLUMES[vi];
   const [open, setOpen] = useState(false);
+  const proFrom = PLANS.find((p) => p.id === "pro")?.prices?.[VOLUMES[0]] ?? 0;
   const spring = reduce ? { duration: 0 } : { type: "spring" as const, stiffness: 420, damping: 34 };
 
   return (
@@ -26,7 +27,7 @@ export function PricingSection() {
             Une formule pour <em className="text-brand-500">chaque étape.</em>
           </h2>
           <p className="mt-5 text-[17px] leading-relaxed text-slate-600">
-            Commencez gratuitement, passez à la formule supérieure quand votre boutique grandit. Vos contacts restent illimités : seul le volume d'emails compte.
+            {fmt(PRICING.freeEmails)} emails offerts chaque mois, puis les automatisations dès {proFrom} € par mois. Vos contacts restent illimités : seul le volume d'emails compte.
           </p>
         </div>
 

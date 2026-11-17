@@ -21,7 +21,9 @@ import {
   ShoppingCart,
   Tag,
 } from "lucide-react";
-import { BLOCKS, FAQ, LOGIN_URL, PRICING, SIGNUP_URL } from "./content";
+import { BLOCKS, FAQ, LOGIN_URL, PLANS, PRICING, SIGNUP_URL, VOLUMES } from "./content";
+
+const PRO_FROM = PLANS.find((p) => p.id === "pro")?.prices?.[VOLUMES[0]] ?? 0;
 import { BrandMock, FlowMock, PhoneMock, ReportMock } from "./Mocks";
 import { Hero } from "./sections/Hero";
 import { EditorDemo } from "./sections/EditorDemo";
@@ -379,6 +381,7 @@ function Why() {
   const rows = [
     ["Facturation", "Au nombre de contacts, même inactifs", "Aux emails réellement envoyés"],
     ["Formule gratuite", "Très limitée, sans vraie personnalisation", "Éditeur complet, vos polices et Shopify inclus"],
+    ["Automatisations", "Réservées aux formules les plus chères", `Incluses dès ${PRO_FROM} € par mois`],
     ["Équipe", "Chaque utilisateur en plus est payant", "3 utilisateurs en Pro, illimités en Business"],
     ["Personnalisation", "Modèles figés, polices limitées", "Vos couleurs, vos polices, bloc par bloc"],
     ["E-commerce", "Intégrations à configurer", "Shopify en un clic + API"],
