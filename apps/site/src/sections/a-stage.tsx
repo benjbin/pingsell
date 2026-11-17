@@ -149,7 +149,7 @@ export function EditorStage({ step, reduce, onInView }: { step: number; reduce: 
       ref={boxRef}
       className="relative aspect-[520/460] w-full"
       role="img"
-      aria-label="Démonstration de l'éditeur Missive : des blocs sont glissés dans un email, l'email prend les couleurs de la marque, puis il est envoyé et les premiers résultats apparaissent."
+      aria-label="Démonstration de l'éditeur Pingsell : des blocs sont glissés dans un email, l'email prend les couleurs de la marque, puis il est envoyé et les premiers résultats apparaissent."
     >
       <div aria-hidden className="absolute top-0 left-0 origin-top-left" style={{ width: W, height: H, transform: `scale(${scale})` }}>
         {/* Window */}

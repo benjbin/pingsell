@@ -25,6 +25,7 @@ import { BLOCKS, FAQ, LOGIN_URL, PLANS, PRICING, SIGNUP_URL, VOLUMES } from "./c
 const PRO_FROM = PLANS.find((p) => p.id === "pro")?.prices?.[VOLUMES[0]] ?? 0;
 import { BrandMock, FlowMock, PhoneMock, ReportMock } from "./Mocks";
 import { Hero } from "./sections/Hero";
+import { PingsellLogo } from "./PingsellLogo";
 import { EditorDemo } from "./sections/EditorDemo";
 import { BrandShowcase } from "./sections/BrandShowcase";
 import { ApiSection } from "./sections/ApiSection";
@@ -67,14 +68,8 @@ function useReveal() {
 
 function Logo({ light = false }: { light?: boolean }) {
   return (
-    <a href="#top" className={`flex items-center gap-2 font-display text-lg font-extrabold tracking-tight uppercase ${light ? "text-white" : "text-slate-900"}`}>
-      <span className="flex size-8 items-center justify-center rounded-[10px] bg-brand-500 text-white">
-        <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 7l8 6 8-6" />
-          <rect x="3" y="5" width="18" height="14" rx="3" />
-        </svg>
-      </span>
-      Missive
+    <a href="#top" className="flex items-center" aria-label="Pingsell, retour en haut">
+      <PingsellLogo tone={light ? "light" : "dark"} className="h-8 w-auto" />
     </a>
   );
 }
@@ -271,7 +266,7 @@ function Shopify() {
           </div>
           <p className="reveal mt-6 flex items-start gap-2 text-sm text-slate-500">
             <Code2 className="mt-0.5 size-4 shrink-0 text-brand-500" />
-            Pas sur Shopify ? L'API Missive se branche sur votre back-office pour ajouter des contacts et déclencher des scénarios.
+            Pas sur Shopify ? L'API Pingsell se branche sur votre back-office pour ajouter des contacts et déclencher des scénarios.
           </p>
         </div>
         <div className="reveal rounded-[28px] bg-[radial-gradient(#c3cddf_1px,transparent_1px)] bg-slate-50 bg-[size:16px_16px] p-6 ring-1 ring-slate-900/[0.06] sm:p-10">
@@ -344,7 +339,7 @@ function TeamMobile() {
               dans la poche.
             </h3>
             <p className="mt-4 max-w-xs text-[15px] leading-relaxed text-white/80">
-              L'app Missive sur iOS et Android : vos chiffres du mois, vos campagnes et vos contacts, où que vous soyez.
+              L'app Pingsell sur iOS et Android : vos chiffres du mois, vos campagnes et vos contacts, où que vous soyez.
             </p>
           </div>
           <PhoneMock />
@@ -366,12 +361,12 @@ function Why() {
   return (
     <section className="bg-slate-50 py-24 lg:py-32">
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
-        <SectionHead center eyebrow="Pourquoi Missive" title={<>Pensé pour <em className="text-brand-500">les boutiques.</em></>} />
+        <SectionHead center eyebrow="Pourquoi Pingsell" title={<>Pensé pour <em className="text-brand-500">les boutiques.</em></>} />
         <div className="reveal mt-12 overflow-hidden rounded-[22px] bg-white ring-1 ring-slate-900/[0.08]">
           <div className="grid grid-cols-[1fr_1fr] gap-px bg-slate-900/[0.06] text-sm sm:grid-cols-[0.8fr_1fr_1fr]">
             <div className="hidden bg-white p-4 sm:block" />
             <div className="bg-white p-4 font-display text-xs font-bold tracking-wider text-slate-400 uppercase">Outils classiques</div>
-            <div className="bg-brand-500 p-4 font-display text-xs font-bold tracking-wider text-white uppercase">Missive</div>
+            <div className="bg-brand-500 p-4 font-display text-xs font-bold tracking-wider text-white uppercase">Pingsell</div>
             {rows.map(([k, a, b]) => (
               <div key={k} className="contents">
                 <div className="col-span-2 bg-slate-50 px-4 pt-3 pb-1 font-display text-xs font-bold text-slate-900 sm:col-span-1 sm:bg-white sm:p-4 sm:text-sm">{k}</div>
@@ -456,7 +451,7 @@ function Footer() {
           </a>
         </nav>
       </div>
-      <div className="mx-auto max-w-6xl border-t border-slate-900/[0.07] px-4 py-6 text-xs text-slate-400 sm:px-6">© {new Date().getFullYear()} Missive</div>
+      <div className="mx-auto max-w-6xl border-t border-slate-900/[0.07] px-4 py-6 text-xs text-slate-400 sm:px-6">© {new Date().getFullYear()} Pingsell</div>
     </footer>
   );
 }

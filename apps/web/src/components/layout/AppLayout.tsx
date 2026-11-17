@@ -4,6 +4,7 @@ import { LogOut, Menu, Moon, Sun, X } from "lucide-react";
 import { useAuth } from "../../lib/auth";
 import { useTheme } from "../../lib/theme";
 import { cx, formatNumber } from "../../lib/format";
+import { PingsellLogo } from "../brand/PingsellLogo";
 
 interface NavItem {
   to: string;
@@ -40,28 +41,9 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
   },
 ];
 
-/** Geometric cube mark: blue top facet, white + soft-blue sides. */
-export function LogoMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={cx("size-8", className)} aria-hidden>
-      <path d="M16 3 28 10 16 17 4 10Z" fill="#145CFF" />
-      <path d="M4 10 16 17V30L4 23Z" fill="currentColor" />
-      <path d="M28 10 16 17V30L28 23Z" fill="#4D82FF" />
-    </svg>
-  );
-}
-
-/** Wordmark. `tone` controls the text colour. */
+/** Pingsell lockup. `tone="light"` is for navy surfaces (sidebar); `auto` follows the theme. */
 export function Logo({ className, tone = "auto" }: { className?: string; tone?: "auto" | "light" }) {
-  const color = tone === "light" ? "text-white" : "text-slate-900 dark:text-white";
-  return (
-    <div className={cx("flex items-center gap-2.5", className)}>
-      <LogoMark className={color} />
-      <span className={cx("font-display text-[21px] leading-none font-extrabold tracking-[-0.03em] uppercase", color)}>
-        Missive<span className="text-brand-500">.</span>
-      </span>
-    </div>
-  );
+  return <PingsellLogo tone={tone} className={cx("h-8 w-auto", className)} />;
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {

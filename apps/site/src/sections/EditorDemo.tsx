@@ -436,7 +436,7 @@ export function EditorDemo() {
                     <Check className="size-3.5 shrink-0 text-brand-500" />
                     <span className="truncate">
                       <span className="sm:hidden">Votre style, réutilisé partout.</span>
-                      <span className="hidden sm:inline">Dans Missive, votre style est enregistré une fois pour toutes vos campagnes.</span>
+                      <span className="hidden sm:inline">Dans Pingsell, votre style est enregistré une fois pour toutes vos campagnes.</span>
                     </span>
                   </motion.p>
                 )}
@@ -488,7 +488,7 @@ export function EditorDemo() {
             </motion.div>
           </div>
 
-          {/* Product UI: what Missive tracks once the email is sent */}
+          {/* Product UI: what Pingsell tracks once the email is sent */}
           <ul aria-label="Suivi après l'envoi" className="relative z-20 -mt-6 hidden justify-center gap-3 sm:flex">
             <ResultChip icon={Eye} label="Ouvertures" delay={1.1} reduce={reduce} color={color.hex} beat={beat} />
             <ResultChip icon={MousePointerClick} label="Clics" delay={1.25} reduce={reduce} color={color.hex} beat={beat} />

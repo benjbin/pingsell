@@ -74,19 +74,19 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
   async function sendInvite(inv: InvitationRow, origin: string, inviterName: string) {
     const account = get<{ name: string }>(db, 'SELECT name FROM accounts WHERE id = ?', inv.account_id)!;
     const link = `${origin}/invitation/${inv.token}`;
-    const subject = `${inviterName} vous invite à rejoindre ${account.name} sur Missive`;
+    const subject = `${inviterName} vous invite à rejoindre ${account.name} sur Pingsell`;
     const html = `<!DOCTYPE html><html lang="fr"><body style="margin:0;background:#EEF2F8;font-family:Helvetica,Arial,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 12px;">
 <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:20px;"><tr><td style="padding:40px;">
-<p style="margin:0 0 24px;font-size:20px;font-weight:800;letter-spacing:-0.02em;color:#0B214A;">MISSIVE<span style="color:#145CFF;">.</span></p>
+<p style="margin:0 0 24px;font-size:20px;font-weight:800;letter-spacing:-0.02em;color:#0B214A;">pingsell</p>
 <h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;color:#0B214A;">Rejoignez ${escapeHtml(account.name)}</h1>
 <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#3d4d6a;">${escapeHtml(inviterName)} vous invite à gérer les campagnes email de <strong>${escapeHtml(account.name)}</strong> en tant que <strong>${ROLE_LABELS[inv.role].toLowerCase()}</strong>.</p>
 <a href="${link}" style="display:inline-block;padding:14px 28px;background:#145CFF;color:#FFFFFF;border-radius:999px;font-size:15px;font-weight:bold;text-decoration:none;">Accepter l’invitation</a>
 <p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#7a879e;">Ce lien est valable ${INVITE_DAYS} jours. Si vous n’attendiez pas cette invitation, ignorez simplement cet email.</p>
 </td></tr></table></td></tr></table></body></html>`;
-    const text = `${inviterName} vous invite à rejoindre ${account.name} sur Missive (${ROLE_LABELS[inv.role]}).\n\nAccepter l'invitation : ${link}\n\nLien valable ${INVITE_DAYS} jours.`;
+    const text = `${inviterName} vous invite à rejoindre ${account.name} sur Pingsell (${ROLE_LABELS[inv.role]}).\n\nAccepter l'invitation : ${link}\n\nLien valable ${INVITE_DAYS} jours.`;
     try {
-      await provider.send({ messageId: `invite_${inv.id}_${Date.now()}`, to: inv.email, fromName: 'Missive', fromEmail: config.defaultFromEmail, subject, html, text });
+      await provider.send({ messageId: `invite_${inv.id}_${Date.now()}`, to: inv.email, fromName: 'Pingsell', fromEmail: config.defaultFromEmail, subject, html, text });
       return true;
     } catch (err) {
       app.log.warn({ err }, 'invitation email failed');
@@ -117,7 +117,7 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
     const email = normalizeEmail(body.email);
     const existing = get<UserRow>(db, 'SELECT * FROM users WHERE email = ?', email);
     if (existing?.account_id === request.accountId) throw conflict('Cette personne fait déjà partie de l’équipe');
-    if (existing) throw conflict('Cette adresse est déjà utilisée par un autre compte Missive');
+    if (existing) throw conflict('Cette adresse est déjà utilisée par un autre compte Pingsell');
 
     const created = now();
     const expires = new Date(Date.now() + INVITE_DAYS * 86400000).toISOString();
@@ -229,7 +229,7 @@ export async function invitationRoutes(app: FastifyInstance, { db }: Deps) {
   app.post('/invitations/:token/accept', async (request, reply) => {
     const inv = load((request.params as { token: string }).token);
     const body = parse(acceptSchema, request.body);
-    if (get(db, 'SELECT id FROM users WHERE email = ?', inv.email)) throw conflict('Un compte Missive existe déjà avec cette adresse email');
+    if (get(db, 'SELECT id FROM users WHERE email = ?', inv.email)) throw conflict('Un compte Pingsell existe déjà avec cette adresse email');
     const user: UserRow = {
       id: newId(),
       account_id: inv.account_id,

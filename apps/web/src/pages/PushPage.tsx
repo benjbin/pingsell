@@ -469,7 +469,7 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
       </div>
 
       <Card>
-        <CardHeader title="Historique" description="Campagnes push envoyées depuis Missive" />
+        <CardHeader title="Historique" description="Campagnes push envoyées depuis Pingsell" />
         {campaigns.error ? (
           <div className="p-6">
             <ErrorState message={campaigns.error} onRetry={campaigns.reload} />
@@ -846,22 +846,22 @@ function SetupTab({ config, onSaved }: { config: PushConfig; onSaved: (c: PushCo
   const snippet = useMemo(
     () =>
       lang === "sdk"
-        ? `// React Native / Expo — SDK Missive (dossier sdk/expo du dépôt)
-import { Missive, MissiveInbox, useMissiveInbox } from "@missive/expo-push";
+        ? `// React Native / Expo — SDK Pingsell (dossier sdk/expo du dépôt)
+import { Pingsell, PingsellInbox, usePingsellInbox } from "@pingsell/expo-push";
 
-Missive.init({ appKey: "${config.app_key}", apiUrl: "${API_URL}" });
+Pingsell.init({ appKey: "${config.app_key}", apiUrl: "${API_URL}" });
 
 // Après la connexion du client : permission, jeton, écran verrouillé
-await Missive.register({ email: user.email, userHash: user.missiveHash });
+await Pingsell.register({ email: user.email, userHash: user.pingsellHash });
 
 // À la déconnexion
-await Missive.logout();
+await Pingsell.logout();
 
 // Écran « Notifications » de votre app (centre de notifications)
-<MissiveInbox onOpen={(item) => item.url && Linking.openURL(item.url)} />
+<PingsellInbox onOpen={(item) => item.url && Linking.openURL(item.url)} />
 
 // Pastille sur l'icône cloche
-const { unread } = useMissiveInbox();`
+const { unread } = usePingsellInbox();`
         : `// Swift, Kotlin, Flutter… : 4 appels HTTP
 POST ${API_URL}/api/v1/push/app/devices          // enregistrer le jeton
   Authorization: Bearer ${config.app_key}
@@ -869,13 +869,13 @@ POST ${API_URL}/api/v1/push/app/devices          // enregistrer le jeton
 
 GET  ${API_URL}/api/v1/push/app/inbox            // centre de notifications
   Authorization: Bearer ${config.app_key}
-  X-Missive-Device: <jeton>
+  X-Pingsell-Device: <jeton>
   → { "data": [{ "id", "title", "body", "url", "read" }], "unread": 2 }
 
 POST ${API_URL}/api/v1/push/app/inbox/read       // { "ids": [...] } ou {} = tout lire
-POST ${API_URL}/api/v1/push/app/opened           // { "message_id": data.missive_message_id }
+POST ${API_URL}/api/v1/push/app/opened           // { "message_id": data.pingsell_message_id }
 
-// Android : créez le canal « missive » (importance haute, visibilité publique)`,
+// Android : créez le canal « pingsell » (importance haute, visibilité publique)`,
     [config.app_key, lang],
   );
 
@@ -915,7 +915,7 @@ POST ${API_URL}/api/v1/push/app/opened           // { "message_id": data.missive
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Fonctionne avec Swift, Kotlin, React Native, Flutter ou Expo. Depuis votre back-office, utilisez plutôt <code>POST /api/v1/push/devices</code> avec une clé API secrète.
-            La donnée <code>missive_message_id</code> est incluse dans chaque notification.
+            La donnée <code>pingsell_message_id</code> est incluse dans chaque notification.
           </p>
         </div>
       </Card>
@@ -1084,7 +1084,7 @@ function IdentityCard({ config, onSaved }: { config: PushConfig; onSaved: (c: Pu
 
   const backend = `// Sur VOTRE serveur (jamais dans l'app) — Node.js
 import { createHmac } from "node:crypto";
-const userHash = createHmac("sha256", process.env.MISSIVE_IDENTITY_SECRET)
+const userHash = createHmac("sha256", process.env.PINGSELL_IDENTITY_SECRET)
   .update(user.email.toLowerCase())
   .digest("hex");
 // Renvoyez userHash à l'app avec la session du client.`;
@@ -1175,13 +1175,13 @@ function PromptCard({ config, onSaved }: { config: PushConfig; onSaved: (c: Push
     }
   }
 
-  const code = `import { Missive, MissivePermissionPrompt } from "@missive/expo-push";
+  const code = `import { Pingsell, PingsellPermissionPrompt } from "@pingsell/expo-push";
 
 // 1. Une fois, à la racine de l'app
-<MissivePermissionPrompt />
+<PingsellPermissionPrompt />
 
 // 2. Au bon moment (après un premier achat, un suivi de commande…)
-await Missive.requestPermission();`;
+await Pingsell.requestPermission();`;
 
   return (
     <Card>

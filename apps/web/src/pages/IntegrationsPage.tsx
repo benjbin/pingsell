@@ -101,7 +101,7 @@ export function IntegrationsPage() {
 
   return (
     <>
-      <PageHeader title="Intégrations" description="Missive se branche sur ce que vous utilisez déjà. Choisissez un outil : un guide pas à pas vous accompagne jusqu'au premier essai." />
+      <PageHeader title="Intégrations" description="Pingsell se branche sur ce que vous utilisez déjà. Choisissez un outil : un guide pas à pas vous accompagne jusqu'au premier essai." />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {TOOLS.map((t) => {

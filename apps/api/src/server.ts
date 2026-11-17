@@ -13,7 +13,7 @@ async function main() {
   await app.listen({ port: config.port, host: config.host });
   worker.start();
   app.log.info(
-    `Missive API prête sur http://localhost:${config.port} · base ${config.databasePath} · email=${provider.name}`,
+    `Pingsell API prête sur http://localhost:${config.port} · base ${config.databasePath} · email=${provider.name}`,
   );
 
   let closing = false;

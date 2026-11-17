@@ -18,7 +18,7 @@ export default function SettingsScreen() {
       void signOut();
       return;
     }
-    Alert.alert('Se déconnecter', 'Voulez-vous vraiment vous déconnecter de Missive ?', [
+    Alert.alert('Se déconnecter', 'Voulez-vous vraiment vous déconnecter de Pingsell ?', [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Se déconnecter', style: 'destructive', onPress: () => void signOut() },
     ]);
@@ -64,7 +64,7 @@ export default function SettingsScreen() {
         <UsageTile icon="people-outline" label="Contacts" value={formatNumber(usage.contacts)} />
       </Card>
       <Text style={[styles.note, { color: c.textSubtle }]}>
-        La facturation Missive est basée sur le volume d’emails envoyés.
+        La facturation Pingsell est basée sur le volume d’emails envoyés.
       </Text>
 
       <SectionTitle>Application</SectionTitle>

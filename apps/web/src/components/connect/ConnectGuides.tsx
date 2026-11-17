@@ -243,7 +243,7 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
       <GuideHead
         icon={ShoppingBag}
         title="Connecter Shopify"
-        text="Vos clients, leurs commandes, les expéditions et les paniers abandonnés arrivent tout seuls dans Missive, et restent à jour en continu."
+        text="Vos clients, leurs commandes, les expéditions et les paniers abandonnés arrivent tout seuls dans Pingsell, et restent à jour en continu."
         done={done || undefined}
       />
 
@@ -263,7 +263,7 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
           </dl>
           {status.error && (
             <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
-              La dernière synchronisation a échoué. Vérifiez que l'application Missive est toujours installée dans Shopify, puis relancez.
+              La dernière synchronisation a échoué. Vérifiez que l'application Pingsell est toujours installée dans Shopify, puis relancez.
             </p>
           )}
           <Hint>
@@ -299,7 +299,7 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
               </Field>
               {status.oauth && (
                 <>
-                  <p>Shopify vous demandera d'autoriser Missive à lire vos clients et vos commandes, puis vous ramènera ici.</p>
+                  <p>Shopify vous demandera d'autoriser Pingsell à lire vos clients et vos commandes, puis vous ramènera ici.</p>
                   <Button type="submit" size="lg" icon={Link2} loading={busy}>
                     Connecter en 1 clic
                   </Button>
@@ -313,14 +313,14 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
                     <li>
                       Dans l'admin Shopify, ouvrez <Kbd>Paramètres › Applications et canaux de vente</Kbd>, puis <Kbd>Développer des applications</Kbd>.
                     </li>
-                    <li>Ouvrez l'application personnalisée de votre boutique (ou celle créée pour Missive).</li>
+                    <li>Ouvrez l'application personnalisée de votre boutique (ou celle créée pour Pingsell).</li>
                     <li>
                       Dans <Kbd>Configuration › Admin API</Kbd>, vérifiez que <code>read_customers</code>, <code>read_orders</code> et <code>read_checkouts</code> sont cochés, puis
                       enregistrez.
                     </li>
                   </ol>
                   <Hint>
-                    Missive ne demande que la lecture : rien n'est modifié dans votre boutique. Depuis 2026, Shopify ne permet plus de créer de nouvelles applications depuis l'admin : si
+                    Pingsell ne demande que la lecture : rien n'est modifié dans votre boutique. Depuis 2026, Shopify ne permet plus de créer de nouvelles applications depuis l'admin : si
                     vous n'en avez pas, la connexion en 1 clic s'en charge à votre place.
                   </Hint>
                 </Step>
@@ -376,28 +376,28 @@ const KINDS: Record<ApiKind, { icon: LucideIcon; title: string; intro: string; e
   crm: {
     icon: Code2,
     title: "Brancher votre CRM",
-    intro: "Quand une fiche client est créée ou qualifiée dans votre CRM, elle arrive dans Missive avec ses tags, et vos scénarios démarrent.",
+    intro: "Quand une fiche client est créée ou qualifiée dans votre CRM, elle arrive dans Pingsell avec ses tags, et vos scénarios démarrent.",
     events: ["contact", "tag"],
     label: "Mon CRM",
   },
   pos: {
     icon: Code2,
     title: "Brancher votre caisse",
-    intro: "À chaque ticket où le client laisse son email, Missive reçoit la vente : remerciement, fidélité et relances partent tout seuls.",
+    intro: "À chaque ticket où le client laisse son email, Pingsell reçoit la vente : remerciement, fidélité et relances partent tout seuls.",
     events: ["order", "contact"],
     label: "Ma caisse",
   },
   backoffice: {
     icon: Code2,
     title: "Brancher votre back-office",
-    intro: "ERP, outil de gestion des commandes ou logistique : envoyez les commandes et leur expédition, Missive prévient le client par email ou par notification.",
+    intro: "ERP, outil de gestion des commandes ou logistique : envoyez les commandes et leur expédition, Pingsell prévient le client par email ou par notification.",
     events: ["order", "shipped", "contact"],
     label: "Mon back-office",
   },
   other: {
     icon: Code2,
     title: "Brancher n'importe quel outil",
-    intro: "Tout ce qui sait faire un appel web peut alimenter Missive, dans n'importe quel langage.",
+    intro: "Tout ce qui sait faire un appel web peut alimenter Pingsell, dans n'importe quel langage.",
     events: ["contact", "order", "shipped", "tag"],
     label: "Mon outil",
   },
@@ -610,7 +610,7 @@ export function ApiGuide({
           {done ? (
             <p>Tout fonctionne. Activez maintenant un scénario dans Automatisations pour que les messages partent tout seuls.</p>
           ) : key ? (
-            <Waiting>Lancez le code une fois (ou la commande cURL dans un terminal) : on vous confirme ici dès que Missive reçoit l'appel.</Waiting>
+            <Waiting>Lancez le code une fois (ou la commande cURL dans un terminal) : on vous confirme ici dès que Pingsell reçoit l'appel.</Waiting>
           ) : (
             <p>Générez la clé à l'étape 1 : on détectera votre premier appel en direct, ici.</p>
           )}
@@ -685,33 +685,33 @@ export function AppGuide({ done, onDone }: GuideProps) {
 
       {stack === "expo" ? (
         <Steps>
-          <Step n={1} title="Installez le kit Missive">
-            <Code code="npx expo install @missive/expo-push expo-notifications" />
+          <Step n={1} title="Installez le kit Pingsell">
+            <Code code="npx expo install @pingsell/expo-push expo-notifications" />
           </Step>
           <Step n={2} title="Initialisez-le au démarrage de l'app">
             <p>Votre clé d'application est déjà remplie. Elle est publique : elle peut rester dans l'app.</p>
             <Code
               code={`// App.tsx
-import { Missive, MissivePermissionPrompt } from "@missive/expo-push";
+import { Pingsell, PingsellPermissionPrompt } from "@pingsell/expo-push";
 
-Missive.init({ appKey: "${k}", apiUrl: "${API_URL}" });`}
+Pingsell.init({ appKey: "${k}", apiUrl: "${API_URL}" });`}
             />
           </Step>
           <Step n={3} title="Reliez le téléphone au client, puis demandez la permission">
             <p>À la connexion du client, pour que ses notifications et ses automatisations le suivent :</p>
             <Code
-              code={`await Missive.identify({ email: user.email });
-await Missive.requestPermission();
+              code={`await Pingsell.identify({ email: user.email });
+await Pingsell.requestPermission();
 
 // Une seule fois, à la racine de l'app :
-<MissivePermissionPrompt />`}
+<PingsellPermissionPrompt />`}
             />
             <Hint>
-              Missive affiche d'abord un écran à vos couleurs (réglable dans Notifications push) avant la fenêtre du système : bien plus de clients disent oui.
+              Pingsell affiche d'abord un écran à vos couleurs (réglable dans Notifications push) avant la fenêtre du système : bien plus de clients disent oui.
             </Hint>
           </Step>
           <Step n={4} title="Option : le centre de notifications">
-            <Code code={`import { MissiveInbox } from "@missive/expo-push";\n\n<MissiveInbox />`} />
+            <Code code={`import { PingsellInbox } from "@pingsell/expo-push";\n\n<PingsellInbox />`} />
           </Step>
           <Step n={5} title="Testez sur un vrai téléphone" done={!!done} last>
             {done ? (
@@ -730,7 +730,7 @@ await Missive.requestPermission();
           <Step n={1} title="Récupérez le jeton de notification">
             <p>Comme d'habitude sur chaque plateforme : APNs sur iOS, Firebase Cloud Messaging sur Android ou Flutter.</p>
           </Step>
-          <Step n={2} title="Enregistrez le téléphone chez Missive">
+          <Step n={2} title="Enregistrez le téléphone chez Pingsell">
             <p>Un appel web, avec votre clé d'application et l'email du client connecté :</p>
             <Code
               code={`POST ${API_URL}/api/v1/push/app/devices
@@ -794,7 +794,7 @@ export function FileGuide({ done, onDone }: GuideProps) {
         </Step>
         <Step n={2} title="Vérifiez les colonnes">
           <p>
-            Seule la colonne <Kbd>email</Kbd> est obligatoire. Missive reconnaît aussi <code>first_name</code>, <code>last_name</code>, <code>phone</code>, <code>status</code> et{" "}
+            Seule la colonne <Kbd>email</Kbd> est obligatoire. Pingsell reconnaît aussi <code>first_name</code>, <code>last_name</code>, <code>phone</code>, <code>status</code> et{" "}
             <code>tags</code> (séparés par des points-virgules).
           </p>
           <Code code={`email,first_name,last_name,tags\ncamille@exemple.fr,Camille,Martin,vip;newsletter`} />

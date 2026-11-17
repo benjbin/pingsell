@@ -1,6 +1,6 @@
-# Missive — API
+# Pingsell — API
 
-API REST, worker d'envoi et tracking de Missive (email marketing). Contrat : `../../SPEC.md`.
+API REST, worker d'envoi et tracking de Pingsell (email marketing). Contrat : `../../SPEC.md`.
 
 Stack : Node 25 · TypeScript (exécuté par `tsx`) · Fastify 5 · `node:sqlite` (aucune dépendance native) · zod.
 

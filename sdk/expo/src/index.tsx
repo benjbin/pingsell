@@ -13,28 +13,28 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { Missive, type InboxItem, type InboxState, type MissiveNotification, type PromptSettings } from "./client";
+import { Pingsell, type InboxItem, type InboxState, type PingsellNotification, type PromptSettings } from "./client";
 
-export { Missive, ANDROID_CHANNEL_ID } from "./client";
-export type { Identity, InboxItem, InboxState, MissiveConfig, MissiveNotification, PromptSettings, RegisterOptions, RegisterResult } from "./client";
+export { Pingsell, ANDROID_CHANNEL_ID } from "./client";
+export type { Identity, InboxItem, InboxState, PingsellConfig, PingsellNotification, PromptSettings, RegisterOptions, RegisterResult } from "./client";
 
 /** Live in-app notification centre: items, unread count and actions. */
-export function useMissiveInbox(): InboxState & {
+export function usePingsellInbox(): InboxState & {
   refresh: () => Promise<void>;
   markRead: (ids?: string[]) => Promise<void>;
   remove: (ids: string[]) => Promise<void>;
   open: (item: InboxItem) => void;
 } {
-  const state = useSyncExternalStore(Missive.subscribe, Missive.getState, Missive.getState);
+  const state = useSyncExternalStore(Pingsell.subscribe, Pingsell.getState, Pingsell.getState);
   useEffect(() => {
-    void Missive.refresh();
+    void Pingsell.refresh();
   }, []);
   return {
     ...state,
-    refresh: () => Missive.refresh(),
-    markRead: (ids) => Missive.markRead(ids),
-    remove: (ids) => Missive.remove(ids),
-    open: (item) => Missive.open(item),
+    refresh: () => Pingsell.refresh(),
+    markRead: (ids) => Pingsell.markRead(ids),
+    remove: (ids) => Pingsell.remove(ids),
+    open: (item) => Pingsell.open(item),
   };
 }
 
@@ -64,7 +64,7 @@ function timeAgo(iso: string): string {
 }
 
 /** Notification centre screen: pull to refresh, unread dots, "mark all as read". */
-export function MissiveInbox({
+export function PingsellInbox({
   title = "Notifications",
   emptyText = "Aucune notification pour le moment.",
   theme,
@@ -75,11 +75,11 @@ export function MissiveInbox({
   emptyText?: string;
   theme?: Theme;
   style?: StyleProp<ViewStyle>;
-  /** Overrides the default action (Missive.init onOpen, or opening the link). */
+  /** Overrides the default action (Pingsell.init onOpen, or opening the link). */
   onOpen?: (item: InboxItem) => void;
 }) {
   const t = { ...DEFAULT_THEME, ...theme };
-  const inbox = useMissiveInbox();
+  const inbox = usePingsellInbox();
 
   return (
     <View style={[{ flex: 1, backgroundColor: t.background }, style]}>
@@ -134,9 +134,9 @@ export function MissiveInbox({
   );
 }
 
-/** Small red counter to put on your bell icon: <MissiveBadge><BellIcon /></MissiveBadge>. */
-export function MissiveBadge({ children, color = "#ef4444" }: { children: ReactNode; color?: string }) {
-  const { unread } = useSyncExternalStore(Missive.subscribe, Missive.getState, Missive.getState);
+/** Small red counter to put on your bell icon: <PingsellBadge><BellIcon /></PingsellBadge>. */
+export function PingsellBadge({ children, color = "#ef4444" }: { children: ReactNode; color?: string }) {
+  const { unread } = useSyncExternalStore(Pingsell.subscribe, Pingsell.getState, Pingsell.getState);
   return (
     <View>
       {children}
@@ -151,18 +151,18 @@ export function MissiveBadge({ children, color = "#ef4444" }: { children: ReactN
 
 /**
  * Banner shown inside the app when a notification arrives while it is open
- * (Missive.init({ foreground: "banner" })). Render it once, at the root.
+ * (Pingsell.init({ foreground: "banner" })). Render it once, at the root.
  */
-export function MissiveInAppBanner({ duration = 5000, theme, top = 54 }: { duration?: number; theme?: Theme; top?: number }) {
+export function PingsellInAppBanner({ duration = 5000, theme, top = 54 }: { duration?: number; theme?: Theme; top?: number }) {
   const t = { ...DEFAULT_THEME, ...theme };
-  const [current, setCurrent] = useState<MissiveNotification | null>(null);
+  const [current, setCurrent] = useState<PingsellNotification | null>(null);
   const y = useRef(new Animated.Value(-200)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const hide = () =>
       Animated.timing(y, { toValue: -200, duration: 220, useNativeDriver: true }).start(() => setCurrent(null));
-    const off = Missive.onBanner((n) => {
+    const off = Pingsell.onBanner((n) => {
       setCurrent(n);
       y.setValue(-200);
       Animated.spring(y, { toValue: 0, useNativeDriver: true, damping: 18, stiffness: 180 }).start();
@@ -181,7 +181,7 @@ export function MissiveInAppBanner({ duration = 5000, theme, top = 54 }: { durat
       <Pressable
         accessibilityRole="button"
         onPress={() => {
-          Missive.openBanner(current);
+          Pingsell.openBanner(current);
           y.setValue(-200);
           setCurrent(null);
         }}
@@ -202,16 +202,16 @@ export function MissiveInAppBanner({ duration = 5000, theme, top = 54 }: { durat
 }
 
 /**
- * Pre-permission screen shown by Missive.requestPermission() before the system dialog.
- * Its text comes from Missive (no app update needed to change it). Render it once, at the root.
+ * Pre-permission screen shown by Pingsell.requestPermission() before the system dialog.
+ * Its text comes from Pingsell (no app update needed to change it). Render it once, at the root.
  */
-export function MissivePermissionPrompt({ theme }: { theme?: Theme }) {
+export function PingsellPermissionPrompt({ theme }: { theme?: Theme }) {
   const t = { ...DEFAULT_THEME, ...theme };
   const [prompt, setPrompt] = useState<PromptSettings | null>(null);
-  useEffect(() => Missive.onPrompt(setPrompt), []);
+  useEffect(() => Pingsell.onPrompt(setPrompt), []);
 
   return (
-    <Modal visible={!!prompt} transparent animationType="slide" onRequestClose={() => Missive.answerPrompt(false)}>
+    <Modal visible={!!prompt} transparent animationType="slide" onRequestClose={() => Pingsell.answerPrompt(false)}>
       <View style={styles.promptBackdrop}>
         {prompt && (
           <View style={[styles.promptCard, { backgroundColor: t.background }]} accessibilityViewIsModal>
@@ -224,10 +224,10 @@ export function MissivePermissionPrompt({ theme }: { theme?: Theme }) {
             )}
             <Text style={[styles.promptTitle, { color: t.text }]}>{prompt.title}</Text>
             <Text style={[styles.promptBody, { color: t.muted }]}>{prompt.body}</Text>
-            <Pressable accessibilityRole="button" onPress={() => Missive.answerPrompt(true)} style={[styles.promptPrimary, { backgroundColor: t.accent }]}>
+            <Pressable accessibilityRole="button" onPress={() => Pingsell.answerPrompt(true)} style={[styles.promptPrimary, { backgroundColor: t.accent }]}>
               <Text style={styles.promptPrimaryText}>{prompt.accept_label}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => Missive.answerPrompt(false)} style={styles.promptSecondary} hitSlop={8}>
+            <Pressable accessibilityRole="button" onPress={() => Pingsell.answerPrompt(false)} style={styles.promptSecondary} hitSlop={8}>
               <Text style={{ color: t.muted, fontWeight: "600", fontSize: 15 }}>{prompt.decline_label}</Text>
             </Pressable>
           </View>

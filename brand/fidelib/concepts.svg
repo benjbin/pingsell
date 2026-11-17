@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 560" width="540" height="560"><rect width="540" height="560" fill="#f6f8ff"/>
+<text x="20" y="32" font-family="Futura, Helvetica" font-weight="700" font-size="18" fill="#0b214a">Fidelib — pistes</text>
+<rect x="20" y="50" width="136" height="136" rx="18" fill="#fff" stroke="#dce6ff"/>
+<g transform="translate(40 70) scale(1.5)">
+<path d="M20 52 V22 a10 10 0 0 1 10-10 h10" fill="none" stroke="#145cff" stroke-width="7" stroke-linecap="round"/>
+<path d="M20 33 h14" stroke="#145cff" stroke-width="7" stroke-linecap="round"/>
+<path d="M40 12 a9 9 0 0 1 0 18 h-2" fill="none" stroke="#4d82ff" stroke-width="5" stroke-linecap="round"/>
+<path d="M33 30 l7-5 v10z" fill="#4d82ff"/></g>
+<g transform="translate(24 196) scale(0.5)">
+<path d="M20 52 V22 a10 10 0 0 1 10-10 h10" fill="none" stroke="#145cff" stroke-width="7" stroke-linecap="round"/>
+<path d="M20 33 h14" stroke="#145cff" stroke-width="7" stroke-linecap="round"/>
+<path d="M40 12 a9 9 0 0 1 0 18 h-2" fill="none" stroke="#4d82ff" stroke-width="5" stroke-linecap="round"/>
+<path d="M33 30 l7-5 v10z" fill="#4d82ff"/></g>
+<g transform="translate(64 204) scale(0.25)">
+<path d="M20 52 V22 a10 10 0 0 1 10-10 h10" fill="none" stroke="#145cff" stroke-width="7" stroke-linecap="round"/>
+<path d="M20 33 h14" stroke="#145cff" stroke-width="7" stroke-linecap="round"/>
+<path d="M40 12 a9 9 0 0 1 0 18 h-2" fill="none" stroke="#4d82ff" stroke-width="5" stroke-linecap="round"/>
+<path d="M33 30 l7-5 v10z" fill="#4d82ff"/></g>
+<text x="20" y="252" font-family="Futura, Helvetica" font-weight="700" font-size="13" fill="#0b214a">1 · F-boomerang</text>
+<text x="20" y="270" font-family="Helvetica" font-size="10.5" fill="#53627f">Le F dont le bras revient</text>
+<rect x="190" y="50" width="136" height="136" rx="18" fill="#fff" stroke="#dce6ff"/>
+<g transform="translate(210 70) scale(1.5)">
+<rect x="9" y="16" width="46" height="34" rx="6" fill="#145cff"/>
+<path d="M9 22 C12 30 22 30 32 40 C42 30 52 30 55 22" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+<path d="M32 40 C26 30 20 24 24 20 C27 17 31 19 32 22 C33 19 37 17 40 20 C44 24 38 30 32 40Z" fill="#ff6a3d"/></g>
+<g transform="translate(194 196) scale(0.5)">
+<rect x="9" y="16" width="46" height="34" rx="6" fill="#145cff"/>
+<path d="M9 22 C12 30 22 30 32 40 C42 30 52 30 55 22" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+<path d="M32 40 C26 30 20 24 24 20 C27 17 31 19 32 22 C33 19 37 17 40 20 C44 24 38 30 32 40Z" fill="#ff6a3d"/></g>
+<g transform="translate(234 204) scale(0.25)">
+<rect x="9" y="16" width="46" height="34" rx="6" fill="#145cff"/>
+<path d="M9 22 C12 30 22 30 32 40 C42 30 52 30 55 22" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+<path d="M32 40 C26 30 20 24 24 20 C27 17 31 19 32 22 C33 19 37 17 40 20 C44 24 38 30 32 40Z" fill="#ff6a3d"/></g>
+<text x="190" y="252" font-family="Futura, Helvetica" font-weight="700" font-size="13" fill="#0b214a">2 · Cœur-enveloppe</text>
+<text x="190" y="270" font-family="Helvetica" font-size="10.5" fill="#53627f">Le rabat dessine le cœur</text>
+<rect x="360" y="50" width="136" height="136" rx="18" fill="#fff" stroke="#dce6ff"/>
+<g transform="translate(380 70) scale(1.5)">
+<path d="M14 14 V32 a18 18 0 0 0 36 0 V14" fill="none" stroke="#145cff" stroke-width="9"/>
+<path d="M9.5 14 h9 M45.5 14 h9" stroke="#0b214a" stroke-width="7"/>
+<path d="M32 42 C26 37 22 33 22 29 C22 25.5 26 24 29 25.5 C30.5 26.3 31.4 27.4 32 28.5 C32.6 27.4 33.5 26.3 35 25.5 C38 24 42 25.5 42 29 C42 33 38 37 32 42Z" fill="#ff6a3d"/></g>
+<g transform="translate(364 196) scale(0.5)">
+<path d="M14 14 V32 a18 18 0 0 0 36 0 V14" fill="none" stroke="#145cff" stroke-width="9"/>
+<path d="M9.5 14 h9 M45.5 14 h9" stroke="#0b214a" stroke-width="7"/>
+<path d="M32 42 C26 37 22 33 22 29 C22 25.5 26 24 29 25.5 C30.5 26.3 31.4 27.4 32 28.5 C32.6 27.4 33.5 26.3 35 25.5 C38 24 42 25.5 42 29 C42 33 38 37 32 42Z" fill="#ff6a3d"/></g>
+<g transform="translate(404 204) scale(0.25)">
+<path d="M14 14 V32 a18 18 0 0 0 36 0 V14" fill="none" stroke="#145cff" stroke-width="9"/>
+<path d="M9.5 14 h9 M45.5 14 h9" stroke="#0b214a" stroke-width="7"/>
+<path d="M32 42 C26 37 22 33 22 29 C22 25.5 26 24 29 25.5 C30.5 26.3 31.4 27.4 32 28.5 C32.6 27.4 33.5 26.3 35 25.5 C38 24 42 25.5 42 29 C42 33 38 37 32 42Z" fill="#ff6a3d"/></g>
+<text x="360" y="252" font-family="Futura, Helvetica" font-weight="700" font-size="13" fill="#0b214a">3 · Aimant</text>
+<text x="360" y="270" font-family="Helvetica" font-size="10.5" fill="#53627f">Attire et retient le client</text>
+<rect x="20" y="300" width="136" height="136" rx="18" fill="#fff" stroke="#dce6ff"/>
+<g transform="translate(40 320) scale(1.5)">
+<path d="M14 12 h36 a6 6 0 0 1 6 6 v22 a6 6 0 0 1-6 6 H28 l-10 8 v-8 h-4 a6 6 0 0 1-6-6 V18 a6 6 0 0 1 6-6z" fill="#145cff"/>
+<path d="M32 38 C26 33 22 30 22 25.5 C22 22 25.5 20 28.5 21.5 C30 22.3 31.4 23.4 32 24.6 C32.6 23.4 34 22.3 35.5 21.5 C38.5 20 42 22 42 25.5 C42 30 38 33 32 38Z" fill="#fff"/></g>
+<g transform="translate(24 446) scale(0.5)">
+<path d="M14 12 h36 a6 6 0 0 1 6 6 v22 a6 6 0 0 1-6 6 H28 l-10 8 v-8 h-4 a6 6 0 0 1-6-6 V18 a6 6 0 0 1 6-6z" fill="#145cff"/>
+<path d="M32 38 C26 33 22 30 22 25.5 C22 22 25.5 20 28.5 21.5 C30 22.3 31.4 23.4 32 24.6 C32.6 23.4 34 22.3 35.5 21.5 C38.5 20 42 22 42 25.5 C42 30 38 33 32 38Z" fill="#fff"/></g>
+<g transform="translate(64 454) scale(0.25)">
+<path d="M14 12 h36 a6 6 0 0 1 6 6 v22 a6 6 0 0 1-6 6 H28 l-10 8 v-8 h-4 a6 6 0 0 1-6-6 V18 a6 6 0 0 1 6-6z" fill="#145cff"/>
+<path d="M32 38 C26 33 22 30 22 25.5 C22 22 25.5 20 28.5 21.5 C30 22.3 31.4 23.4 32 24.6 C32.6 23.4 34 22.3 35.5 21.5 C38.5 20 42 22 42 25.5 C42 30 38 33 32 38Z" fill="#fff"/></g>
+<text x="20" y="502" font-family="Futura, Helvetica" font-weight="700" font-size="13" fill="#0b214a">4 · Bulle-cœur</text>
+<text x="20" y="520" font-family="Helvetica" font-size="10.5" fill="#53627f">Message + affection</text>
+<rect x="190" y="300" width="136" height="136" rx="18" fill="#fff" stroke="#dce6ff"/>
+<g transform="translate(210 320) scale(1.5)">
+<circle cx="32" cy="24" r="7" fill="#0b214a"/>
+<path d="M19 46 a13 11 0 0 1 26 0z" fill="#0b214a"/>
+<path d="M52 32 a20 20 0 1 1-6-14.1" fill="none" stroke="#145cff" stroke-width="5" stroke-linecap="round"/>
+<path d="M50 9 l-1 13 -12-3z" fill="#145cff"/></g>
+<g transform="translate(194 446) scale(0.5)">
+<circle cx="32" cy="24" r="7" fill="#0b214a"/>
+<path d="M19 46 a13 11 0 0 1 26 0z" fill="#0b214a"/>
+<path d="M52 32 a20 20 0 1 1-6-14.1" fill="none" stroke="#145cff" stroke-width="5" stroke-linecap="round"/>
+<path d="M50 9 l-1 13 -12-3z" fill="#145cff"/></g>
+<g transform="translate(234 454) scale(0.25)">
+<circle cx="32" cy="24" r="7" fill="#0b214a"/>
+<path d="M19 46 a13 11 0 0 1 26 0z" fill="#0b214a"/>
+<path d="M52 32 a20 20 0 1 1-6-14.1" fill="none" stroke="#145cff" stroke-width="5" stroke-linecap="round"/>
+<path d="M50 9 l-1 13 -12-3z" fill="#145cff"/></g>
+<text x="190" y="502" font-family="Futura, Helvetica" font-weight="700" font-size="13" fill="#0b214a">5 · Client-boucle</text>
+<text x="190" y="520" font-family="Helvetica" font-size="10.5" fill="#53627f">Le client fait le tour et revient</text>
+<rect x="360" y="300" width="136" height="136" rx="18" fill="#fff" stroke="#dce6ff"/>
+<g transform="translate(380 320) scale(1.5)"><defs><mask id="kc_a" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><circle cx="55.5" cy="9" r="8" fill="#000"/></mask></defs><g mask="url(#kc_a)"><path d="M34.48 16.07A12 12 0 0 1 51.49 32.95L32 55L12.51 32.95A12 12 0 0 1 21.29 13" fill="none" stroke="#145cff" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M29.83 12.85L20.08 21.3L19.79 4.75Z" fill="#145cff" stroke="#145cff" stroke-width="1.6" stroke-linejoin="round"/></g><circle cx="55.5" cy="9" r="5.6" fill="#ff6a3d"/></g>
+<g transform="translate(364 446) scale(0.5)"><defs><mask id="kc_b" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><circle cx="55.5" cy="9" r="8" fill="#000"/></mask></defs><g mask="url(#kc_b)"><path d="M34.48 16.07A12 12 0 0 1 51.49 32.95L32 55L12.51 32.95A12 12 0 0 1 21.29 13" fill="none" stroke="#145cff" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M29.83 12.85L20.08 21.3L19.79 4.75Z" fill="#145cff" stroke="#145cff" stroke-width="1.6" stroke-linejoin="round"/></g><circle cx="55.5" cy="9" r="5.6" fill="#ff6a3d"/></g>
+<g transform="translate(404 454) scale(0.25)"><defs><mask id="kc_c" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64"><rect width="64" height="64" fill="#fff"/><circle cx="55.5" cy="9" r="8" fill="#000"/></mask></defs><g mask="url(#kc_c)"><path d="M34.48 16.07A12 12 0 0 1 51.49 32.95L32 55L12.51 32.95A12 12 0 0 1 21.29 13" fill="none" stroke="#145cff" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M29.83 12.85L20.08 21.3L19.79 4.75Z" fill="#145cff" stroke="#145cff" stroke-width="1.6" stroke-linejoin="round"/></g><circle cx="55.5" cy="9" r="5.6" fill="#ff6a3d"/></g>
+<text x="360" y="502" font-family="Futura, Helvetica" font-weight="700" font-size="13" fill="#0b214a">6 · Cœur-retour ✓</text>
+<text x="360" y="520" font-family="Helvetica" font-size="10.5" fill="#53627f">Le cœur boucle et revient + notif</text>
+</svg>

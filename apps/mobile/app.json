@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "Missive",
-    "slug": "missive",
+    "name": "Pingsell",
+    "slug": "pingsell",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.missive.app"
+      "bundleIdentifier": "com.pingsell.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +18,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.missive.app"
+      "package": "com.pingsell.app"
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -30,6 +30,6 @@
       "expo-secure-store",
       "expo-font"
     ],
-    "scheme": "missive"
+    "scheme": "pingsell"
   }
 }

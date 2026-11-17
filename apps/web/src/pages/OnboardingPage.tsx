@@ -21,6 +21,7 @@ import type { AutomationInput } from "../lib/types";
 import { Button } from "../components/ui/primitives";
 import { useToast } from "../components/ui/Toast";
 import { ApiGuide, AppGuide, FileGuide, ShopifyGuide } from "../components/connect/ConnectGuides";
+import { PingsellLogo } from "../components/brand/PingsellLogo";
 import { DEFAULT_EMAIL_HTML } from "./campaigns/defaultTemplate";
 
 /* -------------------------------------------------------------------------- */
@@ -100,12 +101,7 @@ export function OnboardingPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <header className="mx-auto flex max-w-5xl items-center justify-between px-4 py-6 sm:px-6">
-        <span className="flex items-center gap-2 font-display text-lg font-extrabold tracking-tight text-slate-900 uppercase dark:text-white">
-          <span className="flex size-8 items-center justify-center rounded-[10px] bg-brand-500 text-white">
-            <Mail className="size-4" />
-          </span>
-          Missive
-        </span>
+        <PingsellLogo className="h-8 w-auto" />
         <div className="flex items-center gap-4">
           <ol className="hidden items-center gap-2 text-xs font-semibold sm:flex" aria-label="Étapes">
             {["Vos outils", "Branchement", "Premier scénario"].map((label, i) => (
@@ -137,7 +133,7 @@ export function OnboardingPage() {
               Qu'est-ce que vous voulez <em className="text-brand-500">brancher&nbsp;?</em>
             </h1>
             <p className="mt-4 max-w-xl text-[17px] text-slate-600 dark:text-slate-300">
-              Choisissez un ou plusieurs outils. Missive s'adapte à ce que vous utilisez déjà, et vous pourrez en ajouter d'autres plus tard.
+              Choisissez un ou plusieurs outils. Pingsell s'adapte à ce que vous utilisez déjà, et vous pourrez en ajouter d'autres plus tard.
             </p>
 
             <div className="mt-10 grid gap-4 sm:grid-cols-2">

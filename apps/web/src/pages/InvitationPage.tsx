@@ -78,7 +78,7 @@ export function InvitationPage() {
 
             {inv.email_taken ? (
               <p className="mt-8 rounded-xl border border-amber-300 px-3.5 py-2.5 text-sm text-amber-800 dark:border-amber-900 dark:text-amber-200">
-                Un compte Missive existe déjà avec {inv.email}. Demandez une invitation sur une autre adresse.
+                Un compte Pingsell existe déjà avec {inv.email}. Demandez une invitation sur une autre adresse.
               </p>
             ) : (
               <form onSubmit={onSubmit} className="mt-8 space-y-5">

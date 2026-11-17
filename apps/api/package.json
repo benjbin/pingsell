@@ -1,8 +1,8 @@
 {
-  "name": "@missive/api",
+  "name": "@pingsell/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Missive — API REST, worker d'envoi et tracking",
+  "description": "Pingsell — API REST, worker d'envoi et tracking",
   "type": "module",
   "engines": {
     "node": ">=22.5"

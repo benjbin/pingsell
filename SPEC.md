@@ -1,6 +1,6 @@
-# Missive — plateforme d'email marketing (spec MVP)
+# Pingsell — plateforme d'email marketing (spec MVP)
 
-Nom de code : **Missive** (renommable). Plateforme d'email marketing, prix au volume d'emails,
+Nom de code : **Pingsell** (renommable). Plateforme d'email marketing, prix au volume d'emails,
 intégration Shopify, API publique, app mobile. Aucun service d'IA tiers dans le produit.
 
 This file is THE contract between all apps. Every app must follow it exactly. UI language: **French**.

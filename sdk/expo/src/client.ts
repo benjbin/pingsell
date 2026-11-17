@@ -6,25 +6,25 @@ import { AppState, Linking, Platform } from "react-native";
 /* Types                                                                      */
 /* -------------------------------------------------------------------------- */
 
-export interface MissiveConfig {
-  /** Public app key, `msvapp_…` (Missive › Notifications push › Configuration). */
+export interface PingsellConfig {
+  /** Public app key, `msvapp_…` (Pingsell › Notifications push › Configuration). */
   appKey: string;
-  /** Missive API origin, e.g. https://api.missive.fr (without /api/v1). */
+  /** Pingsell API origin, e.g. https://api.example.com (without /api/v1). */
   apiUrl: string;
   /**
    * `expo` (default): Expo push token, works without Firebase / APNs setup on your side.
-   * `device`: native APNs (iOS) / FCM (Android) token, sent through your own keys saved in Missive.
+   * `device`: native APNs (iOS) / FCM (Android) token, sent through your own keys saved in Pingsell.
    */
   tokenType?: "expo" | "device";
   /** EAS project id, required for Expo tokens outside Expo Go (defaults to app config extra.eas.projectId). */
   projectId?: string;
   /**
    * What happens when a notification arrives while the app is open:
-   * `system` (default) shows the OS banner, `banner` shows <MissiveInAppBanner />, `none` only updates the inbox.
+   * `system` (default) shows the OS banner, `banner` shows <PingsellInAppBanner />, `none` only updates the inbox.
    */
   foreground?: "system" | "banner" | "none";
   /** Called when the customer taps a notification (OS or in-app). Defaults to opening its `url`. */
-  onOpen?: (notification: MissiveNotification) => void;
+  onOpen?: (notification: PingsellNotification) => void;
   /** Keep the app icon badge equal to the unread in-app notifications (default: true). */
   syncBadge?: boolean;
   /**
@@ -36,7 +36,7 @@ export interface MissiveConfig {
   androidChannelName?: string;
 }
 
-export interface MissiveNotification {
+export interface PingsellNotification {
   /** In-app inbox id (when the notification is also kept in the notification centre). */
   id: string | null;
   messageId: string | null;
@@ -66,7 +66,7 @@ export interface InboxState {
 }
 
 export interface RegisterOptions {
-  /** Signed-in customer: links this phone to their Missive contact (segments, automations, history). */
+  /** Signed-in customer: links this phone to their Pingsell contact (segments, automations, history). */
   email?: string;
   contactId?: string;
   /** HMAC-SHA256 of the email, computed by YOUR server (required when identity verification is on). */
@@ -80,7 +80,7 @@ export type RegisterResult =
   | { ok: true; token: string; linked: boolean }
   | { ok: false; reason: "permission_denied" | "declined" | "not_now" | "unsupported" | "error"; message: string };
 
-/** Pre-permission screen, configured in Missive › Notifications push › Pré-permission. */
+/** Pre-permission screen, configured in Pingsell › Notifications push › Pré-permission. */
 export interface PromptSettings {
   enabled: boolean;
   title: string;
@@ -98,8 +98,8 @@ export interface Identity {
   userHash?: string;
 }
 
-/** Android channel used by Missive notifications (high importance, full content on the lock screen). */
-export const ANDROID_CHANNEL_ID = "missive";
+/** Android channel used by Pingsell notifications (high importance, full content on the lock screen). */
+export const ANDROID_CHANNEL_ID = "pingsell";
 
 /* -------------------------------------------------------------------------- */
 /* Client                                                                     */
@@ -107,13 +107,13 @@ export const ANDROID_CHANNEL_ID = "missive";
 
 type Listener = () => void;
 
-class MissiveClient {
-  private config: MissiveConfig | null = null;
+class PingsellClient {
+  private config: PingsellConfig | null = null;
   private token: string | null = null;
   private subscriptions: Array<{ remove: () => void }> = [];
   private state: InboxState = { items: [], unread: 0, loading: false, error: null, ready: false };
   private stateListeners = new Set<Listener>();
-  private bannerListeners = new Set<(n: MissiveNotification) => void>();
+  private bannerListeners = new Set<(n: PingsellNotification) => void>();
   private refreshing: Promise<void> | null = null;
   private identity: Identity = {};
   private memory = new Map<string, string>();
@@ -122,15 +122,15 @@ class MissiveClient {
   private promptAnswer: ((accepted: boolean) => void) | null = null;
 
   /** Call once, as early as possible (outside components, e.g. in App.tsx / _layout.tsx). */
-  init(config: MissiveConfig): void {
+  init(config: PingsellConfig): void {
     if (this.config) return;
-    if (!config.appKey?.startsWith("msvapp_")) throw new Error("Missive : clé d'application invalide (msvapp_…)");
+    if (!config.appKey?.startsWith("msvapp_")) throw new Error("Pingsell : clé d'application invalide (msvapp_…)");
     this.config = { foreground: "system", syncBadge: true, tokenType: "expo", ...config, apiUrl: config.apiUrl.replace(/\/+$/, "") };
     void this.countLaunch(this.config);
 
     Notifications.setNotificationHandler({
       handleNotification: async (notification) => {
-        const n = toMissive(notification.request);
+        const n = toPingsell(notification.request);
         if (n.messageId || n.id) {
           void this.refresh();
           if (this.config?.foreground === "banner") this.bannerListeners.forEach((l) => l(n));
@@ -142,10 +142,10 @@ class MissiveClient {
 
     // Tap on a notification: app in background, or cold start.
     this.subscriptions.push(
-      Notifications.addNotificationResponseReceivedListener((response) => this.handleTap(toMissive(response.notification.request))),
+      Notifications.addNotificationResponseReceivedListener((response) => this.handleTap(toPingsell(response.notification.request))),
     );
     void Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response) this.handleTap(toMissive(response.notification.request));
+      if (response) this.handleTap(toPingsell(response.notification.request));
     });
 
     // Back to the foreground: the inbox may have changed (sent while the phone was offline).
@@ -169,7 +169,7 @@ class MissiveClient {
   }
 
   /**
-   * Asks for permission, gets the push token and registers the phone with Missive.
+   * Asks for permission, gets the push token and registers the phone with Pingsell.
    * Call it at every launch (it is idempotent) and again after the customer signs in.
    */
   async register(options: RegisterOptions = {}): Promise<RegisterResult> {
@@ -217,7 +217,7 @@ class MissiveClient {
 
   /**
    * The customer signed in to your app (call it even if notifications are off): links the phone to
-   * their Missive contact and starts the "Première connexion à l'app" automations the first time.
+   * their Pingsell contact and starts the "Première connexion à l'app" automations the first time.
    */
   async identify(identity: Identity): Promise<{ known: boolean; first: boolean }> {
     this.identity = identity;
@@ -233,8 +233,8 @@ class MissiveClient {
   /* ------------------------- Pre-permission screen ------------------------ */
 
   /**
-   * Asks for notifications the smart way: shows <MissivePermissionPrompt /> first (your message,
-   * configured in Missive) and only opens the one-shot system dialog to customers who tapped "Activer".
+   * Asks for notifications the smart way: shows <PingsellPermissionPrompt /> first (your message,
+   * configured in Pingsell) and only opens the one-shot system dialog to customers who tapped "Activer".
    * Returns `not_now` when the screen should not be shown yet (launch count, cooldown after "Plus tard").
    */
   async requestPermission(options: RegisterOptions & { force?: boolean } = {}): Promise<RegisterResult> {
@@ -273,7 +273,7 @@ class MissiveClient {
     return result;
   }
 
-  /** Used by <MissivePermissionPrompt />. */
+  /** Used by <PingsellPermissionPrompt />. */
   onPrompt(listener: (prompt: PromptSettings | null) => void): () => void {
     this.promptListeners.add(listener);
     return () => this.promptListeners.delete(listener);
@@ -297,19 +297,19 @@ class MissiveClient {
     void this.request("POST", "/push/app/prompt", { event, platform: Platform.OS === "ios" ? "ios" : "android" }).catch(() => undefined);
   }
 
-  private async countLaunch(config: MissiveConfig): Promise<void> {
+  private async countLaunch(config: PingsellConfig): Promise<void> {
     if (this.launchCounted) return;
     this.launchCounted = true;
     const launches = Number((await this.load(config, "missive.launches")) ?? 0);
     await this.store(config, "missive.launches", String(launches + 1));
   }
 
-  private async load(config: MissiveConfig, key: string): Promise<string | null> {
+  private async load(config: PingsellConfig, key: string): Promise<string | null> {
     if (config.storage) return config.storage.getItem(key).catch(() => null);
     return this.memory.get(key) ?? null;
   }
 
-  private async store(config: MissiveConfig, key: string, value: string): Promise<void> {
+  private async store(config: PingsellConfig, key: string, value: string): Promise<void> {
     if (config.storage) await config.storage.setItem(key, value).catch(() => undefined);
     else this.memory.set(key, value);
   }
@@ -389,33 +389,33 @@ class MissiveClient {
     this.dispatchOpen({ id: item.id, messageId: null, title: item.title, body: item.body, url: item.url, imageUrl: item.image_url });
   }
 
-  /** Used by <MissiveInAppBanner /> (foreground: "banner"). */
-  onBanner(listener: (n: MissiveNotification) => void): () => void {
+  /** Used by <PingsellInAppBanner /> (foreground: "banner"). */
+  onBanner(listener: (n: PingsellNotification) => void): () => void {
     this.bannerListeners.add(listener);
     return () => this.bannerListeners.delete(listener);
   }
 
   /* ------------------------------ Internals ----------------------------- */
 
-  private handleTap(n: MissiveNotification): void {
+  private handleTap(n: PingsellNotification): void {
     if (!n.messageId && !n.id) return;
     if (n.messageId) void this.request("POST", "/push/app/opened", { message_id: n.messageId }).then(() => this.refresh()).catch(() => undefined);
     this.dispatchOpen(n);
   }
 
   /** In-app banner tap. */
-  openBanner(n: MissiveNotification): void {
+  openBanner(n: PingsellNotification): void {
     if (n.id) void this.markRead([n.id]);
     if (n.messageId) void this.request("POST", "/push/app/opened", { message_id: n.messageId }).catch(() => undefined);
     this.dispatchOpen(n);
   }
 
-  private dispatchOpen(n: MissiveNotification): void {
+  private dispatchOpen(n: PingsellNotification): void {
     if (this.config?.onOpen) this.config.onOpen(n);
     else if (n.url) void Linking.openURL(n.url).catch(() => undefined);
   }
 
-  private async fetchToken(config: MissiveConfig): Promise<{ token: string; provider: "expo" | "fcm" | "apns" }> {
+  private async fetchToken(config: PingsellConfig): Promise<{ token: string; provider: "expo" | "fcm" | "apns" }> {
     if (config.tokenType === "device") {
       const t = await Notifications.getDevicePushTokenAsync();
       return { token: String(t.data), provider: Platform.OS === "ios" ? "apns" : "fcm" };
@@ -438,8 +438,8 @@ class MissiveClient {
     this.stateListeners.forEach((l) => l());
   }
 
-  private requireConfig(): MissiveConfig {
-    if (!this.config) throw new Error("Missive : appelez Missive.init({ appKey, apiUrl }) avant toute autre méthode");
+  private requireConfig(): PingsellConfig {
+    if (!this.config) throw new Error("Pingsell : appelez Pingsell.init({ appKey, apiUrl }) avant toute autre méthode");
     return this.config;
   }
 
@@ -449,24 +449,24 @@ class MissiveClient {
       method,
       headers: {
         authorization: `Bearer ${config.appKey}`,
-        ...(this.token ? { "x-missive-device": this.token } : {}),
+        ...(this.token ? { "x-pingsell-device": this.token } : {}),
         ...(body ? { "content-type": "application/json" } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
     });
     const data = (await res.json().catch(() => ({}))) as T & { error?: string; message?: string };
-    if (!res.ok) throw new Error(data.message ?? data.error ?? `Missive : erreur ${res.status}`);
+    if (!res.ok) throw new Error(data.message ?? data.error ?? `Pingsell : erreur ${res.status}`);
     return data;
   }
 }
 
-function toMissive(request: Notifications.NotificationRequest): MissiveNotification {
+function toPingsell(request: Notifications.NotificationRequest): PingsellNotification {
   const content = request.content;
   const data = (content.data ?? {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v ? v : null);
   return {
-    id: str(data.missive_inbox_id),
-    messageId: str(data.missive_message_id),
+    id: str(data.pingsell_inbox_id ?? data.missive_inbox_id),
+    messageId: str(data.pingsell_message_id ?? data.missive_message_id),
     title: content.title ?? "",
     body: content.body ?? "",
     url: str(data.url),
@@ -475,4 +475,4 @@ function toMissive(request: Notifications.NotificationRequest): MissiveNotificat
 }
 
 /** Singleton used by the hooks and components. */
-export const Missive = new MissiveClient();
+export const Pingsell = new PingsellClient();

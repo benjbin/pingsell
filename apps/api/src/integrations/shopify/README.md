@@ -1,4 +1,4 @@
-# Intégration Shopify — Missive
+# Intégration Shopify — Pingsell
 
 Module monté par l'API (`registerShopify(app, ctx)`), sans dépendance npm : `fetch` global + `node:crypto`.
 Version d'API Shopify : **2025-10** (constante `SHOPIFY_API_VERSION` dans `types.ts`).
@@ -26,7 +26,7 @@ Celles qui existent déjà marchent toujours (elles s'affichent comme « legacy 
 2. Onglet **Configuration** : cochez `read_customers` et `read_orders` dans les scopes Admin API, puis enregistrez.
 3. Onglet **Identifiants de l'API** : révélez le **jeton d'accès Admin API** (une seule fois) et copiez aussi la
    **clé secrète de l'API**. Cette clé sert à vérifier la signature des webhooks.
-4. Dans Missive : `POST /api/v1/integrations/shopify/connect`
+4. Dans Pingsell : `POST /api/v1/integrations/shopify/connect`
    ```json
    { "shop_domain": "ma-boutique.myshopify.com", "access_token": "shpat_…", "api_secret": "…" }
    ```
@@ -40,7 +40,7 @@ Celles qui existent déjà marchent toujours (elles s'affichent comme « legacy 
    ```json
    { "shop_domain": "ma-boutique.myshopify.com", "client_id": "…", "client_secret": "…" }
    ```
-   Missive obtient le jeton avec le *client credentials grant*. Ce jeton expire au bout de 24 h, et Missive
+   Pingsell obtient le jeton avec le *client credentials grant*. Ce jeton expire au bout de 24 h, et Pingsell
    le renouvelle tout seul. Le client secret sert aussi à vérifier la signature des webhooks.
 
 ### 3. App publique (OAuth)

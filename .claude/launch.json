@@ -1,7 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "missive-api", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "apps/api", "run", "dev"], "port": 4000 },
-    { "name": "missive-web", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "apps/web", "run", "dev", "--", "--port", "5182"], "port": 5182 }
+    { "name": "pingsell-api", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "apps/api", "run", "dev"], "port": 4000 },
+    { "name": "pingsell-web", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "apps/web", "run", "dev", "--", "--port", "5182"], "port": 5182 }
   ]
 }

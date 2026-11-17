@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1060" viewBox="0 0 900 1060">
+<title>Pingsell — pistes (designer A : « the ping that sells »)</title>
+<rect width="900" height="1060" fill="#ffffff"/>
+<text x="24" y="42" font-family="Helvetica, Arial, sans-serif" font-size="20" font-weight="700" fill="#0b214a">Pingsell — 6 pistes « la notif qui vend »</text>
+<rect x="12" y="70" width="276" height="310" rx="12" fill="#dce6ff"/>
+<g transform="translate(54.0 90) scale(3)"><path fill="#0b214a" fill-rule="evenodd" d="M49 17L49 38.172A2 2 0 0 1 48.414 39.586L25.414 62.586A2 2 0 0 1 22.586 62.586L1.414 41.414A2 2 0 0 1 1.414 38.586L24.414 15.586A2 2 0 0 1 25.828 15L47 15A2 2 0 0 1 49 17Z"/><path fill="#0b214a" d="M63 21L63 17A16 16 0 0 0 47 1L43 1L43 11L47 11A6 6 0 0 1 53 17L53 21Z"/><path fill="#f45c36" d="M26 31A7 7 0 1 1 40 31A7 7 0 1 1 26 31Z"/></g>
+<text x="28" y="312" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#0b214a">A — Ping-Tag (retenu)</text>
+<text x="28" y="334" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">La pastille corail est l’œillet de</text>
+<text x="28" y="351" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">l’étiquette ; la pointe résonne (V4).</text>
+<rect x="312" y="70" width="276" height="310" rx="12" fill="#f4f6fb"/>
+<g transform="translate(354.0 90) scale(3)"><path fill="#0b214a" fill-rule="evenodd" d="M61 32L58.333 34.967L60.273 38.453L57.013 40.752L58.128 44.583L54.438 46.099L54.673 50.081L50.738 50.738L50.081 54.673L46.099 54.438L44.583 58.128L40.752 57.013L38.453 60.273L34.967 58.333L32 61L29.033 58.333L25.547 60.273L23.248 57.013L19.417 58.128L17.901 54.438L13.919 54.673L13.262 50.738L9.327 50.081L9.562 46.099L5.872 44.583L6.987 40.752L3.727 38.453L5.667 34.967L3 32L5.667 29.033L3.727 25.547L6.987 23.248L5.872 19.417L9.562 17.901L9.327 13.919L13.262 13.262L13.919 9.327L17.901 9.562L19.417 5.872L23.248 6.987L25.547 3.727L29.033 5.667L32 3L34.967 5.667L38.453 3.727L40.752 6.987L44.583 5.872L46.099 9.562L50.081 9.327L50.738 13.262L54.673 13.919L54.438 17.901L58.128 19.417L57.013 23.248L60.273 25.547L58.333 29.033ZM11 32A21 21 0 1 0 53 32A21 21 0 1 0 11 32Z"/><path fill="#0b214a" fill-rule="evenodd" d="M15 32A17 17 0 1 1 49 32A17 17 0 1 1 15 32ZM19 32A13 13 0 1 0 45 32A13 13 0 1 0 19 32Z"/><path fill="#f45c36" d="M24 32A8 8 0 1 1 40 32A8 8 0 1 1 24 32Z"/></g>
+<text x="328" y="312" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#0b214a">B — Pièce-ping</text>
+<text x="328" y="334" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">L’onde extérieure devient tranche de</text>
+<text x="328" y="351" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">pièce crantée. Lit « engrenage » à</text>
+<text x="328" y="368" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">16 px.</text>
+<rect x="612" y="70" width="276" height="310" rx="12" fill="#f4f6fb"/>
+<g transform="translate(654.0 90) scale(3)"><path fill="#0b214a" d="M6 46.5L20 36.5L32 40.5L46 16.5L46 23.5L32 47.5L20 43.5L6 53.5Z"/><path fill="#f45c36" d="M43 17A7 7 0 1 1 57 17A7 7 0 1 1 43 17Z"/><path fill="#f45c36" fill-rule="evenodd" d="M37 17A13 13 0 1 1 63 17A13 13 0 1 1 37 17ZM40 17A10 10 0 1 0 60 17A10 10 0 1 0 40 17Z" opacity="0.35"/></g>
+<text x="628" y="312" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#0b214a">C — Courbe-ping</text>
+<text x="628" y="334" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">La courbe des ventes monte et finit en</text>
+<text x="628" y="351" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">pastille qui sonne. Trop « dashboard ».</text>
+<rect x="12" y="400" width="276" height="310" rx="12" fill="#f4f6fb"/>
+<g transform="translate(54.0 420) scale(3)"><path fill="#0b214a" fill-rule="evenodd" d="M22 28L32 20L42 28L42 58L22 58ZM28.5 31A3.5 3.5 0 1 0 35.5 31A3.5 3.5 0 1 0 28.5 31Z"/><path fill="#f45c36" d="M25 9A7 7 0 1 1 39 9A7 7 0 1 1 25 9Z"/></g>
+<text x="28" y="642" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#0b214a">D — Étiquette-i</text>
+<text x="28" y="664" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">Le fût du i est une étiquette</text>
+<text x="28" y="681" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">suspendue, le point est la notif. Lit</text>
+<text x="28" y="698" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">« maison ».</text>
+<rect x="312" y="400" width="276" height="310" rx="12" fill="#f4f6fb"/>
+<g transform="translate(354.0 420) scale(3)"><path fill="#0b214a" d="M6 18L40 18L52 30L52 58L6 58Z"/><path fill="#f4f6fb" d="M36 15A13 13 0 1 1 62 15A13 13 0 1 1 36 15Z"/><path fill="#f45c36" d="M40 15A9 9 0 1 1 58 15A9 9 0 1 1 40 15Z"/></g>
+<text x="328" y="642" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#0b214a">E — Badge-étiquette</text>
+<text x="328" y="664" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">Tuile d’app au coin chanfreiné + badge.</text>
+<text x="328" y="681" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">Trop proche du badge iOS.</text>
+<rect x="612" y="400" width="276" height="310" rx="12" fill="#f4f6fb"/>
+<g transform="translate(654.0 420) scale(3)"><path fill="#0b214a" d="M10 16L20 16L20 60L10 60Z"/><path fill="#0b214a" fill-rule="evenodd" d="M12 30A19 19 0 1 1 50 30A19 19 0 1 1 12 30ZM20 30A11 11 0 1 0 42 30A11 11 0 1 0 20 30Z"/><path fill="#f45c36" d="M24 30A7 7 0 1 1 38 30A7 7 0 1 1 24 30Z"/></g>
+<text x="628" y="642" font-family="Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#0b214a">F — p-ping</text>
+<text x="628" y="664" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">Le contre-poinçon du p est la pastille.</text>
+<text x="628" y="681" font-family="Helvetica, Arial, sans-serif" font-size="12.5" fill="#33405c">Monogramme fort, « vente » absente.</text>
+<text x="24" y="762" font-family="Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#0b214a">V2 — trois échos testés sur la piste A</text>
+<rect x="12" y="780" width="276" height="260" rx="12" fill="#dce6ff"/>
+<g transform="translate(70 794) scale(2.5)"><path fill="#0b214a" fill-rule="evenodd" d="M49 17L49 38.172A2 2 0 0 1 48.414 39.586L25.414 62.586A2 2 0 0 1 22.586 62.586L1.414 41.414A2 2 0 0 1 1.414 38.586L24.414 15.586A2 2 0 0 1 25.828 15L47 15A2 2 0 0 1 49 17Z"/><path fill="#0b214a" d="M63 21L63 17A16 16 0 0 0 47 1L43 1L43 11L47 11A6 6 0 0 1 53 17L53 21Z"/><path fill="#f45c36" d="M26 31A7 7 0 1 1 40 31A7 7 0 1 1 26 31Z"/></g>
+<text x="28" y="980" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#0b214a">a — Résonance (retenu)</text>
+<text x="28" y="1002" font-family="Helvetica, Arial, sans-serif" font-size="12" fill="#33405c">Pointe dédoublée, bouts coupés net : plus de Wi-Fi.</text>
+<rect x="312" y="780" width="276" height="260" rx="12" fill="#f4f6fb"/>
+<g transform="translate(370 794) scale(2.5)"><path fill="#0b214a" fill-rule="evenodd" d="M50.142 17.858L50.142 33.414A4 4 0 0 1 48.971 36.243L29.636 55.577A4 4 0 0 1 23.979 55.577L8.423 40.021A4 4 0 0 1 8.423 34.364L27.757 15.029A4 4 0 0 1 30.586 13.858L46.142 13.858A4 4 0 0 1 50.142 17.858Z"/><path fill="#0b214a" d="M38.47 -0.235A28.343 28.343 0 0 1 64.235 25.53L58.258 26.053A22.343 22.343 0 0 0 37.947 5.742Z"/><path fill="#f45c36" d="M29 28A7 7 0 1 1 43 28A7 7 0 1 1 29 28Z"/></g>
+<text x="328" y="980" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#0b214a">b — Arc concentrique, coupe radiale</text>
+<text x="328" y="1002" font-family="Helvetica, Arial, sans-serif" font-size="12" fill="#33405c">Encore lu « signal / NFC ».</text>
+<rect x="612" y="780" width="276" height="260" rx="12" fill="#f4f6fb"/>
+<g transform="translate(670 794) scale(2.5)"><path fill="#0b214a" fill-rule="evenodd" d="M50.142 17.858L50.142 33.414A4 4 0 0 1 48.971 36.243L29.636 55.577A4 4 0 0 1 23.979 55.577L8.423 40.021A4 4 0 0 1 8.423 34.364L27.757 15.029A4 4 0 0 1 30.586 13.858L46.142 13.858A4 4 0 0 1 50.142 17.858ZM20.243 25.222A16 16 0 0 0 38.778 43.757L38.084 39.818A12 12 0 0 1 24.182 25.916Z"/><path fill="#f45c36" d="M29 28A7 7 0 1 1 43 28A7 7 0 1 1 29 28Z"/></g>
+<text x="628" y="980" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#0b214a">c — Arc en négatif</text>
+<text x="628" y="1002" font-family="Helvetica, Arial, sans-serif" font-size="12" fill="#33405c">Lit « sourire / œil », le ping se perd.</text>
+</svg>

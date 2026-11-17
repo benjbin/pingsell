@@ -79,8 +79,8 @@ export const ICONS: Record<BlockType, LucideIcon> = {
 };
 
 export const LABELS = Object.fromEntries(BLOCK_LIBRARY.map((b) => [b.type, b.label])) as Record<BlockType, string>;
-export const DND_NEW = "application/x-missive-new";
-export const DND_MOVE = "application/x-missive-move";
+export const DND_NEW = "application/x-pingsell-new";
+export const DND_MOVE = "application/x-pingsell-move";
 
 function PanelTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -340,7 +340,7 @@ export function TemplatesPanel({
         </div>
 
         <div>
-          <p className="eyebrow mb-2.5">Modèles Missive</p>
+          <p className="eyebrow mb-2.5">Modèles Pingsell</p>
           <div className="grid grid-cols-2 gap-2">
             {previews.map(({ p, d }) => (
               <button

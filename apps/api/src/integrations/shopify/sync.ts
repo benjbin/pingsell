@@ -43,7 +43,7 @@ interface OrderNode {
 }
 
 const CUSTOMERS_QUERY = /* GraphQL */ `
-  query MissiveCustomers($first: Int!, $after: String) {
+  query PingsellCustomers($first: Int!, $after: String) {
     customers(first: $first, after: $after, sortKey: UPDATED_AT) {
       pageInfo { hasNextPage endCursor }
       nodes {
@@ -62,7 +62,7 @@ const CUSTOMERS_QUERY = /* GraphQL */ `
 `;
 
 const ORDERS_QUERY = /* GraphQL */ `
-  query MissiveOrders($first: Int!, $after: String, $query: String) {
+  query PingsellOrders($first: Int!, $after: String, $query: String) {
     orders(first: $first, after: $after, query: $query, sortKey: CREATED_AT) {
       pageInfo { hasNextPage endCursor }
       nodes {

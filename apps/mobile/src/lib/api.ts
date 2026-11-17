@@ -53,7 +53,7 @@ export interface ApiClientOptions {
   onUnauthorized?: () => void;
 }
 
-/** Typed client for the Missive REST API (SPEC.md). */
+/** Typed client for the Pingsell REST API (SPEC.md). */
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly token: string | null;

@@ -1,8 +1,8 @@
 {
-  "name": "missive",
+  "name": "pingsell",
   "version": "0.1.0",
   "private": true,
-  "description": "Missive — plateforme d'email marketing (monorepo sans workspaces : chaque app a ses propres node_modules)",
+  "description": "Pingsell — plateforme d'email marketing (monorepo sans workspaces : chaque app a ses propres node_modules)",
   "scripts": {
     "install:all": "npm --prefix apps/api install && npm --prefix apps/web install && npm --prefix apps/mobile install && npm --prefix apps/site install",
     "seed": "npm --prefix apps/api run seed",

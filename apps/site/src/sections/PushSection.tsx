@@ -102,7 +102,7 @@ const FEATURES = [
 
 /** Pre-permission demo: the merchant's own screen, then the one-shot system dialog, then subscribed. */
 const PROMPT_STEPS = [
-  { caption: "Votre écran, modifiable dans Missive", ms: 2400 },
+  { caption: "Votre écran, modifiable dans Pingsell", ms: 2400 },
   { caption: "Le client touche « Activer »", ms: 900 },
   { caption: "La fenêtre système, une seule fois", ms: 1800 },
   { caption: "Client abonné aux notifications", ms: 2400 },
@@ -199,7 +199,7 @@ export function PushSection() {
               Vos clients, jusque sur <em className="text-brand-500">leur écran d'accueil.</em>
             </h2>
             <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-slate-600">
-              Vous avez votre propre app iOS ou Android ? Connectez-la à Missive et envoyez-lui des notifications push depuis le même endroit que vos emails : mêmes
+              Vous avez votre propre app iOS ou Android ? Connectez-la à Pingsell et envoyez-lui des notifications push depuis le même endroit que vos emails : mêmes
               contacts, mêmes segments, mêmes automatisations.
             </p>
           </div>
@@ -658,7 +658,7 @@ function CodeCard({ reduce }: { reduce: boolean }) {
         <li className="flex items-start gap-2.5">
           <Check className="mt-0.5 size-4 shrink-0 text-brand-400" strokeWidth={1.75} />
           <span>
-            SDK React Native / Expo prêt à intégrer : <code className="font-mono text-[12px] text-brand-300">Missive.identify</code> relie le client à sa connexion, et les
+            SDK React Native / Expo prêt à intégrer : <code className="font-mono text-[12px] text-brand-300">Pingsell.identify</code> relie le client à sa connexion, et les
             jetons invalides sont nettoyés tout seuls.
           </span>
         </li>
@@ -700,12 +700,12 @@ function PermissionCard({ reduce }: { reduce: boolean }) {
           Une seule chance de demander, <em className="text-brand-500">autant la saisir.</em>
         </h3>
         <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-slate-600">
-          La demande de notifications d'iOS et d'Android ne s'affiche qu'une fois. Missive la prépare avec votre propre écran, et ne l'ouvre que pour les clients
+          La demande de notifications d'iOS et d'Android ne s'affiche qu'une fois. Pingsell la prépare avec votre propre écran, et ne l'ouvre que pour les clients
           qui ont dit oui.
         </p>
         <ul className="mt-6 space-y-2.5 text-[14px] text-slate-700">
           {[
-            "Titre, texte et boutons modifiés dans Missive, sans republier l'app",
+            "Titre, texte et boutons modifiés dans Pingsell, sans republier l'app",
             "Affiché à partir du lancement de votre choix, par exemple le 3e",
             "« Plus tard » reproposé après le nombre de jours que vous fixez",
           ].map((t) => (

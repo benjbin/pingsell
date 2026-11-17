@@ -686,11 +686,11 @@ export interface PushPayload {
 }
 
 /** Android notification channel the SDK creates (high importance, visible on the lock screen). */
-export const ANDROID_CHANNEL_ID = 'missive';
+export const ANDROID_CHANNEL_ID = 'pingsell';
 
 function payloadData(p: PushPayload): Record<string, string> {
-  const data: Record<string, string> = { missive_message_id: p.messageId };
-  if (p.inboxId) data.missive_inbox_id = p.inboxId;
+  const data: Record<string, string> = { pingsell_message_id: p.messageId };
+  if (p.inboxId) data.pingsell_inbox_id = p.inboxId;
   if (p.url) data.url = p.url;
   if (p.imageUrl) data.image_url = p.imageUrl;
   return data;
@@ -752,7 +752,7 @@ async function sendFcm(config: AppConfig, creds: FcmCredentials, p: PushPayload)
         apns: {
           headers: { 'apns-priority': '10', 'apns-push-type': 'alert' },
           payload: {
-            aps: { sound: 'default', 'mutable-content': 1, 'thread-id': 'missive', ...(p.badge !== undefined ? { badge: p.badge } : {}) },
+            aps: { sound: 'default', 'mutable-content': 1, 'thread-id': 'pingsell', ...(p.badge !== undefined ? { badge: p.badge } : {}) },
           },
           ...(p.imageUrl ? { fcm_options: { image: p.imageUrl } } : {}),
         },
@@ -796,7 +796,7 @@ function sendApns(config: AppConfig, creds: ApnsCredentials, p: PushPayload): Pr
       alert: { title: p.title, body: p.body },
       sound: 'default',
       'mutable-content': 1,
-      'thread-id': 'missive',
+      'thread-id': 'pingsell',
       'interruption-level': 'active',
       ...(p.badge !== undefined ? { badge: p.badge } : {}),
     },

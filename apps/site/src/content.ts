@@ -91,7 +91,7 @@ export const PLAN_TABLE: Array<[string, string | boolean, string | boolean, stri
   ["Segments et import CSV", true, true, true],
   ["Connexion Shopify", true, true, true],
   ["Rapports d'ouvertures et de clics", true, true, true],
-  ["App Missive iOS et Android (pour gérer votre compte)", true, true, true],
+  ["App Pingsell iOS et Android (pour gérer votre compte)", true, true, true],
   ["Automatisations", false, true, true],
   ["Notifications push et centre de notifications in-app (votre app iOS / Android)", false, true, true],
   ["Écran de pré-permission et taux d'opt-in", false, true, true],
@@ -149,7 +149,7 @@ export const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: "Pourquoi payer au volume d'emails plutôt qu'au nombre de contacts ?",
-    a: "Parce que vos contacts dormants ne devraient rien vous coûter. Avec Missive, une liste de 20 000 contacts à qui vous écrivez deux fois par mois coûte le prix de ces envois, pas celui de la taille de votre fichier.",
+    a: "Parce que vos contacts dormants ne devraient rien vous coûter. Avec Pingsell, une liste de 20 000 contacts à qui vous écrivez deux fois par mois coûte le prix de ces envois, pas celui de la taille de votre fichier.",
   },
   {
     q: "Comment ça marche avec Shopify ?",
@@ -157,15 +157,15 @@ export const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: "Ma boutique n'est pas sur Shopify, est-ce que ça marche quand même ?",
-    a: "Oui. L'API Missive et les clés API permettent de brancher votre back-office ou votre site : ajout de contacts, événements, déclenchement d'automatisations.",
+    a: "Oui. L'API Pingsell et les clés API permettent de brancher votre back-office ou votre site : ajout de contacts, événements, déclenchement d'automatisations.",
   },
   {
     q: "Puis-je envoyer des notifications push à ma propre app ?",
-    a: "Oui, en Pro et Business. Votre app iOS ou Android (native, React Native, Flutter ou Expo) enregistre ses appareils auprès de Missive avec une clé publique d'app, et l'email relie chaque appareil à un contact. Missive envoie ensuite via Firebase Cloud Messaging, APNs ou Expo. Chaque message s'affiche sur l'écran verrouillé et reste dans le centre de notifications de votre app (avec badge des non-lues), grâce au SDK React Native / Expo ou à quatre appels d'API. Vous créez des campagnes avec titre, texte, image et un lien profond qui ouvre la bonne page de l'app, et vous ajoutez une étape « Notification push » dans vos automatisations, à côté de vos emails. À ne pas confondre avec l'app Missive, qui sert à suivre votre compte depuis votre téléphone.",
+    a: "Oui, en Pro et Business. Votre app iOS ou Android (native, React Native, Flutter ou Expo) enregistre ses appareils auprès de Pingsell avec une clé publique d'app, et l'email relie chaque appareil à un contact. Pingsell envoie ensuite via Firebase Cloud Messaging, APNs ou Expo. Chaque message s'affiche sur l'écran verrouillé et reste dans le centre de notifications de votre app (avec badge des non-lues), grâce au SDK React Native / Expo ou à quatre appels d'API. Vous créez des campagnes avec titre, texte, image et un lien profond qui ouvre la bonne page de l'app, et vous ajoutez une étape « Notification push » dans vos automatisations, à côté de vos emails. À ne pas confondre avec l'app Pingsell, qui sert à suivre votre compte depuis votre téléphone.",
   },
   {
     q: "Pourquoi un écran avant la demande de notifications ?",
-    a: "Parce que la fenêtre système d'iOS et d'Android ne s'affiche qu'une fois : un client qui refuse ne la reverra plus, et devra passer par les réglages de son téléphone. Missive affiche d'abord votre propre écran, dans votre app, qui explique ce que vos notifications apportent (suivi de colis, ventes privées…). La fenêtre système ne s'ouvre que pour les clients qui touchent « Activer ». Vous modifiez le texte depuis Missive sans republier l'app, vous choisissez à partir de quel lancement l'afficher et après combien de jours le reproposer à ceux qui ont choisi « Plus tard », et vous suivez les affichages, les acceptations et votre taux d'opt-in.",
+    a: "Parce que la fenêtre système d'iOS et d'Android ne s'affiche qu'une fois : un client qui refuse ne la reverra plus, et devra passer par les réglages de son téléphone. Pingsell affiche d'abord votre propre écran, dans votre app, qui explique ce que vos notifications apportent (suivi de colis, ventes privées…). La fenêtre système ne s'ouvre que pour les clients qui touchent « Activer ». Vous modifiez le texte depuis Pingsell sans republier l'app, vous choisissez à partir de quel lancement l'afficher et après combien de jours le reproposer à ceux qui ont choisi « Plus tard », et vous suivez les affichages, les acceptations et votre taux d'opt-in.",
   },
   {
     q: "Quelle différence entre un push transactionnel et un push marketing ?",
@@ -173,11 +173,11 @@ export const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: "Je viens d'un autre outil, comment récupérer mes contacts ?",
-    a: "Exportez-les en CSV depuis votre ancien outil et importez le fichier dans Missive. Seule la colonne email est obligatoire ; prénom, nom, téléphone, tags et statut sont repris s'ils sont présents, donc vos désinscrits restent désinscrits.",
+    a: "Exportez-les en CSV depuis votre ancien outil et importez le fichier dans Pingsell. Seule la colonne email est obligatoire ; prénom, nom, téléphone, tags et statut sont repris s'ils sont présents, donc vos désinscrits restent désinscrits.",
   },
   {
     q: "Mes emails s'afficheront-ils bien partout ?",
-    a: "Les emails Missive sont construits pour Gmail, Outlook, Apple Mail et les mobiles. L'éditeur vous montre l'aperçu ordinateur et mobile, et vous pouvez vous envoyer un test avant chaque campagne.",
+    a: "Les emails Pingsell sont construits pour Gmail, Outlook, Apple Mail et les mobiles. L'éditeur vous montre l'aperçu ordinateur et mobile, et vous pouvez vous envoyer un test avant chaque campagne.",
   },
   {
     q: "Puis-je travailler à plusieurs ?",

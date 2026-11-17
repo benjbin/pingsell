@@ -47,7 +47,7 @@ export default function LoginScreen() {
             <View style={[styles.logo, { backgroundColor: c.accent }]}>
               <Ionicons name="paper-plane" size={26} color={c.onAccent} />
             </View>
-            <Text style={[styles.title, { color: c.text }]}>Missive</Text>
+            <Text style={[styles.title, { color: c.text }]}>Pingsell</Text>
             <Text style={[styles.subtitle, { color: c.textMuted }]}>
               Connectez-vous pour suivre vos campagnes et vos contacts.
             </Text>

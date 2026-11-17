@@ -1,4 +1,4 @@
-# Missive — back-office web
+# Pingsell — back-office web
 
 Vite + React 19 + TypeScript + Tailwind v4 + react-router + recharts.
 

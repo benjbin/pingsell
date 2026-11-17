@@ -392,7 +392,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
           });
       if (!globalOk && targets.length === 0) return reply.code(401).send({ error: 'Signature HMAC invalide' });
 
-      // GDPR mandatory topics: acknowledged (Missive keeps no Shopify data beyond contacts).
+      // GDPR mandatory topics: acknowledged (Pingsell keeps no Shopify data beyond contacts).
       if (topic.startsWith('customers/data_request') || topic.startsWith('customers/redact') || topic.startsWith('shop/redact')) {
         request.log.info({ shop, topic }, 'Shopify : webhook RGPD reçu');
         return { ok: true };

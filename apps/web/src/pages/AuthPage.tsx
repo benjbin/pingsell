@@ -49,7 +49,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               </>
             ) : (
               <>
-                Votre première <em className="text-brand-500">missive.</em>
+                Votre premier <em className="text-brand-500">ping.</em>
               </>
             )}
           </h1>
@@ -100,7 +100,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
             </p>
           )}
         </div>
-        <p className="font-display text-[10px] tracking-[0.2em] text-slate-400 uppercase">© Missive — Email marketing</p>
+        <p className="font-display text-[10px] tracking-[0.2em] text-slate-400 uppercase">© Pingsell — Email marketing</p>
       </div>
 
       <div className="relative m-3 hidden overflow-hidden rounded-[28px] bg-brand-500 text-white lg:flex lg:flex-col lg:justify-between lg:p-14">
@@ -120,7 +120,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
             qui <em className="text-slate-900">vendent.</em>
           </h2>
           <p className="mt-6 max-w-sm text-[17px] text-white/80">
-            Sans y passer vos soirées. Écrivez, ciblez, envoyez — Missive s'occupe du reste.
+            Sans y passer vos soirées. Écrivez, ciblez, envoyez — Pingsell s'occupe du reste.
           </p>
         </div>
 

@@ -20,7 +20,7 @@ import {
 
 const EASE = [0.2, 0.8, 0.2, 1] as const;
 
-/** Everything that can feed Missive today (Shopify connector, CSV import, REST API, mobile SDK). */
+/** Everything that can feed Pingsell today (Shopify connector, CSV import, REST API, mobile SDK). */
 const SOURCES: Array<{ icon: LucideIcon; label: string; how: string }> = [
   { icon: ShoppingBag, label: "Shopify", how: "1 clic" },
   { icon: Globe, label: "Votre site", how: "API" },
@@ -44,7 +44,7 @@ const PATHS = [
     icon: Code2,
     badge: "≈ 5 minutes",
     title: "Avec quelques lignes",
-    text: "Une clé API et un appel web : votre site, votre CRM ou votre caisse alimentent Missive, dans n'importe quel langage.",
+    text: "Une clé API et un appel web : votre site, votre CRM ou votre caisse alimentent Pingsell, dans n'importe quel langage.",
     points: ["PHP, Node, Python, Java…", "Exemples prêts à copier", "Déclenche vos automatisations"],
   },
   {
@@ -109,7 +109,7 @@ function Hub() {
             <path d="M4 7l8 6 8-6" />
             <rect x="3" y="5" width="18" height="14" rx="3" />
           </svg>
-          <span className="mt-1.5 font-display text-[11px] font-extrabold tracking-wide uppercase sm:text-xs">Missive</span>
+          <span className="mt-1.5 font-display text-[11px] font-extrabold tracking-wide uppercase sm:text-xs">Pingsell</span>
         </div>
       </div>
 
@@ -140,7 +140,7 @@ function Hub() {
   );
 }
 
-/** "Missive s'adapte à vous": the first thing to understand, right after the hero. */
+/** "Pingsell s'adapte à vous": the first thing to understand, right after the hero. */
 export function AdaptSection() {
   return (
     <section id="adapte" className="relative overflow-hidden border-y border-slate-900/[0.07] bg-slate-50 py-24 lg:py-32">
@@ -149,16 +149,16 @@ export function AdaptSection() {
           <div className="reveal min-w-0">
             <p className="eyebrow">Intégration</p>
             <h2 className="display mt-4 text-[38px] leading-[0.92] sm:text-[56px]">
-              Missive s'adapte à vous. <em className="text-brand-500">Pas l'inverse.</em>
+              Pingsell s'adapte à vous. <em className="text-brand-500">Pas l'inverse.</em>
             </h2>
             <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-slate-600">
-              Boutique Shopify, site sur mesure, CRM, logiciel de caisse, app mobile ou simple fichier Excel : vous gardez vos outils et votre façon de travailler. Missive se
+              Boutique Shopify, site sur mesure, CRM, logiciel de caisse, app mobile ou simple fichier Excel : vous gardez vos outils et votre façon de travailler. Pingsell se
               branche dessus, en un clic ou en quelques lignes.
             </p>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
               {[
-                [Plug, "Dans votre logiciel", "Vos équipes restent dans leur outil, Missive envoie en coulisses."],
+                [Plug, "Dans votre logiciel", "Vos équipes restent dans leur outil, Pingsell envoie en coulisses."],
                 [Layers, "Ou à côté", "Un espace email et push complet, alimenté par tous vos outils."],
               ].map(([Icon, t, d]) => {
                 const I = Icon as LucideIcon;

@@ -2,16 +2,16 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { Missive, MissiveBadge, MissiveInAppBanner, MissiveInbox, MissivePermissionPrompt, useMissiveInbox, type InboxItem } from "@missive/expo-push";
+import { Pingsell, PingsellBadge, PingsellInAppBanner, PingsellInbox, PingsellPermissionPrompt, usePingsellInbox, type InboxItem } from "@pingsell/expo-push";
 
-const APP_KEY = process.env.EXPO_PUBLIC_MISSIVE_APP_KEY ?? "";
-const API_URL = process.env.EXPO_PUBLIC_MISSIVE_API_URL ?? "http://localhost:4000";
+const APP_KEY = process.env.EXPO_PUBLIC_PINGSELL_APP_KEY ?? "";
+const API_URL = process.env.EXPO_PUBLIC_PINGSELL_API_URL ?? "http://localhost:4000";
 
 let opened: ((item: { title: string; url: string | null }) => void) | null = null;
 
-// 1. Initialise Missive once, outside components.
+// 1. Initialise Pingsell once, outside components.
 if (APP_KEY) {
-  Missive.init({
+  Pingsell.init({
     appKey: APP_KEY,
     apiUrl: API_URL,
     // In-app banner when the app is open; the OS shows lock-screen notifications otherwise.
@@ -49,7 +49,7 @@ export default function App() {
       <SafeAreaProvider>
         <SafeAreaView style={[styles.screen, { padding: 24 }]}>
           <Text style={styles.h1}>Clé manquante</Text>
-          <Text style={styles.p}>Copiez .env.example en .env et collez la clé msvapp_… de Missive (Notifications push › Configuration).</Text>
+          <Text style={styles.p}>Copiez .env.example en .env et collez la clé msvapp_… de Pingsell (Notifications push › Configuration).</Text>
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -62,21 +62,21 @@ export default function App() {
         <View style={styles.topbar}>
           <Text style={styles.brand}>ATELIER NORD</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Notifications" onPress={() => setTab("inbox")} hitSlop={10}>
-            <MissiveBadge>
+            <PingsellBadge>
               <Text style={{ fontSize: 22 }}>🔔</Text>
-            </MissiveBadge>
+            </PingsellBadge>
           </Pressable>
         </View>
 
         <View style={{ flex: 1 }}>
           {tab === "shop" && <Shop last={last} />}
-          {tab === "inbox" && <MissiveInbox onOpen={(item: InboxItem) => opened?.(item)} />}
+          {tab === "inbox" && <PingsellInbox onOpen={(item: InboxItem) => opened?.(item)} />}
           {tab === "account" && <Account />}
         </View>
 
         <TabBar tab={tab} onChange={setTab} />
-        <MissiveInAppBanner />
-        <MissivePermissionPrompt />
+        <PingsellInAppBanner />
+        <PingsellPermissionPrompt />
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -107,23 +107,23 @@ function Shop({ last }: { last: string | null }) {
 
 function Account() {
   const [email, setEmail] = useState("arthur.thomas@example.org");
-  const [status, setStatus] = useState<string>(Missive.deviceToken ? "Notifications activées" : "Notifications désactivées");
+  const [status, setStatus] = useState<string>(Pingsell.deviceToken ? "Notifications activées" : "Notifications désactivées");
   const [busy, setBusy] = useState(false);
-  const inbox = useMissiveInbox();
+  const inbox = usePingsellInbox();
 
   async function enable() {
     setBusy(true);
     // 2. Sign-in: link the phone to the customer (fires "Première connexion à l'app" automations).
-    if (email.trim()) await Missive.identify({ email: email.trim() }).catch(() => undefined);
+    if (email.trim()) await Pingsell.identify({ email: email.trim() }).catch(() => undefined);
     // 3. Pre-permission screen, then the system dialog only if the customer tapped "Activer".
-    const res = await Missive.requestPermission({ force: true });
+    const res = await Pingsell.requestPermission({ force: true });
     setBusy(false);
     if (res.ok) {
-      setStatus(res.linked ? `Activées · liées à ${email}` : "Activées (client inconnu de Missive)");
+      setStatus(res.linked ? `Activées · liées à ${email}` : "Activées (client inconnu de Pingsell)");
       return;
     }
     if (res.reason === "declined") {
-      setStatus("Plus tard : l'écran sera reproposé après le délai réglé dans Missive");
+      setStatus("Plus tard : l'écran sera reproposé après le délai réglé dans Pingsell");
       return;
     }
     if (res.reason === "unsupported") {
@@ -133,7 +133,7 @@ function Account() {
         {
           text: "Jeton de test",
           onPress: async () => {
-            const r = await Missive.registerToken("ExponentPushToken[simulateur-atelier-nord]", { provider: "expo", email: email.trim() || undefined });
+            const r = await Pingsell.registerToken("ExponentPushToken[simulateur-atelier-nord]", { provider: "expo", email: email.trim() || undefined });
             setStatus(r.ok ? `Simulateur · ${r.linked ? `lié à ${email}` : "anonyme"}` : r.message);
           },
         },
@@ -153,7 +153,7 @@ function Account() {
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        onPress={() => void Missive.logout().then(() => setStatus("Déconnecté : l'appareil n'est plus lié au client"))}
+        onPress={() => void Pingsell.logout().then(() => setStatus("Déconnecté : l'appareil n'est plus lié au client"))}
         style={[styles.button, styles.secondary]}
       >
         <Text style={[styles.buttonText, { color: "#0b214a" }]}>Se déconnecter</Text>
@@ -161,14 +161,14 @@ function Account() {
       <View style={styles.notice}>
         <Text style={{ color: "#0b214a", fontWeight: "700" }}>{status}</Text>
         <Text style={styles.p}>Non lues : {inbox.unread}</Text>
-        {Missive.deviceToken && <Text style={[styles.p, { fontSize: 12 }]}>Jeton : {Missive.deviceToken}</Text>}
+        {Pingsell.deviceToken && <Text style={[styles.p, { fontSize: 12 }]}>Jeton : {Pingsell.deviceToken}</Text>}
       </View>
     </ScrollView>
   );
 }
 
 function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
-  const { unread } = useMissiveInbox();
+  const { unread } = usePingsellInbox();
   const items: Array<[Tab, string]> = [
     ["shop", "Boutique"],
     ["inbox", unread ? `Notifications (${unread})` : "Notifications"],

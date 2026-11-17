@@ -1,4 +1,4 @@
-// Typed client for the Missive REST API (see SPEC.md, base /api/v1).
+// Typed client for the Pingsell REST API (see SPEC.md, base /api/v1).
 import type {
   Analytics,
   ApiKey,

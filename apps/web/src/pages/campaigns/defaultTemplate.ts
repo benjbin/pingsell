@@ -4,7 +4,7 @@ export const DEFAULT_EMAIL_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Missive</title>
+<title>Pingsell</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f2fb;font-family:Helvetica,Arial,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f2fb;padding:32px 12px;">

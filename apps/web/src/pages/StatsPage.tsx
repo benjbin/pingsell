@@ -217,7 +217,7 @@ function KpiGrid({ k, p, days }: { k: AnalyticsKpis; p: AnalyticsKpis; days: num
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
       <div className="relative overflow-hidden rounded-[20px] bg-slate-900 p-6 text-white col-span-2 xl:row-span-2 dark:bg-slate-950 dark:ring-1 dark:ring-white/10">
-        <p className="font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/60 uppercase">Revenu généré par Missive</p>
+        <p className="font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/60 uppercase">Revenu généré par Pingsell</p>
         <p className="mt-4 font-display text-[56px] leading-none font-extrabold tracking-[-0.03em] sm:text-[72px]">{formatCurrency(k.revenue_attributed)}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-white/70">
           <Delta cur={k.revenue_attributed} prev={p.revenue_attributed} kind="money" />
@@ -776,7 +776,7 @@ function exportCsv(data: Analytics) {
   const blob = new Blob([`﻿${lines.join("\n")}`], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `missive-statistiques-${data.range.from}-${data.range.to}.csv`;
+  a.download = `pingsell-statistiques-${data.range.from}-${data.range.to}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

@@ -105,17 +105,17 @@ function parseFcm(raw: string): FcmCredentials {
 /** Public routes used by the merchant's mobile app, authenticated with its public app key (`msvapp_…`). */
 export async function pushAppRoutes(app: FastifyInstance, { db, kickWorker }: Deps) {
   const appAccount = (request: FastifyRequest): string => {
-    const header = String(request.headers.authorization ?? request.headers['x-missive-app-key'] ?? '');
+    const header = String(request.headers.authorization ?? (request.headers['x-pingsell-app-key'] ?? request.headers['x-missive-app-key']) ?? '');
     const key = header.replace(/^Bearer\s+/i, '').trim();
     const accountId = key.startsWith('msvapp_') ? accountForAppKey(db, key) : undefined;
     if (!accountId) throw new HttpError(401, "Clé d'application invalide");
     return accountId;
   };
 
-  /** The device push token identifies the phone for its inbox (header `X-Missive-Device`, or `token`). */
+  /** The device push token identifies the phone for its inbox (header `X-Pingsell-Device`, or `token`). */
   const appDevice = (request: FastifyRequest, accountId: string, bodyToken?: string) => {
-    const token = String(request.headers['x-missive-device'] ?? bodyToken ?? '').trim();
-    if (!token) throw badRequest('Jeton de l’appareil manquant (en-tête X-Missive-Device)');
+    const token = String((request.headers['x-pingsell-device'] ?? request.headers['x-missive-device']) ?? bodyToken ?? '').trim();
+    if (!token) throw badRequest('Jeton de l’appareil manquant (en-tête X-Pingsell-Device)');
     const device = deviceByToken(db, accountId, token);
     if (!device) throw notFound('Appareil inconnu : enregistrez-le d’abord avec POST /push/app/devices');
     return device;
@@ -162,7 +162,7 @@ export async function pushAppRoutes(app: FastifyInstance, { db, kickWorker }: De
     const contactId = contactIdFor(db, accountId, input);
     if (!contactId) return { ok: true, known: false, first: false };
     const { first } = trackAppUser(db, accountId, contactId);
-    const token = String(request.headers['x-missive-device'] ?? input.token ?? '').trim();
+    const token = String((request.headers['x-pingsell-device'] ?? request.headers['x-missive-device']) ?? input.token ?? '').trim();
     if (token) run(db, 'UPDATE push_devices SET contact_id = ?, last_seen_at = ? WHERE account_id = ? AND token = ?', contactId, now(), accountId, token);
     kickWorker();
     return { ok: true, known: true, first };

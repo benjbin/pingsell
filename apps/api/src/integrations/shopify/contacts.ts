@@ -1,4 +1,4 @@
-// Mapping Shopify customers/orders to Missive contacts.
+// Mapping Shopify customers/orders to Pingsell contacts.
 import type { IntegrationContext } from '../context.js';
 import { findContactByEmail } from './store.js';
 
@@ -52,7 +52,7 @@ export function marketingStateFromRest(customer: Record<string, unknown> | null 
 }
 
 /**
- * Consent → Missive status.
+ * Consent → Pingsell status.
  * - explicit opt-in → subscribed (except contacts already bounced/complained);
  * - explicit opt-out → unsubscribed;
  * - no consent: new contacts are created `unsubscribed` (no marketing without opt-in, RGPD),

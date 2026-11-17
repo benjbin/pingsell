@@ -1,4 +1,4 @@
-# Missive
+# Pingsell
 
 Plateforme d'email marketing avec un prix basé sur le volume d'emails, une intégration Shopify,
 une API publique et une app mobile.
@@ -72,7 +72,7 @@ email ne part réellement : tout est visible dans **Boîte d'envoi (dev)** du ba
 ## Connecter Shopify
 
 Dans le back-office : **Intégrations → Shopify**, saisissez le domaine `ma-boutique.myshopify.com` et un jeton
-Admin API (`shpat_…`) avec les scopes `read_customers` et `read_orders`. Missive valide le jeton, enregistre
+Admin API (`shpat_…`) avec les scopes `read_customers` et `read_orders`. Pingsell valide le jeton, enregistre
 les webhooks (clients, commandes, checkouts, désinstallation) et lance une première synchronisation.
 
 - Sans boutique : les boutons « Simuler une commande » / « Simuler un panier abandonné »

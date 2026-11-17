@@ -10,7 +10,7 @@ export interface Sender {
 /** Default sender for an account: its name + the platform default address. */
 export function accountSender(db: DatabaseSync, config: AppConfig, accountId: string): Sender {
   const row = get<{ name: string }>(db, 'SELECT name FROM accounts WHERE id = ?', accountId);
-  return { name: row?.name ?? 'Missive', email: config.defaultFromEmail };
+  return { name: row?.name ?? 'Pingsell', email: config.defaultFromEmail };
 }
 
 export interface CreateMessageInput {

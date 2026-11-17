@@ -75,7 +75,7 @@ export class SesProvider implements EmailProvider {
             Headers: headers,
           },
         },
-        EmailTags: [{ Name: 'missive_message_id', Value: email.messageId.replace(/[^\w-]/g, '') }],
+        EmailTags: [{ Name: 'pingsell_message_id', Value: email.messageId.replace(/[^\w-]/g, '') }],
       }),
     );
     return { providerId: result.MessageId ?? `ses_${email.messageId}` };

@@ -69,7 +69,7 @@ function loadConfig(): AppConfig {
     isProduction: process.env.NODE_ENV === 'production',
     emailProvider: provider === 'ses' ? 'ses' : 'log',
     awsRegion: str('AWS_REGION', 'eu-west-3'),
-    defaultFromEmail: str('MAIL_FROM_EMAIL', 'bonjour@missive.local'),
+    defaultFromEmail: str('MAIL_FROM_EMAIL', 'bonjour@pingsell.local'),
     shopifyApiKey: optional('SHOPIFY_API_KEY'),
     shopifyApiSecret: optional('SHOPIFY_API_SECRET'),
     push: {

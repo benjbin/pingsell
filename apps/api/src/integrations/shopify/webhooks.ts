@@ -9,7 +9,7 @@ import { WEBHOOK_TOPICS } from './types.js';
 const toGraphqlTopic = (topic: string) => topic.replace('/', '_').toUpperCase(); // orders/create → ORDERS_CREATE
 
 const CREATE_MUTATION = /* GraphQL */ `
-  mutation MissiveWebhookCreate($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
+  mutation PingsellWebhookCreate($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
     webhookSubscriptionCreate(topic: $topic, webhookSubscription: $sub) {
       webhookSubscription { id topic }
       userErrors { field message }
@@ -18,11 +18,11 @@ const CREATE_MUTATION = /* GraphQL */ `
 `;
 
 const LIST_QUERY = /* GraphQL */ `
-  query MissiveWebhooks { webhookSubscriptions(first: 100) { nodes { id topic } } }
+  query PingsellWebhooks { webhookSubscriptions(first: 100) { nodes { id topic } } }
 `;
 
 const DELETE_MUTATION = /* GraphQL */ `
-  mutation MissiveWebhookDelete($id: ID!) {
+  mutation PingsellWebhookDelete($id: ID!) {
     webhookSubscriptionDelete(id: $id) { deletedWebhookSubscriptionId userErrors { message } }
   }
 `;

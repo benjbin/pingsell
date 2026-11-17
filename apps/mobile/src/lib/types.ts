@@ -1,5 +1,5 @@
 /**
- * Types mirroring the Missive REST contract (SPEC.md, base /api/v1).
+ * Types mirroring the Pingsell REST contract (SPEC.md, base /api/v1).
  * Dates are ISO strings, rates are 0..1.
  */
 

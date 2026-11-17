@@ -5,6 +5,6 @@ const path = require("path");
 const config = getDefaultConfig(__dirname);
 const sdk = path.resolve(__dirname, "../../sdk/expo");
 config.watchFolders = [sdk];
-config.resolver.extraNodeModules = { "@missive/expo-push": sdk };
+config.resolver.extraNodeModules = { "@pingsell/expo-push": sdk };
 config.resolver.nodeModulesPaths = [path.resolve(__dirname, "node_modules")];
 module.exports = config;

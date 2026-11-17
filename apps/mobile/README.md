@@ -1,13 +1,13 @@
-# Missive — app mobile
+# Pingsell — app mobile
 
-Application Expo (SDK 58, expo-router, TypeScript) pour suivre l'activité Missive depuis un téléphone :
+Application Expo (SDK 58, expo-router, TypeScript) pour suivre l'activité Pingsell depuis un téléphone :
 KPI, campagnes (stats, envoi de test, envoi immédiat) et contacts. Interface en français, thème clair/sombre
 automatique, accent violet `#6D28D9`.
 
 ## Prérequis
 
 - Node 25 et npm
-- L'API Missive démarrée (`apps/api` : `npm install && npm run seed && npm run dev`, port 4000)
+- L'API Pingsell démarrée (`apps/api` : `npm install && npm run seed && npm run dev`, port 4000)
 - Sur iPhone : l'app **Expo Go** (App Store), compatible SDK 58
 
 ## Lancer

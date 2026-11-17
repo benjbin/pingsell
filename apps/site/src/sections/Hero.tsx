@@ -83,7 +83,7 @@ export function Hero() {
 
           <motion.p {...enter(0.45)} className="mt-6 max-w-md text-[17px] leading-relaxed text-slate-600">
             Emails, notifications push et automatisations, branchés sur les outils que vous utilisez déjà : Shopify en un clic, votre site, votre CRM ou votre app en
-            quelques lignes. Missive s'adapte à votre façon de travailler.
+            quelques lignes. Pingsell s'adapte à votre façon de travailler.
           </motion.p>
 
           <motion.div {...enter(0.55)} className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">

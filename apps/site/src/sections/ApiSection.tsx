@@ -5,7 +5,7 @@ import { API_URL } from "../content";
 
 const EASE = [0.2, 0.8, 0.2, 1] as const;
 
-/** Tools that can feed Missive through the API (anything able to make an HTTP call). */
+/** Tools that can feed Pingsell through the API (anything able to make an HTTP call). */
 const SOURCES = [
   [Contact, "CRM"],
   [Smartphone, "App mobile"],
@@ -31,7 +31,7 @@ const SNIPPETS: Record<string, string> = {
 await fetch("${API_URL}/contacts", {
   method: "POST",
   headers: {
-    Authorization: \`Bearer \${process.env.MISSIVE_KEY}\`,
+    Authorization: \`Bearer \${process.env.PINGSELL_KEY}\`,
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
@@ -46,7 +46,7 @@ curl_setopt_array($ch, [
   CURLOPT_POST => true,
   CURLOPT_RETURNTRANSFER => true,
   CURLOPT_HTTPHEADER => [
-    "Authorization: Bearer " . getenv("MISSIVE_KEY"),
+    "Authorization: Bearer " . getenv("PINGSELL_KEY"),
     "Content-Type: application/json",
   ],
   CURLOPT_POSTFIELDS => json_encode([
@@ -95,7 +95,7 @@ const FEATURES = [
   { icon: BarChart3, title: "Statistiques", text: "Récupérez ouvertures, clics et chiffre d'affaires pour vos propres tableaux de bord." },
 ];
 
-/** "Branchez Missive sur votre logiciel": REST API + API keys, with an animated live example. */
+/** "Branchez Pingsell sur votre logiciel": REST API + API keys, with an animated live example. */
 export function ApiSection() {
   const reduce = useReducedMotion() ?? false;
   const [tab, setTab] = useState<keyof typeof SNIPPETS>("cURL");
@@ -120,16 +120,16 @@ export function ApiSection() {
         <div className="reveal min-w-0">
           <p className="eyebrow !text-brand-300">API & intégrations</p>
           <h2 className="display mt-4 text-[38px] leading-[0.92] sm:text-[52px]">
-            Branchez Missive <em className="text-brand-400">sur tous vos outils.</em>
+            Branchez Pingsell <em className="text-brand-400">sur tous vos outils.</em>
           </h2>
           <p className="mt-5 max-w-md text-[17px] leading-relaxed text-white/70">
-            Intégrez Missive directement dans votre logiciel, ou gardez-le à côté et laissez vos outils le piloter. Tout ce qui sait appeler une API peut ajouter des contacts et déclencher vos automatisations.
+            Intégrez Pingsell directement dans votre logiciel, ou gardez-le à côté et laissez vos outils le piloter. Tout ce qui sait appeler une API peut ajouter des contacts et déclencher vos automatisations.
           </p>
 
           <div className="mt-7 grid gap-3 sm:grid-cols-2">
             {[
-              [Plug, "Intégré à votre logiciel", "Vos clients et vos campagnes gérés depuis votre propre outil, Missive travaille en coulisses."],
-              [Layers, "À côté de vos outils", "Gardez Missive comme espace email, alimenté en continu par votre CRM, votre app, votre site."],
+              [Plug, "Intégré à votre logiciel", "Vos clients et vos campagnes gérés depuis votre propre outil, Pingsell travaille en coulisses."],
+              [Layers, "À côté de vos outils", "Gardez Pingsell comme espace email, alimenté en continu par votre CRM, votre app, votre site."],
             ].map(([Icon, t, d]) => {
               const I = Icon as typeof Plug;
               return (
@@ -271,7 +271,7 @@ export function ApiSection() {
   );
 }
 
-/** Your software → Missive API → automation → email, with a travelling pulse. */
+/** Your software → Pingsell API → automation → email, with a travelling pulse. */
 function Flow({ reduce }: { reduce: boolean }) {
   const [src, setSrc] = useState(0);
   useEffect(() => {
@@ -281,7 +281,7 @@ function Flow({ reduce }: { reduce: boolean }) {
   }, [reduce]);
   const steps = [
     ["Source", FLOW_SOURCES[src]],
-    ["API", "API Missive"],
+    ["API", "API Pingsell"],
     ["Scénario", "Automatisation"],
     ["Email", "Email envoyé"],
   ];

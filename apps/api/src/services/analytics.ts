@@ -112,7 +112,7 @@ function touches(db: DatabaseSync, accountId: string, w: Window): Map<string, To
   return byContact;
 }
 
-/** Revenue credited to Missive messages between two UTC instants (same rule as the Statistiques page). */
+/** Revenue credited to Pingsell messages between two UTC instants (same rule as the Statistiques page). */
 export function attributedRevenue(db: DatabaseSync, accountId: string, start: string, end: string): { revenue: number; orders: number } {
   const credited = attribute(db, accountId, { start, end, days: [] }).filter((o) => o.source);
   return { revenue: money(credited.reduce((s, o) => s + o.total, 0)), orders: credited.length };

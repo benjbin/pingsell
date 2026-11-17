@@ -8,7 +8,7 @@ import { useToast } from "../ui/Toast";
 import { Modal } from "../ui/Overlay";
 import { Input } from "../ui/primitives";
 
-export const DND_ASSET = "application/x-missive-asset";
+export const DND_ASSET = "application/x-pingsell-asset";
 const ACCEPT = "image/png,image/jpeg,image/gif,image/webp";
 
 function readAsDataUrl(file: File): Promise<string> {
