@@ -317,6 +317,16 @@ function main() {
       hashPassword(DEMO.password),
       iso(accountCreated),
     );
+    run(
+      db,
+      "INSERT INTO users (id, account_id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, 'owner', ?)",
+      accountId,
+      accountId,
+      DEMO.email,
+      DEMO.name,
+      hashPassword(DEMO.password),
+      iso(accountCreated),
+    );
     createApiKey(db, accountId, 'Clé de développement', DEMO.apiKey);
 
     const contacts = seedContacts(db, accountId);

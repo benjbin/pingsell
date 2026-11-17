@@ -31,10 +31,27 @@ export function generateApiKey(): string {
   return `msv_${randomBytes(24).toString('base64url')}`;
 }
 
-export function createSession(db: DatabaseSync, accountId: string): string {
+export function createSession(db: DatabaseSync, accountId: string, userId: string): string {
   const token = generateSessionToken();
-  run(db, 'INSERT INTO sessions (token, account_id, created_at) VALUES (?, ?, ?)', token, accountId, now());
+  run(db, 'INSERT INTO sessions (token, account_id, user_id, created_at) VALUES (?, ?, ?, ?)', token, accountId, userId, now());
   return token;
+}
+
+export type Role = 'owner' | 'admin' | 'editor';
+
+export interface UserRow {
+  id: string;
+  account_id: string;
+  email: string;
+  name: string;
+  password_hash: string;
+  role: Role;
+  created_at: string;
+  last_seen_at: string | null;
+}
+
+export function publicUser(u: UserRow) {
+  return { id: u.id, name: u.name, email: u.email, role: u.role, created_at: u.created_at, last_seen_at: u.last_seen_at };
 }
 
 export function createApiKey(db: DatabaseSync, accountId: string, label: string, key = generateApiKey()) {
@@ -51,16 +68,18 @@ export function createApiKey(db: DatabaseSync, accountId: string, label: string,
   return record;
 }
 
-/** Resolves a bearer token (session token or `msv_` API key) to an account id. */
-export function resolveToken(db: DatabaseSync, token: string): string | undefined {
+/** Resolves a bearer token (session token or `msv_` API key) to an account (and user, for sessions). */
+export function resolveToken(db: DatabaseSync, token: string): { accountId: string; userId: string } | undefined {
   if (token.startsWith('msv_')) {
     const row = get<{ id: string; account_id: string }>(db, 'SELECT id, account_id FROM api_keys WHERE key = ?', token);
     if (!row) return undefined;
     run(db, 'UPDATE api_keys SET last_used_at = ? WHERE id = ?', now(), row.id);
-    return row.account_id;
+    return { accountId: row.account_id, userId: '' };
   }
-  const row = get<{ account_id: string }>(db, 'SELECT account_id FROM sessions WHERE token = ?', token);
-  return row?.account_id;
+  // Sessions of a removed member disappear with the user (ON DELETE CASCADE).
+  const row = get<{ account_id: string; user_id: string | null }>(db, 'SELECT account_id, user_id FROM sessions WHERE token = ?', token);
+  if (!row?.user_id) return undefined;
+  return { accountId: row.account_id, userId: row.user_id };
 }
 
 export function bearerToken(request: FastifyRequest): string | undefined {
@@ -73,11 +92,12 @@ export function bearerToken(request: FastifyRequest): string | undefined {
 export function makeRequireAuth(db: DatabaseSync): preHandlerHookHandler {
   return async function requireAuth(request: FastifyRequest, reply: FastifyReply) {
     const token = bearerToken(request);
-    const accountId = token ? resolveToken(db, token) : undefined;
-    if (!accountId) {
+    const auth = token ? resolveToken(db, token) : undefined;
+    if (!auth) {
       return reply.code(401).send({ error: token ? 'Jeton invalide ou expiré' : 'Authentification requise' });
     }
-    request.accountId = accountId;
+    request.accountId = auth.accountId;
+    request.userId = auth.userId;
   };
 }
 

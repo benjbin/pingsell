@@ -12,14 +12,54 @@ export interface Usage {
   contacts: number;
 }
 
+export type Role = "owner" | "admin" | "editor";
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  created_at: string;
+  last_seen_at: string | null;
+}
+
 export interface MeResponse {
   account: Account;
+  /** null when authenticated with an API key. */
+  user: User | null;
   usage: Usage;
 }
 
 export interface AuthResponse {
   token: string;
   account: Account;
+  user: User;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: Exclude<Role, "owner">;
+  invited_by: string | null;
+  created_at: string;
+  expires_at: string;
+  expired: boolean;
+  /** Shareable link (null for editors). */
+  link: string | null;
+}
+
+export interface TeamResponse {
+  members: User[];
+  invitations: Invitation[];
+  can_manage: boolean;
+}
+
+export interface InvitationInfo {
+  email: string;
+  role: Exclude<Role, "owner">;
+  account_name: string;
+  invited_by: string | null;
+  email_taken: boolean;
 }
 
 export interface Paginated<T> {

@@ -182,12 +182,14 @@ export function Field({
   htmlFor,
   children,
   className,
+  error,
 }: {
   label: ReactNode;
   hint?: ReactNode;
   htmlFor?: string;
   children: ReactNode;
   className?: string;
+  error?: ReactNode;
 }) {
   return (
     <div className={className}>
@@ -195,7 +197,7 @@ export function Field({
         {label}
       </label>
       {children}
-      {hint && <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
+      {error ? <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p> : hint && <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
     </div>
   );
 }

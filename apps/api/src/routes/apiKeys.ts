@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { all, run } from '../db.js';
 import type { Deps } from '../deps.js';
-import { notFound, parse } from '../lib/http.js';
+import { forbidden, notFound, parse } from '../lib/http.js';
+import { get } from '../db.js';
 import { createApiKey } from '../services/auth.js';
 
 const createSchema = z.object({
@@ -22,6 +23,12 @@ function maskKey(key: string): string {
 }
 
 export async function apiKeyRoutes(app: FastifyInstance, { db }: Deps) {
+  // An API key acts as the whole account: editors cannot create or see them.
+  app.addHook('preHandler', async (request) => {
+    if (!request.url.includes('/api-keys') || !request.userId) return;
+    const role = get<{ role: string }>(db, 'SELECT role FROM users WHERE id = ?', request.userId)?.role;
+    if (role === 'editor') throw forbidden('Les clés API sont réservées au propriétaire et aux administrateurs');
+  });
   app.get('/api-keys', async (request) => {
     const rows = all<ApiKeyRow>(
       db,

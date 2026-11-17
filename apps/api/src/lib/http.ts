@@ -13,6 +13,7 @@ export class HttpError extends Error {
 export const badRequest = (message: string) => new HttpError(400, message);
 export const notFound = (message = 'Ressource introuvable') => new HttpError(404, message);
 export const conflict = (message: string) => new HttpError(409, message);
+export const forbidden = (message = 'Action réservée aux administrateurs du compte') => new HttpError(403, message);
 export const unauthorized = (message = 'Authentification requise') => new HttpError(401, message);
 
 /** Formats a zod error into a short, human-readable French message. */

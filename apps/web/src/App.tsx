@@ -20,6 +20,8 @@ import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { OutboxPage } from "./pages/OutboxPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { ProfilePage } from "./pages/ProfilePage";
+import { InvitationPage } from "./pages/InvitationPage";
 
 function FullScreenLoader() {
   return (
@@ -74,6 +76,7 @@ export function App() {
             <Routes>
               <Route path="/connexion" element={<GuestOnly><AuthPage mode="login" /></GuestOnly>} />
               <Route path="/inscription" element={<GuestOnly><AuthPage mode="register" /></GuestOnly>} />
+              <Route path="/invitation/:token" element={<InvitationPage />} />
               <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
                 <Route index element={<DashboardPage />} />
                 <Route path="contacts" element={<ContactsPage />} />
@@ -90,6 +93,7 @@ export function App() {
                 <Route path="integrations" element={<IntegrationsPage />} />
                 <Route path="boite-envoi" element={<OutboxPage />} />
                 <Route path="parametres" element={<SettingsPage />} />
+                <Route path="profil" element={<ProfilePage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Routes>

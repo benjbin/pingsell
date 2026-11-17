@@ -194,6 +194,40 @@ const MIGRATIONS: string[] = [
   `,
   // v4 — brand kit: default email style (theme, logo, socials, footer) per account
   `ALTER TABLE accounts ADD COLUMN brand_kit TEXT;`,
+  // v5 — team: several users per account (roles), invitations. The account's
+  // historical login becomes its owner user (same id), sessions belong to a user.
+  `
+  CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('owner','admin','editor')),
+    created_at TEXT NOT NULL,
+    last_seen_at TEXT
+  );
+  CREATE INDEX idx_users_account ON users(account_id);
+  INSERT INTO users (id, account_id, email, name, password_hash, role, created_at)
+    SELECT id, id, email, name, password_hash, 'owner', created_at FROM accounts;
+
+  ALTER TABLE sessions ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
+  UPDATE sessions SET user_id = account_id;
+  CREATE INDEX idx_sessions_user ON sessions(user_id);
+
+  CREATE TABLE invitations (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('admin','editor')),
+    token TEXT NOT NULL UNIQUE,
+    invited_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_invitations_account ON invitations(account_id);
+  CREATE UNIQUE INDEX idx_invitations_email ON invitations(account_id, email);
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

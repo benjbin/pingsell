@@ -12,6 +12,7 @@ import { fireTrigger } from './services/automations.js';
 import { recordEvent, upsertContact } from './services/contacts.js';
 import type { EmailProvider } from './services/mailer.js';
 import { accountRoutes, authRoutes } from './routes/auth.js';
+import { invitationRoutes, teamRoutes } from './routes/team.js';
 import { apiKeyRoutes } from './routes/apiKeys.js';
 import { contactRoutes } from './routes/contacts.js';
 import { segmentRoutes } from './routes/segments.js';
@@ -70,6 +71,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.addHook('onRoute', (route) => shopifyUrls.track(route.url));
 
   app.decorateRequest('accountId', '');
+  app.decorateRequest('userId', '');
   app.decorateRequest('rawBody', undefined);
 
   // JSON parser that keeps the raw body (needed for webhook HMAC verification).
@@ -133,6 +135,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(
     async (api) => {
       await api.register(async (pub) => authRoutes(pub, deps));
+      await api.register(async (pub) => invitationRoutes(pub, deps));
       await api.register(async (priv) => {
         priv.addHook('preHandler', requireAuth);
         await accountRoutes(priv, deps);
@@ -146,6 +149,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         await outboxRoutes(priv, deps);
         await integrationRoutes(priv, deps);
         await libraryRoutes(priv, deps);
+        await teamRoutes(priv, deps);
       });
     },
     { prefix: API_PREFIX },

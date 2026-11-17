@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router";
+import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { LogOut, Menu, Moon, Sun, X } from "lucide-react";
 import { useAuth } from "../../lib/auth";
 import { useTheme } from "../../lib/theme";
@@ -32,6 +32,7 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
     items: [
       { to: "/integrations", label: "Intégrations" },
       { to: "/boite-envoi", label: "Boîte d'envoi" },
+      { to: "/profil", label: "Profil & équipe" },
       { to: "/parametres", label: "Paramètres" },
     ],
   },
@@ -62,7 +63,7 @@ export function Logo({ className, tone = "auto" }: { className?: string; tone?: 
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
-  const { account, usage, logout } = useAuth();
+  const { account, user, usage, logout } = useAuth();
   // Visual quota: a soft monthly reference so the bar means something at a glance.
   const quota = 10000;
   const pct = usage ? Math.min(100, (usage.emails_sent_month / quota) * 100) : 0;
@@ -119,14 +120,16 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       )}
 
-      <div className="flex items-center gap-3 border-t border-white/10 px-5 py-4">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white font-display text-base font-extrabold text-slate-900">
-          {(account?.name ?? "M").slice(0, 1).toUpperCase()}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white">{account?.name}</p>
-          <p className="truncate text-[11px] text-white/50">{account?.email}</p>
-        </div>
+      <div className="flex items-center gap-1 border-t border-white/10 py-3 pr-3 pl-3">
+        <Link to="/profil" onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-3 rounded-full p-2 transition hover:bg-white/[0.06]" title="Profil & équipe">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white font-display text-base font-extrabold text-slate-900">
+            {(user?.name ?? account?.name ?? "M").slice(0, 1).toUpperCase()}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-white">{user?.name ?? account?.name}</span>
+            <span className="block truncate text-[11px] text-white/50">{user && user.name !== account?.name ? account?.name : (user?.email ?? account?.email)}</span>
+          </span>
+        </Link>
         <button
           onClick={logout}
           className="rounded-full p-2 text-white/50 transition hover:bg-white/10 hover:text-white"

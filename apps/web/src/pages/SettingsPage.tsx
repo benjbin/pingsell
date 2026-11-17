@@ -19,8 +19,8 @@ function maskKey(k: ApiKey): string {
 
 export function SettingsPage() {
   const toast = useToast();
-  const { account, usage } = useAuth();
-  const keys = useAsync(() => api.apiKeys.list(), []);
+  const { account, usage, canManage } = useAuth();
+  const keys = useAsync(() => (canManage ? api.apiKeys.list() : Promise.resolve([] as ApiKey[])), [canManage]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [label, setLabel] = useState("");
@@ -62,7 +62,7 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="Paramètres" description="Votre compte et vos clés API." />
+      <PageHeader title="Paramètres" description="Votre compte et vos clés API. Votre profil et l'équipe sont dans « Profil & équipe »." />
 
       <div className="space-y-6">
         <Card>
@@ -82,6 +82,11 @@ export function SettingsPage() {
           </dl>
         </Card>
 
+        {!canManage ? (
+          <Card>
+            <CardHeader title="Clés API" description="Réservées au propriétaire et aux administrateurs du compte." />
+          </Card>
+        ) : (
         <Card>
           <CardHeader
             title="Clés API"
@@ -124,7 +129,7 @@ export function SettingsPage() {
             </ul>
           )}
         </Card>
-
+        )}
       </div>
 
       <Modal

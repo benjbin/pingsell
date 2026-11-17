@@ -38,6 +38,8 @@ declare module 'fastify' {
   interface FastifyRequest {
     /** Set by `requireAuth` for authenticated routes. */
     accountId: string;
+    /** Set by `requireAuth` for session tokens ("" for API keys, which act as the account). */
+    userId: string;
     /** Raw request body as received, for every JSON request (webhook HMAC verification). */
     rawBody?: string;
   }

@@ -17,6 +17,11 @@ import type {
   ImportResult,
   Integration,
   MeResponse,
+  Account,
+  Invitation,
+  InvitationInfo,
+  TeamResponse,
+  User,
   Message,
   Paginated,
   SavedTemplate,
@@ -161,6 +166,25 @@ export const api = {
     login: (input: { email: string; password: string }) => post<AuthResponse>("/auth/login", input),
   },
   me: () => get<MeResponse>("/me"),
+
+  profile: {
+    update: (input: { name?: string; email?: string }) => patch<{ user: User }>("/me/profile", input).then((r) => r.user),
+    changePassword: (input: { current: string; next: string }) => post<void>("/me/password", input),
+  },
+  account: {
+    rename: (name: string) => patch<{ account: Account }>("/account", { name }).then((r) => r.account),
+  },
+  team: {
+    get: () => get<TeamResponse>("/team"),
+    invite: (input: { email: string; role: "admin" | "editor" }) => post<{ invitation: Invitation; email_sent: boolean }>("/team/invitations", input),
+    cancelInvite: (id: string) => del(`/team/invitations/${id}`),
+    setRole: (id: string, role: "admin" | "editor") => patch<{ member: User }>(`/team/members/${id}`, { role }).then((r) => r.member),
+    remove: (id: string) => del(`/team/members/${id}`),
+  },
+  invitations: {
+    get: (token: string) => get<InvitationInfo>(`/invitations/${encodeURIComponent(token)}`),
+    accept: (token: string, input: { name: string; password: string }) => post<AuthResponse>(`/invitations/${encodeURIComponent(token)}/accept`, input),
+  },
 
   apiKeys: {
     list: () => get<{ data: ApiKey[] } | ApiKey[]>("/api-keys").then((r) => (Array.isArray(r) ? r : r.data)),
