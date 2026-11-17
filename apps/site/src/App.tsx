@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, useReducedMotion, useScroll, useSpring } from "motion/react";
 import {
   ArrowRight,
@@ -21,12 +21,13 @@ import {
   ShoppingCart,
   Tag,
 } from "lucide-react";
-import { BLOCKS, FAQ, LOGIN_URL, PRICING, SIGNUP_URL, monthlyPrice } from "./content";
+import { BLOCKS, FAQ, LOGIN_URL, PRICING, SIGNUP_URL } from "./content";
 import { BrandMock, FlowMock, PhoneMock, ReportMock } from "./Mocks";
 import { Hero } from "./sections/Hero";
 import { EditorDemo } from "./sections/EditorDemo";
 import { BrandShowcase } from "./sections/BrandShowcase";
 import { ApiSection } from "./sections/ApiSection";
+import { PricingSection } from "./sections/PricingSection";
 import { MagneticLink, useFinePointer } from "./sections/motion-kit";
 
 const NAV = [
@@ -337,10 +338,10 @@ function TeamMobile() {
           <h3 className="display mt-6 text-[34px] leading-[0.92] sm:text-[42px]">
             À plusieurs,
             <br />
-            <em className="text-brand-400">sans supplément.</em>
+            <em className="text-brand-400">en toute sécurité.</em>
           </h3>
           <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-white/65">
-            Invitez un associé, un freelance ou votre agence. Chacun a son propre accès, vous choisissez son rôle.
+            Invitez un associé, un freelance ou votre agence : jusqu'à 3 utilisateurs en Pro, sans limite en Business. Chacun a son accès, vous choisissez son rôle.
           </p>
           <div className="mt-auto space-y-2 pt-10">
             {[
@@ -377,8 +378,8 @@ function TeamMobile() {
 function Why() {
   const rows = [
     ["Facturation", "Au nombre de contacts, même inactifs", "Aux emails réellement envoyés"],
-    ["Fonctionnalités", "Débloquées selon la formule", "Toutes incluses, dès le gratuit"],
-    ["Équipe", "Utilisateurs supplémentaires payants", "Invitations sans supplément"],
+    ["Formule gratuite", "Très limitée, sans vraie personnalisation", "Éditeur complet, vos polices et Shopify inclus"],
+    ["Équipe", "Chaque utilisateur en plus est payant", "3 utilisateurs en Pro, illimités en Business"],
     ["Personnalisation", "Modèles figés, polices limitées", "Vos couleurs, vos polices, bloc par bloc"],
     ["E-commerce", "Intégrations à configurer", "Shopify en un clic + API"],
   ];
@@ -400,84 +401,6 @@ function Why() {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const STEPS = [3000, 5000, 10000, 20000, 30000, 50000, 75000, 100000, 150000, 250000, 500000, 1000000];
-
-function Pricing() {
-  const [i, setI] = useState(3);
-  const emails = STEPS[i];
-  const price = useMemo(() => monthlyPrice(emails), [emails]);
-  const fmt = (n: number) => n.toLocaleString("fr-FR");
-  return (
-    <section id="tarifs" className="mx-auto max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
-      <SectionHead
-        center
-        eyebrow="Tarifs"
-        title={<>Payez ce que <em className="text-brand-500">vous envoyez.</em></>}
-        text="Un seul tarif, toutes les fonctionnalités pour tout le monde. Vos contacts sont illimités : seuls les emails envoyés comptent."
-      />
-      <div className="reveal mx-auto mt-14 grid max-w-4xl gap-5 md:grid-cols-[1.3fr_1fr]">
-        <div className="rounded-[22px] bg-slate-900 p-7 text-white sm:p-9">
-          <label htmlFor="volume" className="eyebrow !text-white/60">
-            Emails envoyés par mois
-          </label>
-          <p className="mt-3 font-display text-4xl font-extrabold tracking-tight">{fmt(emails)}</p>
-          <input
-            id="volume"
-            type="range"
-            min={0}
-            max={STEPS.length - 1}
-            value={i}
-            onChange={(e) => setI(Number(e.target.value))}
-            className="mt-6 w-full accent-brand-500"
-          />
-          <div className="mt-1 flex justify-between text-xs text-white/40">
-            <span>3 000</span>
-            <span>1 000 000</span>
-          </div>
-          <div className="mt-8 flex items-end gap-2 border-t border-white/10 pt-6">
-            <span className="display text-6xl leading-none">{price === 0 ? "0" : fmt(price)} €</span>
-            <span className="pb-1.5 text-sm text-white/60">/ mois HT</span>
-          </div>
-          <p className="mt-2 text-sm text-white/60">{price === 0 ? "Gratuit, pour toujours." : `Soit ${(price / (emails / 1000)).toFixed(2).replace(".", ",")} € les 1 000 emails en moyenne.`}</p>
-          <CTA dark className="mt-8 w-full">
-            Commencer gratuitement
-          </CTA>
-        </div>
-        <div className="rounded-[22px] bg-slate-100 p-7 sm:p-9">
-          <p className="font-display text-sm font-bold">Inclus pour tous</p>
-          <ul className="mt-4 space-y-2.5 text-[15px] text-slate-700">
-            {[
-              `${fmt(PRICING.freeEmails)} emails offerts chaque mois`,
-              "Contacts illimités",
-              `Éditeur complet, ${BLOCKS.length} blocs`,
-              "Polices et style de marque",
-              "Automatisations",
-              "Shopify et API",
-              "Équipe sans supplément",
-              "App mobile",
-            ].map((t) => (
-              <li key={t} className="flex items-start gap-2">
-                <Check className="mt-0.5 size-4 shrink-0 text-brand-500" /> {t}
-              </li>
-            ))}
-          </ul>
-          <div className="mt-6 border-t border-slate-900/10 pt-5 text-xs leading-relaxed text-slate-500">
-            {PRICING.tiers.map((t, k) => {
-              const from = k === 0 ? PRICING.freeEmails : PRICING.tiers[k - 1].upTo;
-              return (
-                <p key={k} className="flex justify-between gap-3">
-                  <span>{t.upTo === Infinity ? `Au-delà de ${fmt(from)}` : `De ${fmt(from)} à ${fmt(t.upTo)}`}</span>
-                  <span className="font-semibold text-slate-700">{t.per1000.toFixed(2).replace(".", ",")} € / 1 000</span>
-                </p>
-              );
-            })}
           </div>
         </div>
       </div>
@@ -576,7 +499,7 @@ export function App() {
         <Reports />
         <TeamMobile />
         <Why />
-        <Pricing />
+        <PricingSection />
         <Faq />
         <FinalCTA />
       </main>

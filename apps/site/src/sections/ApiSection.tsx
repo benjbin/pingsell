@@ -1,9 +1,21 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useInView, useReducedMotion } from "motion/react";
-import { BarChart3, Check, KeyRound, Megaphone, Repeat, ShoppingBag, Tags, Upload, Users, Workflow } from "lucide-react";
+import { BarChart3, Check, Contact, Globe, KeyRound, Layers, LayoutDashboard, Megaphone, Plug, Repeat, ShoppingBag, Smartphone, Store, Tags, Upload, Users, Workflow } from "lucide-react";
 import { API_URL } from "../content";
 
 const EASE = [0.2, 0.8, 0.2, 1] as const;
+
+/** Tools that can feed Missive through the API (anything able to make an HTTP call). */
+const SOURCES = [
+  [Contact, "CRM"],
+  [Smartphone, "App mobile"],
+  [Globe, "Site web"],
+  [LayoutDashboard, "Back-office"],
+  [Store, "Logiciel de caisse"],
+  [Plug, "Vos outils maison"],
+] as const;
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+const FLOW_SOURCES = ["Votre CRM", "Votre app", "Votre site", "Votre caisse", "Votre logiciel"];
 
 const SNIPPETS: Record<string, string> = {
   cURL: `curl -X POST ${API_URL}/contacts \\
@@ -108,11 +120,39 @@ export function ApiSection() {
         <div className="reveal min-w-0">
           <p className="eyebrow !text-brand-300">API & intégrations</p>
           <h2 className="display mt-4 text-[38px] leading-[0.92] sm:text-[52px]">
-            Branchez Missive <em className="text-brand-400">sur votre logiciel.</em>
+            Branchez Missive <em className="text-brand-400">sur tous vos outils.</em>
           </h2>
           <p className="mt-5 max-w-md text-[17px] leading-relaxed text-white/70">
-            Site sur mesure, back-office, CRM, logiciel de caisse : l'API REST de Missive s'intègre directement à vos outils. Vos clients arrivent tout seuls dans Missive, et vos automatisations partent au bon moment.
+            Intégrez Missive directement dans votre logiciel, ou gardez-le à côté et laissez vos outils le piloter. Tout ce qui sait appeler une API peut ajouter des contacts et déclencher vos automatisations.
           </p>
+
+          <div className="mt-7 grid gap-3 sm:grid-cols-2">
+            {[
+              [Plug, "Intégré à votre logiciel", "Vos clients et vos campagnes gérés depuis votre propre outil, Missive travaille en coulisses."],
+              [Layers, "À côté de vos outils", "Gardez Missive comme espace email, alimenté en continu par votre CRM, votre app, votre site."],
+            ].map(([Icon, t, d]) => {
+              const I = Icon as typeof Plug;
+              return (
+                <div key={t as string} className="rounded-2xl bg-white/[0.05] p-4 ring-1 ring-white/10">
+                  <I className="size-4 text-brand-400" strokeWidth={1.75} />
+                  <p className="mt-2.5 font-display text-[15px] font-bold">{t as string}</p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-white/60">{d as string}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="mt-6 text-[13px] text-white/50">Ils peuvent déclencher vos emails :</p>
+          <ul className="mt-2.5 flex flex-wrap gap-2">
+            {SOURCES.map(([Icon, label]) => {
+              const I = Icon as typeof Plug;
+              return (
+                <li key={label as string} className="flex items-center gap-1.5 rounded-full bg-white/[0.06] px-3 py-1.5 text-[12px] font-medium text-white/80 ring-1 ring-white/10">
+                  <I className="size-3.5 text-brand-400" strokeWidth={1.75} /> {label as string}
+                </li>
+              );
+            })}
+          </ul>
 
           <Flow reduce={reduce} />
 
@@ -233,8 +273,14 @@ export function ApiSection() {
 
 /** Your software → Missive API → automation → email, with a travelling pulse. */
 function Flow({ reduce }: { reduce: boolean }) {
+  const [src, setSrc] = useState(0);
+  useEffect(() => {
+    if (reduce) return;
+    const id = window.setInterval(() => setSrc((i) => (i + 1) % FLOW_SOURCES.length), 2600);
+    return () => window.clearInterval(id);
+  }, [reduce]);
   const steps = [
-    ["Logiciel", "Votre logiciel"],
+    ["Source", FLOW_SOURCES[src]],
     ["API", "API Missive"],
     ["Scénario", "Automatisation"],
     ["Email", "Email envoyé"],
@@ -242,14 +288,32 @@ function Flow({ reduce }: { reduce: boolean }) {
   return (
     <div className="mt-8 flex items-center">
       {steps.map(([short, long], i) => (
-        <div key={long} className={`flex items-center ${i < steps.length - 1 ? "flex-1" : ""}`}>
+        <div key={i} className={`flex items-center ${i < steps.length - 1 ? "flex-1" : ""}`}>
           <span
             className={`shrink-0 rounded-full px-2.5 py-1.5 text-[10.5px] font-semibold whitespace-nowrap ring-1 sm:px-3 sm:text-[11.5px] ${
               i === 1 ? "bg-brand-500 text-white ring-brand-400" : "bg-white/[0.06] text-white/80 ring-white/10"
             }`}
           >
-            <span className="sm:hidden">{short}</span>
-            <span className="hidden sm:inline">{long}</span>
+            {i === 0 ? (
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={long}
+                  className="inline-block"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <span className="sm:hidden">{cap(long.replace("Votre ", ""))}</span>
+                  <span className="hidden sm:inline">{long}</span>
+                </motion.span>
+              </AnimatePresence>
+            ) : (
+              <>
+                <span className="sm:hidden">{short}</span>
+                <span className="hidden sm:inline">{long}</span>
+              </>
+            )}
           </span>
           {i < steps.length - 1 && (
             <span className="relative mx-1 h-px min-w-3 flex-1 bg-white/15">

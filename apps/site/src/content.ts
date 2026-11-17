@@ -6,32 +6,94 @@ export const LOGIN_URL = `${APP_URL}/connexion`;
 export const API_URL = (import.meta.env.VITE_API_URL ?? `${APP_URL}/api/v1`).replace(/\/+$/, "");
 
 /**
- * Pricing — billed on emails sent, every feature included.
- * ⚠️ Prices to validate before going live: they are the only figures on the site to set.
+ * Pricing — 3 SaaS plans. Contacts are unlimited in every plan; paid plans are priced by monthly email volume.
+ * ⚠️ Prices and plan contents to validate before going live (the app does not enforce plan limits yet).
  */
-export const PRICING = {
-  freeEmails: 3000,
-  /** Price per 1,000 emails, by monthly volume band (cumulative, like tax brackets). */
-  tiers: [
-    { upTo: 50_000, per1000: 1.0 },
-    { upTo: 250_000, per1000: 0.7 },
-    { upTo: Infinity, per1000: 0.5 },
-  ],
+export const PRICING = { freeEmails: 3000, yearlyDiscount: 0.2 };
+
+/** Monthly email volumes offered on the paid plans. */
+export const VOLUMES = [10_000, 20_000, 50_000, 100_000, 250_000, 500_000, 1_000_000] as const;
+export type Volume = (typeof VOLUMES)[number];
+
+export type Plan = {
+  id: "free" | "pro" | "business";
+  name: string;
+  tagline: string;
+  /** Monthly price (€ HT, billed monthly) per volume; null = free plan. */
+  prices: Record<Volume, number> | null;
+  featuresTitle: string;
+  features: string[];
+  cta: string;
+  highlight?: boolean;
 };
 
-export function monthlyPrice(emails: number): number {
-  let billable = Math.max(0, emails - PRICING.freeEmails);
-  let floor = PRICING.freeEmails;
-  let total = 0;
-  for (const t of PRICING.tiers) {
-    if (billable <= 0) break;
-    const band = Math.min(billable, t.upTo - floor);
-    total += (band / 1000) * t.per1000;
-    billable -= band;
-    floor = t.upTo;
-  }
-  return Math.round(total);
+export const PLANS: Plan[] = [
+  {
+    id: "free",
+    name: "Gratuit",
+    tagline: "Pour lancer vos premières campagnes.",
+    prices: null,
+    featuresTitle: "Pour démarrer :",
+    features: [
+      "3 000 emails par mois",
+      "Contacts illimités",
+      `Éditeur complet, 30 blocs`,
+      "Style de marque et vos polices",
+      "Segments et import CSV",
+      "Connexion Shopify",
+      "1 utilisateur",
+    ],
+    cta: "Commencer gratuitement",
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    tagline: "Pour les boutiques qui veulent automatiser leurs ventes.",
+    prices: { 10000: 19, 20000: 29, 50000: 59, 100000: 99, 250000: 199, 500000: 349, 1000000: 599 },
+    featuresTitle: "Tout Gratuit, plus :",
+    features: [
+      "Automatisations : bienvenue, après achat, panier abandonné",
+      "Chiffre d'affaires Shopify par campagne",
+      "API et clés API",
+      "Jusqu'à 3 utilisateurs",
+    ],
+    cta: "Essayer Pro",
+    highlight: true,
+  },
+  {
+    id: "business",
+    name: "Business",
+    tagline: "Pour les équipes, les agences et les gros volumes.",
+    prices: { 10000: 49, 20000: 69, 50000: 119, 100000: 189, 250000: 349, 500000: 599, 1000000: 999 },
+    featuresTitle: "Tout Pro, plus :",
+    features: ["Utilisateurs illimités", "Rôles administrateur et éditeur", "Support prioritaire", "Aide à la migration de vos contacts"],
+    cta: "Choisir Business",
+  },
+];
+
+/** Monthly price shown for a plan, volume and billing period (yearly = discounted monthly equivalent). */
+export function planPrice(plan: Plan, volume: Volume, yearly: boolean): number {
+  if (!plan.prices) return 0;
+  const base = plan.prices[volume];
+  return yearly ? Math.round(base * (1 - PRICING.yearlyDiscount)) : base;
 }
+
+/** Plan comparison table: [label, Gratuit, Pro, Business]; true/false render as check/dash. */
+export const PLAN_TABLE: Array<[string, string | boolean, string | boolean, string | boolean]> = [
+  ["Emails par mois", "3 000", "10 000 à 1 million", "10 000 à 1 million"],
+  ["Contacts", "Illimités", "Illimités", "Illimités"],
+  ["Éditeur glisser-déposer, 30 blocs", true, true, true],
+  ["Style de marque et polices personnalisées", true, true, true],
+  ["Segments et import CSV", true, true, true],
+  ["Connexion Shopify", true, true, true],
+  ["Rapports d'ouvertures et de clics", true, true, true],
+  ["App iOS et Android", true, true, true],
+  ["Automatisations", false, true, true],
+  ["Chiffre d'affaires par campagne", false, true, true],
+  ["API et clés API", false, true, true],
+  ["Utilisateurs", "1", "3", "Illimités"],
+  ["Support", "Email", "Email", "Prioritaire"],
+];
 
 export const BLOCKS = [
   "Titre",
@@ -72,6 +134,10 @@ export const FAQ: Array<{ q: string; a: string }> = [
     a: "Non. Les 3 000 premiers emails de chaque mois sont offerts : vous créez votre compte, importez vos contacts et envoyez votre première campagne sans rien payer.",
   },
   {
+    q: "Quelle formule choisir ?",
+    a: "Gratuit pour démarrer et envoyer vos premières campagnes. Pro dès que vous voulez des automatisations (bienvenue, panier abandonné, après achat), l'API ou travailler à plusieurs. Business pour les équipes et agences qui ont besoin d'utilisateurs illimités et d'un support prioritaire.",
+  },
+  {
     q: "Pourquoi payer au volume d'emails plutôt qu'au nombre de contacts ?",
     a: "Parce que vos contacts dormants ne devraient rien vous coûter. Avec Missive, une liste de 20 000 contacts à qui vous écrivez deux fois par mois coûte le prix de ces envois, pas celui de la taille de votre fichier.",
   },
@@ -93,7 +159,7 @@ export const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: "Puis-je travailler à plusieurs ?",
-    a: "Oui, sans supplément. Invitez un associé, un freelance ou votre agence en éditeur ou en administrateur : chacun a son accès et vous gardez la main sur l'équipe.",
+    a: "Oui. Invitez un associé, un freelance ou votre agence en éditeur ou en administrateur : jusqu'à 3 utilisateurs en Pro, sans limite en Business. Chacun a son accès et vous gardez la main sur l'équipe.",
   },
   {
     q: "Et le RGPD ?",
