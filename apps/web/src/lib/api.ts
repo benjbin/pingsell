@@ -43,7 +43,10 @@ import type {
   PushChannel,
 } from "./types";
 
-export const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:4000";
+// Set: that API origin. Otherwise local dev talks to the API on :4000, and a production build
+// uses its own origin (the app's nginx proxies /api to the API container).
+const envApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim().replace(/\/+$/, "");
+export const API_URL: string = envApiUrl || (import.meta.env.DEV ? "http://localhost:4000" : window.location.origin);
 const BASE = `${API_URL}/api/v1`;
 const TOKEN_KEY = "missive_token";
 

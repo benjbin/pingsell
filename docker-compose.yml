@@ -1,25 +1,27 @@
-# Pingsell on Coolify — "Docker Compose" build pack.
-# In Coolify, give each service its domain (api / app / www). Variables come from the Coolify UI.
+# Pingsell on Coolify — "Docker Compose" build pack. Works with no variable set:
+# Coolify generates a domain for "web" (the app, which also serves the API under /api)
+# and one for "site" (the marketing site). Change them in each service's settings.
 services:
   api:
     build:
       context: ./apps/api
     restart: unless-stopped
     environment:
-      NODE_ENV: production
-      PORT: 4000
-      DATABASE_PATH: /data/pingsell.db
-      UPLOAD_DIR: /data/uploads
-      PUBLIC_URL: ${PUBLIC_URL:?https://api.votre-domaine}
-      WEB_URL: ${WEB_URL:?https://app.votre-domaine}
-      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-log}
-      AWS_REGION: ${AWS_REGION:-eu-west-3}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL:-}
-      PUSH_MODE: ${PUSH_MODE:-live}
-      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY:-}
-      SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET:-}
+      - NODE_ENV=production
+      - PORT=4000
+      - DATABASE_PATH=/data/pingsell.db
+      - UPLOAD_DIR=/data/uploads
+      # Public base URL for tracking links, images and invitations = the app's domain.
+      - PUBLIC_URL=${PUBLIC_URL:-${SERVICE_URL_WEB}}
+      - WEB_URL=${WEB_URL:-${SERVICE_URL_WEB}}
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-log}
+      - AWS_REGION=${AWS_REGION:-eu-west-3}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - MAIL_FROM_EMAIL=${MAIL_FROM_EMAIL:-}
+      - PUSH_MODE=${PUSH_MODE:-live}
+      - SHOPIFY_API_KEY=${SHOPIFY_API_KEY:-}
+      - SHOPIFY_API_SECRET=${SHOPIFY_API_SECRET:-}
     volumes:
       - pingsell-data:/data
     expose:
@@ -29,9 +31,12 @@ services:
     build:
       context: ./apps/web
       args:
-        VITE_API_URL: ${PUBLIC_URL}
-        VITE_SITE_URL: ${SITE_URL:-}
+        # Empty = same origin: nginx in this container proxies /api to the api service.
+        VITE_API_URL: ""
+        VITE_SITE_URL: ${SITE_URL:-${SERVICE_URL_SITE}}
     restart: unless-stopped
+    environment:
+      - SERVICE_URL_WEB_80
     depends_on:
       - api
     expose:
@@ -41,9 +46,11 @@ services:
     build:
       context: ./apps/site
       args:
-        VITE_APP_URL: ${WEB_URL}
-        VITE_API_URL: ${PUBLIC_URL}/api/v1
+        VITE_APP_URL: ${WEB_URL:-${SERVICE_URL_WEB}}
+        VITE_API_URL: ${WEB_URL:-${SERVICE_URL_WEB}}/api/v1
     restart: unless-stopped
+    environment:
+      - SERVICE_URL_SITE_80
     expose:
       - "80"
 
