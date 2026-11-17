@@ -49,7 +49,38 @@ export const FONT_LIST: Record<string, FontDef> = {
   dmserif: { label: "DM Serif Display", stack: "'DM Serif Display', Georgia, serif", google: "DM+Serif+Display", kind: "web" },
 };
 
-export const fontStack = (key: string | undefined, fallback: string) => (FONT_LIST[key ?? ""] ?? FONT_LIST[fallback] ?? FONT_LIST.helvetica).stack;
+/** A font added by the merchant: any Google font, or a font file they uploaded. */
+export interface CustomFont {
+  key: string;
+  label: string;
+  /** CSS family name. */
+  family: string;
+  source: "google" | "upload";
+  /** Google Fonts family spec (source "google"). */
+  google?: string;
+  /** Font file URL (source "upload"). */
+  url?: string;
+  /** Used by mail clients that ignore web fonts (Gmail, Outlook). */
+  fallback: "sans" | "serif" | "mono";
+}
+
+const FALLBACK_STACKS = { sans: "Helvetica, Arial, sans-serif", serif: "Georgia, 'Times New Roman', serif", mono: "'Courier New', Courier, monospace" } as const;
+
+export function customFontDef(f: CustomFont): FontDef {
+  return { label: f.label, stack: `'${f.family.replace(/'/g, "")}', ${FALLBACK_STACKS[f.fallback] ?? FALLBACK_STACKS.sans}`, google: f.google, kind: "web" };
+}
+
+export function fontDef(key: string | undefined, custom: CustomFont[] = []): FontDef | undefined {
+  if (!key) return undefined;
+  const c = custom.find((f) => f.key === key);
+  return c ? customFontDef(c) : FONT_LIST[key];
+}
+
+export const fontStack = (key: string | undefined, fallback: string, custom: CustomFont[] = []) => (fontDef(key, custom) ?? fontDef(fallback, custom) ?? FONT_LIST.helvetica).stack;
+
+export function customFontKey(label: string): string {
+  return `c_${label.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "")}_${Math.random().toString(36).slice(2, 6)}`;
+}
 
 // --- Theme ------------------------------------------------------------------------------
 
@@ -75,7 +106,11 @@ export interface Theme {
   headingLineHeight: number;
   bodySize: number;
   bodyLineHeight: number;
+  /** Merchant fonts (Google or uploaded), usable anywhere a font is picked. */
+  customFonts: CustomFont[];
   // Buttons
+  /** "" = body font. */
+  buttonFont: string;
   radius: number;
   buttonPadY: number;
   buttonPadX: number;
@@ -92,6 +127,14 @@ export interface Theme {
 }
 
 export interface BlockStyle {
+  /** Typography overrides for the whole block (titles / texts inside it). */
+  headingFont?: string;
+  bodyFont?: string;
+  headingColor?: string;
+  textColor?: string;
+  accent?: string;
+  /** Scales every text size in the block, in %. */
+  textScale?: number;
   padTop?: number;
   padBottom?: number;
   /** Horizontal padding inside the section. */
@@ -219,6 +262,8 @@ export const DEFAULT_THEME: Theme = {
   headingLineHeight: 1.1,
   bodySize: 16,
   bodyLineHeight: 1.65,
+  customFonts: [],
+  buttonFont: "",
   radius: 12,
   buttonPadY: 15,
   buttonPadX: 30,
@@ -643,6 +688,7 @@ export function normalizeTheme(t: Partial<Theme> & { font?: string }): Theme {
   const legacy = t.font ? LEGACY_FONTS[t.font] : undefined;
   const merged = { ...DEFAULT_THEME, ...(legacy ? { headingFont: legacy[0], bodyFont: legacy[1], headingWeight: t.font === "serif" ? 400 : 700 } : {}), ...t } as Theme & { font?: string };
   delete merged.font;
+  merged.customFonts = Array.isArray(merged.customFonts) ? [...merged.customFonts] : [];
   return merged;
 }
 
@@ -865,7 +911,7 @@ function buttonHtml(ctx: Ctx, label: string, href: string, full: boolean, path: 
   const a = css({
     display: full ? "block" : "inline-block",
     padding: `${o.padY ?? theme.buttonPadY}px ${o.padX ?? theme.buttonPadX}px`,
-    "font-family": fontStack(o.font, theme.bodyFont),
+    "font-family": fontStack(o.font, theme.buttonFont || theme.bodyFont, theme.customFonts),
     "font-size": `${o.fontSize ?? theme.buttonSize}px`,
     "font-weight": o.weight ?? theme.buttonWeight,
     "letter-spacing": (o.transform ?? theme.buttonTransform) === "uppercase" ? "0.08em" : "0.01em",
@@ -912,8 +958,8 @@ const TEXT_SIZES = { sm: -2, md: 0, lg: 2 } as const;
 
 function inner(block: Block, ctx: Ctx): string {
   const { theme } = ctx;
-  const hFont = (k?: string) => fontStack(k, theme.headingFont);
-  const bFont = (k?: string) => fontStack(k, theme.bodyFont);
+  const hFont = (k?: string) => fontStack(k, theme.headingFont, theme.customFonts);
+  const bFont = (k?: string) => fontStack(k, theme.bodyFont, theme.customFonts);
   const muted = mutedColor(theme);
   const contentWidth = theme.width - 2 * theme.padX;
   switch (block.type) {
@@ -1352,11 +1398,26 @@ ${buttonHtml(ctx, block.cta, block.href, false, "cta", { bg: block.accent })}
 }
 
 /** Renders a single block. `canvas` adds placeholders and (if `editable`) inline-editable fields. */
-export function renderBlock(block: Block, theme: Theme, opts: { canvas?: boolean; editable?: boolean } = {}): string {
-  const ctx: Ctx = { theme, canvas: !!opts.canvas, editable: !!opts.editable };
-  const html = inner(block, ctx);
-  if (!html) return "";
+export function renderBlock(block: Block, baseTheme: Theme, opts: { canvas?: boolean; editable?: boolean } = {}): string {
   const s = block.style;
+  const theme: Theme = s
+    ? {
+        ...baseTheme,
+        headingFont: s.headingFont || baseTheme.headingFont,
+        bodyFont: s.bodyFont || baseTheme.bodyFont,
+        buttonFont: s.bodyFont ? "" : baseTheme.buttonFont,
+        text: s.headingColor || baseTheme.text,
+        body: s.textColor || baseTheme.body,
+        accent: s.accent || baseTheme.accent,
+      }
+    : baseTheme;
+  const ctx: Ctx = { theme, canvas: !!opts.canvas, editable: !!opts.editable };
+  let html = inner(block, ctx);
+  if (!html) return "";
+  if (s?.textScale && s.textScale !== 100) {
+    const k = s.textScale / 100;
+    html = html.replace(/font-size:\s*(\d+(?:\.\d+)?)px/g, (_m, n: string) => `font-size:${Math.max(8, Math.round(Number(n) * k))}px`);
+  }
   const cls = [s?.hideMobile ? "hide-m" : "", s?.hideDesktop ? "hide-d" : ""].filter(Boolean).join(" ");
   const boxed = !!(s?.bg || s?.radius || s?.borderWidth);
   if (!boxed && !cls && !s?.inset) return html;
@@ -1372,10 +1433,33 @@ export function renderBlock(block: Block, theme: Theme, opts: { canvas?: boolean
 }
 
 /** Google Fonts used by a design (theme + block overrides). */
+function usedFontKeys(design: Design): Set<string> {
+  const t = design.theme;
+  const keys = new Set<string>([t.headingFont, t.bodyFont, t.buttonFont].filter(Boolean));
+  for (const b of design.blocks) {
+    if ("font" in b && b.font) keys.add(b.font);
+    if (b.style?.headingFont) keys.add(b.style.headingFont);
+    if (b.style?.bodyFont) keys.add(b.style.bodyFont);
+  }
+  return keys;
+}
+
 export function usedWebFonts(design: Design): string[] {
-  const keys = new Set<string>([design.theme.headingFont, design.theme.bodyFont]);
-  for (const b of design.blocks) if ("font" in b && b.font) keys.add(b.font);
-  return [...keys].map((k) => FONT_LIST[k]?.google).filter((g): g is string => !!g);
+  const custom = design.theme.customFonts ?? [];
+  return [...new Set([...usedFontKeys(design)].map((k) => fontDef(k, custom)?.google).filter((g): g is string => !!g))];
+}
+
+const FONT_FORMATS: Record<string, string> = { woff2: "woff2", woff: "woff", ttf: "truetype", otf: "opentype" };
+
+/** @font-face rules for uploaded fonts. `all` = every custom font (editor), else only those used. */
+export function fontFaceCss(theme: Theme, keys?: Set<string>): string {
+  return (theme.customFonts ?? [])
+    .filter((f) => f.source === "upload" && f.url && (!keys || keys.has(f.key)))
+    .map((f) => {
+      const fmt = FONT_FORMATS[f.url!.split(".").pop()?.toLowerCase() ?? ""] ?? "woff2";
+      return `@font-face { font-family: '${f.family.replace(/'/g, "")}'; src: url('${f.url!.replace(/'/g, "")}') format('${fmt}'); font-display: swap; }`;
+    })
+    .join("\n");
 }
 
 export function googleFontsHref(families: string[]): string | null {
@@ -1392,6 +1476,7 @@ export function renderEmail(design: Design, preheader = ""): string {
     ? ""
     : row(`<div style="font-family:${fontStack(theme.bodyFont, "helvetica")};font-size:12px;color:${muted};text-align:center;"><a href="{{unsubscribe_url}}" style="color:${muted};">Se désinscrire</a></div>`, `24px ${theme.padX}px 32px`);
   const fonts = googleFontsHref(usedWebFonts(design));
+  const faces = fontFaceCss(theme, usedFontKeys(design));
   const border = theme.borderWidth > 0 ? `border:${theme.borderWidth}px solid ${theme.borderColor};` : "";
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -1402,6 +1487,7 @@ export function renderEmail(design: Design, preheader = ""): string {
 <title></title>
 ${fonts ? `<link href="${fonts}" rel="stylesheet">` : ""}
 <style>
+${faces}
   .hide-d { display: table; }
   @media only screen and (max-width: ${theme.width + 20}px) {
     .container { width: 100% !important; border-radius: 0 !important; }

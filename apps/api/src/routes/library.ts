@@ -15,8 +15,12 @@ const MIME_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/gif': 'gif',
   'image/webp': 'webp',
+  'font/woff2': 'woff2',
+  'font/woff': 'woff',
+  'font/ttf': 'ttf',
+  'font/otf': 'otf',
 };
-const STORED_RE = /^[0-9a-f-]{36}\.(png|jpg|gif|webp)$/;
+const STORED_RE = /^[0-9a-f-]{36}\.(png|jpg|gif|webp|woff2|woff|ttf|otf)$/;
 
 const uploadSchema = z.object({
   filename: z.string().trim().min(1).max(200),
@@ -52,6 +56,11 @@ function sniff(buf: Buffer): string | null {
   if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
   if (buf.subarray(0, 4).toString('ascii') === 'GIF8') return 'image/gif';
   if (buf.subarray(0, 4).toString('ascii') === 'RIFF' && buf.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  const head = buf.subarray(0, 4).toString('ascii');
+  if (head === 'wOF2') return 'font/woff2';
+  if (head === 'wOFF') return 'font/woff';
+  if (head === 'OTTO') return 'font/otf';
+  if (head === 'true' || (buf[0] === 0x00 && buf[1] === 0x01 && buf[2] === 0x00 && buf[3] === 0x00)) return 'font/ttf';
   return null;
 }
 
@@ -72,6 +81,8 @@ export async function publicUploadRoutes(app: FastifyInstance) {
       .type(mime)
       .header('cache-control', 'public, max-age=31536000, immutable')
       .header('x-content-type-options', 'nosniff')
+      // Fonts are loaded cross-origin by mail clients and by the editor.
+      .header('access-control-allow-origin', '*')
       .send(readFileSync(path));
   });
 }
@@ -90,7 +101,9 @@ export async function libraryRoutes(app: FastifyInstance, { db, config }: Deps) 
 
   // --- Media library ---------------------------------------------------------
   app.get('/assets', async (request) => {
-    const rows = all<AssetRow>(db, 'SELECT * FROM assets WHERE account_id = ? ORDER BY created_at DESC LIMIT 200', request.accountId);
+    // The media library lists images; fonts are managed from the style panel.
+    const kind = (request.query as { kind?: string }).kind === 'font' ? 'font/%' : 'image/%';
+    const rows = all<AssetRow>(db, 'SELECT * FROM assets WHERE account_id = ? AND mime LIKE ? ORDER BY created_at DESC LIMIT 200', request.accountId, kind);
     return { data: rows.map(serialize) };
   });
 
@@ -99,9 +112,9 @@ export async function libraryRoutes(app: FastifyInstance, { db, config }: Deps) 
     const b64 = body.data.replace(/^data:[^;]+;base64,/, '');
     const buf = Buffer.from(b64, 'base64');
     if (buf.length === 0) throw badRequest('Fichier vide');
-    if (buf.length > MAX_BYTES) throw badRequest('Image trop lourde (8 Mo maximum)');
+    if (buf.length > MAX_BYTES) throw badRequest('Fichier trop lourd (8 Mo maximum)');
     const mime = sniff(buf);
-    if (!mime) throw badRequest('Format non pris en charge : PNG, JPG, GIF ou WebP uniquement');
+    if (!mime) throw badRequest('Format non pris en charge : images PNG, JPG, GIF, WebP ou polices WOFF2, WOFF, TTF, OTF');
     const id = newId();
     const stored = `${id}.${MIME_EXT[mime]}`;
     mkdirSync(UPLOAD_DIR, { recursive: true });

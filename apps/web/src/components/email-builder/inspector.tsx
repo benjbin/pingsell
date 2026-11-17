@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowUp, CaseSensitive, CaseUpper, Italic, MonitorOff, MousePointerClick, Plus, RotateCcw, SmartphoneNfc, Trash2 } from "lucide-react";
 import { cx } from "../../lib/format";
 import { Field, Input, Segmented, Select, Textarea } from "../ui/primitives";
 import { ImageField } from "./media";
-import { FONT_LIST, SOCIAL_LABELS, formatUntil, THEME_SWATCHES, type Align, type Block, type BlockStyle, type ColumnItem, type SocialNetwork, type Theme, type Transform } from "./model";
+import { FontsManager } from "./fonts";
+import { FONT_LIST, SOCIAL_LABELS, customFontDef, fontDef, formatUntil, type CustomFont, THEME_SWATCHES, type Align, type Block, type BlockStyle, type ColumnItem, type SocialNetwork, type Theme, type Transform } from "./model";
 
 // --- Controls ---------------------------------------------------------------------------
 
@@ -124,13 +125,28 @@ function Toggle({ label, checked, onChange, icon: Icon }: { label: string; check
   );
 }
 
+/** The merchant's own fonts, offered by every font picker. */
+const CustomFontsContext = createContext<CustomFont[]>([]);
+
 export function FontSelect({ label, value, onChange, inheritLabel }: { label: string; value: string | undefined; onChange: (v: string | undefined) => void; inheritLabel?: string }) {
+  const custom = useContext(CustomFontsContext);
   const safe = Object.entries(FONT_LIST).filter(([, f]) => f.kind === "sûre");
   const web = Object.entries(FONT_LIST).filter(([, f]) => f.kind === "web");
+  const known = !value || !!fontDef(value, custom);
   return (
     <Field label={label}>
-      <Select value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)} style={value ? { fontFamily: FONT_LIST[value]?.stack } : undefined}>
+      <Select value={value ?? ""} onChange={(e) => onChange(e.target.value || undefined)} style={value ? { fontFamily: fontDef(value, custom)?.stack } : undefined}>
         {inheritLabel && <option value="">{inheritLabel}</option>}
+        {!known && <option value={value}>Police supprimée</option>}
+        {custom.length > 0 && (
+          <optgroup label="Vos polices">
+            {custom.map((f) => (
+              <option key={f.key} value={f.key} style={{ fontFamily: customFontDef(f).stack }}>
+                {f.label}
+              </option>
+            ))}
+          </optgroup>
+        )}
         <optgroup label="Polices universelles (partout)">
           {safe.map(([k, f]) => (
             <option key={k} value={k}>
@@ -305,10 +321,25 @@ export function BlockInspector({ block, theme, onChange }: { block: Block; theme
     onChange({ style: Object.keys(style).length ? (style as BlockStyle) : undefined } as Partial<Block>);
   };
   const pads = DEFAULT_PAD[block.type];
+  const typo = !NO_BLOCK_TYPO.has(block.type);
+  const st = block.style;
 
   return (
-    <>
+    <CustomFontsContext.Provider value={theme.customFonts ?? []}>
       <BlockFields block={block} theme={theme} set={set} />
+      {typo && (
+        <Section title="Typographie du bloc" defaultOpen={!!(st?.headingFont || st?.bodyFont || st?.headingColor || st?.textColor || st?.accent || st?.textScale)}>
+          <p className="text-[11px] leading-relaxed text-slate-500">Remplace le style global pour ce bloc uniquement. Laissez vide pour suivre le style global.</p>
+          <FontSelect label="Police des titres" value={st?.headingFont} inheritLabel="Style global" onChange={(headingFont) => setStyle({ headingFont })} />
+          <FontSelect label="Police du texte" value={st?.bodyFont} inheritLabel="Style global" onChange={(bodyFont) => setStyle({ bodyFont })} />
+          <Slider label="Taille des textes" value={st?.textScale} inherit={100} min={70} max={150} step={5} unit="%" onChange={(textScale) => setStyle({ textScale: textScale === 100 ? undefined : textScale })} />
+          <Row>
+            <ColorField label="Titres" value={st?.headingColor} inherit={theme.text} onChange={(headingColor) => setStyle({ headingColor })} />
+            <ColorField label="Texte" value={st?.textColor} inherit={theme.body || theme.text} onChange={(textColor) => setStyle({ textColor })} />
+          </Row>
+          <ColorField label="Accent (boutons, puces…)" value={st?.accent} inherit={theme.accent} onChange={(accent) => setStyle({ accent })} />
+        </Section>
+      )}
       {pads && (
         <Section title="Espacement" defaultOpen={false}>
           <Row>
@@ -331,9 +362,12 @@ export function BlockInspector({ block, theme, onChange }: { block: Block; theme
         <Toggle label="Masquer sur mobile" icon={SmartphoneNfc} checked={!!block.style?.hideMobile} onChange={(hideMobile) => setStyle({ hideMobile, hideDesktop: hideMobile ? undefined : block.style?.hideDesktop })} />
         <Toggle label="Masquer sur ordinateur" icon={MonitorOff} checked={!!block.style?.hideDesktop} onChange={(hideDesktop) => setStyle({ hideDesktop, hideMobile: hideDesktop ? undefined : block.style?.hideMobile })} />
       </Section>
-    </>
+    </CustomFontsContext.Provider>
   );
 }
+
+/** Blocks without text, or with their own complete typography section. */
+const NO_BLOCK_TYPO = new Set<Block["type"]>(["spacer", "divider", "html", "image", "gallery", "heading", "text", "logo"]);
 
 function ButtonStyleFields({ b, theme, set }: { b: Extract<Block, { type: "button" }>; theme: Theme; set: Setter }) {
   return (
@@ -1055,8 +1089,20 @@ function BlockFields({ block, theme, set }: { block: Block; theme: Theme; set: S
 
 export function ThemeInspector({ theme, onChange, brandActions }: { theme: Theme; onChange: (patch: Partial<Theme>) => void; brandActions?: ReactNode }) {
   const n = (k: keyof Theme) => (v: number | undefined) => v !== undefined && onChange({ [k]: v } as Partial<Theme>);
+  const fonts = theme.customFonts ?? [];
+  const setFonts = (customFonts: CustomFont[]) => {
+    // Anything that pointed at a removed font falls back to the defaults.
+    const keys = new Set(customFonts.map((f) => f.key));
+    const gone = (k: string) => k.startsWith("c_") && !keys.has(k);
+    onChange({
+      customFonts,
+      ...(gone(theme.headingFont) ? { headingFont: "helvetica" } : {}),
+      ...(gone(theme.bodyFont) ? { bodyFont: "helvetica" } : {}),
+      ...(gone(theme.buttonFont) ? { buttonFont: "" } : {}),
+    });
+  };
   return (
-    <>
+    <CustomFontsContext.Provider value={fonts}>
       {brandActions}
       <Section title="Ambiances">
         <div className="grid grid-cols-3 gap-2">
@@ -1099,6 +1145,10 @@ export function ThemeInspector({ theme, onChange, brandActions }: { theme: Theme
         <ColorField label="Texte des boutons" value={theme.accentText} onChange={(accentText) => onChange({ accentText })} />
       </Section>
 
+      <Section title="Vos polices" defaultOpen={fonts.length > 0}>
+        <FontsManager fonts={fonts} onChange={setFonts} />
+      </Section>
+
       <Section title="Titres">
         <FontSelect label="Police" value={theme.headingFont} onChange={(v) => v && onChange({ headingFont: v })} />
         <WeightField value={theme.headingWeight} onChange={(v) => v && onChange({ headingWeight: v })} />
@@ -1118,6 +1168,7 @@ export function ThemeInspector({ theme, onChange, brandActions }: { theme: Theme
       </Section>
 
       <Section title="Boutons">
+        <FontSelect label="Police" value={theme.buttonFont || undefined} inheritLabel="Police du texte" onChange={(v) => onChange({ buttonFont: v ?? "" })} />
         <Slider label="Arrondi" value={Math.min(theme.radius, 40)} min={0} max={40} onChange={(v) => v !== undefined && onChange({ radius: v === 40 ? 999 : v })} format={(x) => (x >= 40 ? "pilule " : String(x))} />
         <Row>
           <Slider label="Hauteur" value={theme.buttonPadY} min={6} max={30} onChange={n("buttonPadY")} />
@@ -1136,6 +1187,6 @@ export function ThemeInspector({ theme, onChange, brandActions }: { theme: Theme
         <Slider label="Bordure de l'email" value={theme.borderWidth} min={0} max={6} onChange={n("borderWidth")} />
         {theme.borderWidth > 0 && <ColorField label="Couleur de bordure" value={theme.borderColor} onChange={(borderColor) => onChange({ borderColor })} />}
       </Section>
-    </>
+    </CustomFontsContext.Provider>
   );
 }

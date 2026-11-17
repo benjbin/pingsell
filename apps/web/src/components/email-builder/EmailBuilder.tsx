@@ -50,6 +50,7 @@ import {
   applyBrandKit,
   brandBlock,
   googleFontsHref,
+  fontFaceCss,
   parseBrandKit,
   usedWebFonts,
   type BrandKit,
@@ -203,7 +204,18 @@ export function EmailBuilder(props: EmailBuilderProps) {
   }, []);
 
   // Load the web fonts used by the design so the canvas matches the email.
-  const fontsHref = googleFontsHref(usedWebFonts(design));
+  // Every merchant font is loaded too, so the font pickers can preview them.
+  const fontsHref = googleFontsHref([...new Set([...usedWebFonts(design), ...(design.theme.customFonts ?? []).map((f) => f.google).filter((g): g is string => !!g)])]);
+  const faces = fontFaceCss(design.theme);
+  useEffect(() => {
+    let el = document.getElementById("email-font-faces") as HTMLStyleElement | null;
+    if (!el) {
+      el = document.createElement("style");
+      el.id = "email-font-faces";
+      document.head.appendChild(el);
+    }
+    el.textContent = faces;
+  }, [faces]);
   useEffect(() => {
     if (!fontsHref) return;
     let link = document.querySelector<HTMLLinkElement>(`link[data-email-fonts="${CSS.escape(fontsHref)}"]`);
