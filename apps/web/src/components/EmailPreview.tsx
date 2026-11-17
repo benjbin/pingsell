@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Monitor, Smartphone } from "lucide-react";
 import { cx } from "../lib/format";
 import { Segmented } from "./ui/primitives";
+import { countdownParts, type CountdownUnit } from "./email-builder/model";
 
 const SAMPLE = {
   first_name: "Camille",
@@ -12,7 +13,9 @@ const SAMPLE = {
 
 /** Replace merge tags (optionally with a fallback: {{first_name|ami}}) with sample values for previewing. */
 export function renderMergeTags(html: string): string {
-  return html.replace(
+  return html
+    .replace(/\{\{\s*countdown_(days|hours|minutes|seconds)\s*\|([^}]*)\}\}/g, (_, unit: CountdownUnit, iso: string) => countdownParts(iso.trim(), Date.now())[unit])
+    .replace(
     /\{\{\s*(first_name|last_name|email|unsubscribe_url)\s*(?:\|[^}]*)?\}\}/g,
     (_, key: keyof typeof SAMPLE) => SAMPLE[key],
   );

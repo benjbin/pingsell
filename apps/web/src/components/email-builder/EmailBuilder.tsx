@@ -107,7 +107,12 @@ function imageKey(block: Block): string | null {
       return "src";
     case "logo":
     case "product":
+    case "hero":
+    case "imageText":
       return "imageUrl";
+    case "review":
+    case "signature":
+      return "avatarUrl";
     case "video":
       return "thumbnail";
     default:
@@ -543,7 +548,7 @@ export function EmailBuilder(props: EmailBuilderProps) {
               style={{ background: design.theme.background, paddingTop: Math.max(12, design.theme.outerPad), paddingBottom: Math.max(12, design.theme.outerPad) }}
             >
               <div
-                className="relative mx-auto overflow-hidden transition-[width] duration-300"
+                className={cx("relative mx-auto overflow-hidden transition-[width] duration-300", device === "mobile" && "canvas-mobile")}
                 style={{
                   width: canvasWidth,
                   maxWidth: "100%",
@@ -962,7 +967,7 @@ function QuickInsert({ onPick }: { onPick: (t: BlockType) => void }) {
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className="absolute top-full left-1/2 z-40 mt-5 grid w-[340px] max-w-[90vw] -translate-x-1/2 animate-pop-in grid-cols-5 gap-1 rounded-2xl bg-white p-2 shadow-2xl ring-1 ring-slate-900/10 dark:bg-slate-800 dark:ring-white/10"
+      className="absolute top-full left-1/2 z-40 mt-5 grid max-h-[340px] w-[380px] max-w-[90vw] -translate-x-1/2 animate-pop-in grid-cols-5 gap-1 overflow-y-auto rounded-2xl bg-white p-2 shadow-2xl ring-1 ring-slate-900/10 dark:bg-slate-800 dark:ring-white/10"
     >
       {BLOCK_LIBRARY.map((b) => {
         const Icon = ICONS[b.type];

@@ -177,6 +177,21 @@ export type Block = Base &
     | { type: "spacer"; height: number }
     | { type: "html"; html: string }
     | { type: "footer"; text: string; fontSize?: number; color?: string; linkColor?: string; align?: Align; unsubscribeLabel?: string }
+    | { type: "hero"; imageUrl: string; title: string; text: string; cta: string; href: string; align: Align; showCta?: boolean; bg?: string; textColor?: string; overlay?: number; titleSize?: number; buttonBg?: string; buttonText?: string }
+    | { type: "imageText"; imageUrl: string; title: string; text: string; cta: string; href: string; layout?: "left" | "right"; imageWidth?: number; showCta?: boolean; imageRadius?: number; valign?: "top" | "middle" }
+    | { type: "list"; items: Array<{ text: string }>; marker?: "bullet" | "number" | "check" | "arrow" | "star"; markerColor?: string; fontSize?: number; color?: string; gap?: number }
+    | { type: "gallery"; images: Array<{ src: string; href: string; alt: string }>; columns?: 2 | 3; gap?: number; radius?: number }
+    | { type: "buttons"; primary: { label: string; href: string }; secondary: { label: string; href: string }; align: Align; secondaryStyle?: "outline" | "text" }
+    | { type: "stats"; items: Array<{ value: string; label: string }>; color?: string; valueSize?: number; labelColor?: string }
+    | { type: "review"; rating: number; text: string; author: string; avatarUrl: string; starColor?: string; align?: Align; cardBg?: string }
+    | { type: "faq"; items: Array<{ q: string; a: string }>; qColor?: string; separators?: boolean }
+    | { type: "features"; items: Array<{ icon: string; title: string; text: string }>; layout?: "row" | "list"; iconBg?: string; align?: Align }
+    | { type: "countdown"; until: string; title: string; bg?: string; color?: string; boxBg?: string; showSeconds?: boolean }
+    | { type: "event"; title: string; date: string; time: string; place: string; cta: string; href: string; accent?: string; cardBg?: string }
+    | { type: "survey"; question: string; scale: "stars" | "emoji" | "nps" | "yesno"; href: string; color?: string; lowLabel?: string; highLabel?: string }
+    | { type: "apps"; iosUrl: string; androidUrl: string; align: Align; color?: string }
+    | { type: "menu"; links: Array<{ label: string; href: string }>; align: Align; color?: string; fontSize?: number; uppercase?: boolean; separator?: boolean }
+    | { type: "signature"; avatarUrl: string; name: string; role: string; text: string; nameColor?: string }
   );
 
 export type BlockType = Block["type"];
@@ -294,19 +309,34 @@ export function uid(): string {
   return `b${Date.now().toString(36)}${counter.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-export type BlockCategory = "Contenu" | "Commerce" | "Mise en page";
+export type BlockCategory = "Contenu" | "Mise en avant" | "Commerce" | "Engagement" | "Mise en page";
 
 export const BLOCK_LIBRARY: Array<{ type: BlockType; label: string; hint: string; category: BlockCategory }> = [
   { type: "heading", label: "Titre", hint: "Grand titre accrocheur", category: "Contenu" },
   { type: "text", label: "Texte", hint: "Paragraphe mis en forme", category: "Contenu" },
   { type: "image", label: "Image", hint: "Visuel, avec lien optionnel", category: "Contenu" },
   { type: "button", label: "Bouton", hint: "Appel à l'action", category: "Contenu" },
-  { type: "quote", label: "Citation", hint: "Avis client, témoignage", category: "Contenu" },
+  { type: "buttons", label: "2 boutons", hint: "Action principale + secondaire", category: "Contenu" },
+  { type: "list", label: "Liste", hint: "Puces, numéros, coches", category: "Contenu" },
+  { type: "quote", label: "Citation", hint: "Phrase mise en valeur", category: "Contenu" },
   { type: "video", label: "Vidéo", hint: "Miniature cliquable", category: "Contenu" },
+  { type: "hero", label: "Bannière", hint: "Image de fond + titre + bouton", category: "Mise en avant" },
+  { type: "imageText", label: "Image + texte", hint: "Côte à côte", category: "Mise en avant" },
+  { type: "gallery", label: "Galerie", hint: "Grille de 2 à 9 images", category: "Mise en avant" },
+  { type: "features", label: "Avantages", hint: "Livraison, retours, paiement…", category: "Mise en avant" },
+  { type: "stats", label: "Chiffres", hint: "Chiffres clés", category: "Mise en avant" },
   { type: "product", label: "Produit", hint: "Photo, prix, lien", category: "Commerce" },
   { type: "columns", label: "Colonnes", hint: "2 ou 3 cartes côte à côte", category: "Commerce" },
   { type: "promo", label: "Code promo", hint: "Code à copier", category: "Commerce" },
+  { type: "countdown", label: "Compte à rebours", hint: "Calculé au moment de l'envoi", category: "Commerce" },
+  { type: "review", label: "Avis client", hint: "Étoiles + témoignage", category: "Commerce" },
+  { type: "survey", label: "Sondage", hint: "Note, emoji, NPS, oui/non", category: "Engagement" },
+  { type: "event", label: "Événement", hint: "Date, lieu, inscription", category: "Engagement" },
+  { type: "faq", label: "FAQ", hint: "Questions / réponses", category: "Engagement" },
+  { type: "apps", label: "Applis", hint: "App Store, Google Play", category: "Engagement" },
+  { type: "signature", label: "Signature", hint: "Photo, nom, fonction", category: "Engagement" },
   { type: "logo", label: "Logo", hint: "Nom ou image de marque", category: "Mise en page" },
+  { type: "menu", label: "Menu", hint: "Liens de navigation", category: "Mise en page" },
   { type: "social", label: "Réseaux", hint: "Liens vers vos réseaux", category: "Mise en page" },
   { type: "divider", label: "Séparateur", hint: "Ligne fine", category: "Mise en page" },
   { type: "spacer", label: "Espace", hint: "Respiration verticale", category: "Mise en page" },
@@ -374,6 +404,68 @@ function rawBlock(type: BlockType, brand: string): Block {
       return { id, type, html: '<p style="margin:0;text-align:center;">Votre HTML ici</p>' };
     case "footer":
       return { id, type, text: `${esc(brand)} · Vous recevez cet email car vous êtes inscrit(e) à notre newsletter.` };
+    case "hero":
+      return { id, type, imageUrl: "", title: "La nouvelle collection est là", text: "Des pièces pensées pour durer, en édition limitée.", cta: "Découvrir", href: "https://", align: "center", overlay: 35 };
+    case "imageText":
+      return { id, type, imageUrl: "", title: "Fabriqué avec soin", text: "Racontez l'histoire du produit, de l'atelier ou de l'équipe en quelques lignes.", cta: "En savoir plus", href: "https://", layout: "left" };
+    case "list":
+      return { id, type, marker: "check", items: [{ text: "Livraison offerte dès 50 €" }, { text: "Retours gratuits sous 30 jours" }, { text: "Paiement en 3 fois sans frais" }] };
+    case "gallery":
+      return { id, type, columns: 2, images: [0, 1, 2, 3].map(() => ({ src: "", href: "", alt: "" })) };
+    case "buttons":
+      return { id, type, align: "center", primary: { label: "Acheter", href: "https://" }, secondary: { label: "En savoir plus", href: "https://" } };
+    case "stats":
+      return { id, type, items: [{ value: "12 000+", label: "clients satisfaits" }, { value: "4,9/5", label: "note moyenne" }, { value: "48 h", label: "livraison" }] };
+    case "review":
+      return { id, type, rating: 5, text: "« Qualité impeccable et service client au top. Ma deuxième commande ne tardera pas ! »", author: "Léa M., cliente vérifiée", avatarUrl: "", align: "center" };
+    case "faq":
+      return {
+        id,
+        type,
+        separators: true,
+        items: [
+          { q: "Quels sont les délais de livraison ?", a: "Votre commande est expédiée sous 24 h et livrée en 2 à 4 jours ouvrés." },
+          { q: "Puis-je retourner un article ?", a: "Oui, vous disposez de 30 jours pour changer d'avis. Le retour est gratuit." },
+        ],
+      };
+    case "features":
+      return {
+        id,
+        type,
+        layout: "row",
+        align: "center",
+        items: [
+          { icon: "🚚", title: "Livraison offerte", text: "Dès 50 € d'achat" },
+          { icon: "↩️", title: "Retours gratuits", text: "Sous 30 jours" },
+          { icon: "🔒", title: "Paiement sécurisé", text: "CB, PayPal, Apple Pay" },
+        ],
+      };
+    case "countdown": {
+      const until = new Date(Date.now() + 3 * 86400000);
+      until.setMinutes(0, 0, 0);
+      return { id, type, until: until.toISOString(), title: "L'offre se termine dans" };
+    }
+    case "event":
+      return { id, type, title: "Vente privée en boutique", date: "Samedi 6 décembre", time: "14 h – 19 h", place: "12 rue des Artisans, Paris", cta: "Je m'inscris", href: "https://" };
+    case "survey":
+      return { id, type, question: "Comment s'est passée votre dernière commande ?", scale: "stars", href: "https://", lowLabel: "Décevant", highLabel: "Parfait" };
+    case "apps":
+      return { id, type, iosUrl: "https://apps.apple.com/", androidUrl: "https://play.google.com/", align: "center" };
+    case "menu":
+      return {
+        id,
+        type,
+        align: "center",
+        uppercase: true,
+        links: [
+          { label: "Nouveautés", href: "https://" },
+          { label: "Femme", href: "https://" },
+          { label: "Homme", href: "https://" },
+          { label: "Promos", href: "https://" },
+        ],
+      };
+    case "signature":
+      return { id, type, avatarUrl: "", name: "Camille Durand", role: `Fondatrice, ${esc(brand)}`, text: "Merci de faire partie de l'aventure. À très vite !" };
   }
 }
 
@@ -382,7 +474,7 @@ export function cloneBlock(block: Block): Block {
 }
 
 /** Fields that hold rich HTML (vs plain text). */
-export const RICH_FIELDS = new Set(["heading.text", "text.text", "footer.text", "quote.text"]);
+export const RICH_FIELDS = new Set(["heading.text", "text.text", "footer.text", "quote.text", "hero.text", "imageText.text", "review.text", "signature.text"]);
 
 // --- Presets ----------------------------------------------------------------
 
@@ -790,6 +882,31 @@ function placeholder(ctx: Ctx, height: number, label: string): string {
   return `<div style="height:${height}px;border:1.5px dashed ${mix(ctx.theme.text, 0.25)};border-radius:12px;background:${mix(ctx.theme.text, 0.03)};display:flex;align-items:center;justify-content:center;text-align:center;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:${mix(ctx.theme.text, 0.55)};">${label}</div>`;
 }
 
+
+function aligned(align: Align, btn: string): string {
+  return `<div style="text-align:${align};"><div style="display:inline-block;">${btn}</div></div>`;
+}
+
+export type CountdownUnit = "days" | "hours" | "minutes" | "seconds";
+
+/** Remaining time until `iso`, zero-padded. Also used at send time (server) and in previews. */
+export function countdownParts(iso: string, now: number): Record<CountdownUnit, string> {
+  const end = Date.parse(iso);
+  let left = Number.isFinite(end) ? Math.max(0, Math.floor((end - now) / 1000)) : 0;
+  const days = Math.floor(left / 86400);
+  left -= days * 86400;
+  const hours = Math.floor(left / 3600);
+  left -= hours * 3600;
+  const minutes = Math.floor(left / 60);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return { days: p(days), hours: p(hours), minutes: p(minutes), seconds: p(left - minutes * 60) };
+}
+
+export function formatUntil(iso: string): string {
+  const d = new Date(iso);
+  return Number.isFinite(d.getTime()) ? d.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "Date invalide";
+}
+
 const HEADING_SIZES = { xl: 48, lg: 34, md: 22 } as const;
 const TEXT_SIZES = { sm: -2, md: 0, lg: 2 } as const;
 
@@ -999,6 +1116,238 @@ ${link}
         pad(ctx, block, 28, 36),
       );
     }
+    case "hero": {
+      const fg = block.textColor || "#FFFFFF";
+      const bg = block.bg || theme.text;
+      const ov = Math.max(0, Math.min(90, block.overlay ?? 35)) / 100;
+      const img = block.imageUrl ? `background-image:url('${esc(block.imageUrl)}');background-size:cover;background-position:center;` : "";
+      const title = `<h1 style="${css({
+        margin: "0 0 14px",
+        "font-family": hFont(),
+        "font-size": `${block.titleSize ?? 40}px`,
+        "line-height": theme.headingLineHeight,
+        "font-weight": theme.headingWeight,
+        "letter-spacing": `${theme.headingSpacing}em`,
+        "text-transform": theme.headingTransform === "uppercase" ? "uppercase" : undefined,
+        color: fg,
+      })}">${field(ctx, "title", block.title, false)}</h1>`;
+      const text = `<div style="margin:0 0 24px;font-family:${bFont()};font-size:${theme.bodySize + 1}px;line-height:${theme.bodyLineHeight};color:${fg};opacity:0.92;">${field(ctx, "text", block.text, true, fg)}</div>`;
+      const btn = block.showCta !== false ? aligned(block.align, buttonHtml(ctx, block.cta, block.href, false, "cta", { bg: block.buttonBg, fg: block.buttonText })) : "";
+      const p = pad(ctx, block, 72, 72);
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${bg}"${block.imageUrl ? ` background="${esc(block.imageUrl)}"` : ""} style="background-color:${bg};${img}"><tr><td class="px" style="padding:${p};text-align:${block.align};background:${ov ? `rgba(0,0,0,${ov})` : "transparent"};">${title}${text}${btn}</td></tr></table>`;
+    }
+    case "imageText": {
+      const share = Math.max(25, Math.min(65, block.imageWidth ?? 45));
+      const imgW = Math.round((contentWidth * share) / 100);
+      const img = block.imageUrl
+        ? `<img src="${esc(block.imageUrl)}" alt="${esc(block.title)}" width="${imgW}" style="display:block;width:100%;max-width:${imgW}px;height:auto;border:0;border-radius:${block.imageRadius ?? 12}px;">`
+        : ctx.canvas
+          ? placeholder(ctx, Math.round(imgW * 0.9), "Image")
+          : "";
+      const text = `<p style="margin:0 0 8px;font-family:${hFont()};font-size:22px;line-height:1.2;font-weight:${theme.headingWeight};${theme.headingTransform === "uppercase" ? "text-transform:uppercase;" : ""}color:${theme.text};">${inlineField(ctx, "title", block.title)}</p>
+<div style="margin:0 0 16px;font-family:${bFont()};font-size:${theme.bodySize - 1}px;line-height:${theme.bodyLineHeight};color:${bodyColor(theme)};">${field(ctx, "text", block.text, true, linkColor(theme))}</div>
+${block.showCta !== false ? buttonHtml(ctx, block.cta, block.href, false, "cta") : ""}`;
+      const v = block.valign ?? "middle";
+      const imgCell = `<td class="col" width="${share}%" valign="top" style="padding:0;">${img}</td>`;
+      const right = block.layout === "right";
+      const textCell = `<td class="col" valign="${v}" style="padding:${right ? "0 24px 0 0" : "0 0 0 24px"};">${text}</td>`;
+      return row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${right ? textCell + imgCell : imgCell + textCell}</tr></table>`, pad(ctx, block, 16, 16));
+    }
+    case "list": {
+      const size = block.fontSize ?? theme.bodySize;
+      const mc = block.markerColor || theme.accent;
+      const gap = block.gap ?? 10;
+      const marker = (i: number) => ({ bullet: "●", number: `${i + 1}.`, check: "✓", arrow: "→", star: "★" })[block.marker ?? "bullet"];
+      const rows = block.items
+        .map(
+          (it, i) =>
+            `<tr><td width="28" valign="top" style="padding:0 0 ${gap}px;font-family:${bFont()};font-size:${block.marker === "bullet" || !block.marker ? Math.round(size * 0.6) : size}px;line-height:${block.marker === "bullet" || !block.marker ? `${size * theme.bodyLineHeight}px` : theme.bodyLineHeight};font-weight:bold;color:${mc};">${marker(i)}</td><td valign="top" style="padding:0 0 ${gap}px;font-family:${bFont()};font-size:${size}px;line-height:${theme.bodyLineHeight};color:${block.color || bodyColor(theme)};">${inlineField(ctx, `items.${i}.text`, it.text)}</td></tr>`,
+        )
+        .join("");
+      return row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}</table>`, pad(ctx, block, 10, 4));
+    }
+    case "gallery": {
+      const n = block.columns ?? 2;
+      const gap = block.gap ?? 10;
+      const w = Math.floor((contentWidth - gap * (n - 1)) / n);
+      const cell = (im: { src: string; href: string; alt: string } | undefined, i: number) => {
+        if (!im) return `<td class="col" width="${Math.floor(100 / n)}%"></td>`;
+        const tag = im.src
+          ? `<img src="${esc(im.src)}" alt="${esc(im.alt)}" width="${w}" style="display:block;width:100%;height:auto;border:0;border-radius:${block.radius ?? 10}px;">`
+          : ctx.canvas
+            ? placeholder(ctx, w, `Image ${i + 1}`)
+            : "";
+        const inner = im.href && im.src ? `<a href="${safeHref(im.href)}" target="_blank">${tag}</a>` : tag;
+        const col = i % n;
+        return `<td class="col" width="${Math.floor(100 / n)}%" valign="top" style="padding:0 ${col < n - 1 ? gap / 2 : 0}px ${gap}px ${col > 0 ? gap / 2 : 0}px;">${inner}</td>`;
+      };
+      const rowsHtml: string[] = [];
+      for (let r = 0; r < block.images.length; r += n) {
+        const cells = Array.from({ length: n }, (_, k) => cell(block.images[r + k], r + k)).join("");
+        rowsHtml.push(`<tr>${cells}</tr>`);
+      }
+      return row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rowsHtml.join("")}</table>`, pad(ctx, block, 12, 2));
+    }
+    case "buttons": {
+      const outline = (block.secondaryStyle ?? "outline") === "outline";
+      const a = buttonHtml(ctx, block.primary.label, block.primary.href, false, "primary.label");
+      const b = outline
+        ? buttonHtml(ctx, block.secondary.label, block.secondary.href, false, "secondary.label", { bg: theme.surface, fg: theme.accent, borderWidth: 2, borderColor: theme.accent })
+        : `<a href="${safeHref(block.secondary.href)}" target="_blank" style="display:inline-block;padding:${theme.buttonPadY}px 8px;font-family:${bFont()};font-size:${theme.buttonSize}px;font-weight:${theme.buttonWeight};color:${linkColor(theme)};text-decoration:underline;">${inlineField(ctx, "secondary.label", block.secondary.label)}</a>`;
+      const tableAlign = block.align === "left" ? "" : ` align="${block.align}"`;
+      return row(
+        `<table role="presentation" cellpadding="0" cellspacing="0" border="0"${tableAlign} style="${block.align === "center" ? "margin:0 auto;" : block.align === "right" ? "margin-left:auto;" : ""}"><tr><td style="padding:4px 6px 4px 0;">${a}</td><td style="padding:4px 0 4px 6px;">${b}</td></tr></table>`,
+        pad(ctx, block, 18, 18),
+      );
+    }
+    case "stats": {
+      const n = block.items.length;
+      const cells = block.items
+        .map(
+          (it, i) =>
+            `<td class="col" width="${Math.floor(100 / n)}%" align="center" valign="top" style="padding:0 6px;text-align:center;"><p style="margin:0;font-family:${hFont()};font-size:${block.valueSize ?? 34}px;line-height:1.1;font-weight:${theme.headingWeight};letter-spacing:${theme.headingSpacing}em;color:${block.color || theme.accent};">${inlineField(ctx, `items.${i}.value`, it.value)}</p><p style="margin:6px 0 0;font-family:${bFont()};font-size:13px;line-height:1.4;color:${block.labelColor || muted};">${inlineField(ctx, `items.${i}.label`, it.label)}</p></td>`,
+        )
+        .join("");
+      return row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${cells}</tr></table>`, pad(ctx, block, 20, 20));
+    }
+    case "review": {
+      const align = block.align ?? "center";
+      const r = Math.max(0, Math.min(5, Math.round(block.rating)));
+      const stars = `<span style="color:${block.starColor || "#F5B301"};">${"★".repeat(r)}</span><span style="color:${mix(theme.text, 0.18)};">${"★".repeat(5 - r)}</span>`;
+      const avatar = block.avatarUrl ? `<img src="${esc(block.avatarUrl)}" alt="" width="40" height="40" style="display:inline-block;width:40px;height:40px;border-radius:999px;vertical-align:middle;margin-right:10px;border:0;">` : "";
+      return row(
+        `<div style="${css({ background: block.cardBg, padding: block.cardBg ? "24px" : undefined, "border-radius": block.cardBg ? "16px" : undefined, "text-align": align })}">
+<p style="margin:0 0 12px;font-size:22px;letter-spacing:3px;line-height:1;">${stars}</p>
+<div style="margin:0 0 14px;font-family:${hFont()};font-size:19px;line-height:1.45;color:${theme.text};">${field(ctx, "text", block.text, true, linkColor(theme))}</div>
+<p style="margin:0;font-family:${bFont()};font-size:13px;font-weight:bold;color:${muted};">${avatar}${inlineField(ctx, "author", block.author)}</p>
+</div>`,
+        pad(ctx, block, 18, 18),
+      );
+    }
+    case "faq": {
+      const sep = block.separators !== false;
+      const items = block.items
+        .map(
+          (it, i) =>
+            `<div style="padding:16px 0;${sep && i > 0 ? `border-top:1px solid ${mix(theme.text, 0.1)};` : ""}"><p style="margin:0 0 6px;font-family:${hFont()};font-size:17px;line-height:1.3;font-weight:${theme.headingWeight};color:${block.qColor || theme.text};">${inlineField(ctx, `items.${i}.q`, it.q)}</p><div style="margin:0;font-family:${bFont()};font-size:${theme.bodySize - 1}px;line-height:${theme.bodyLineHeight};color:${bodyColor(theme)};">${field(ctx, `items.${i}.a`, it.a, true, linkColor(theme))}</div></div>`,
+        )
+        .join("");
+      return row(items, pad(ctx, block, 8, 8));
+    }
+    case "features": {
+      const ibg = block.iconBg || mix(theme.accent, 0.1);
+      const icon = (i: number, ic: string) => `<span style="display:inline-block;width:48px;height:48px;line-height:48px;border-radius:999px;background:${ibg};text-align:center;font-size:22px;">${inlineField(ctx, `items.${i}.icon`, ic)}</span>`;
+      const title = (i: number, t: string) => `<p style="margin:10px 0 4px;font-family:${hFont()};font-size:15px;line-height:1.3;font-weight:${theme.headingWeight};color:${theme.text};">${inlineField(ctx, `items.${i}.title`, t)}</p>`;
+      const desc = (i: number, t: string) => `<p style="margin:0;font-family:${bFont()};font-size:13px;line-height:1.5;color:${muted};">${inlineField(ctx, `items.${i}.text`, t)}</p>`;
+      if (block.layout === "list") {
+        const rows = block.items.map((it, i) => `<tr><td width="60" valign="top" style="padding:0 0 14px;">${icon(i, it.icon)}</td><td valign="middle" style="padding:0 0 14px;">${title(i, it.title).replace("margin:10px 0 4px", "margin:0 0 2px")}${desc(i, it.text)}</td></tr>`).join("");
+        return row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows}</table>`, pad(ctx, block, 16, 4));
+      }
+      const n = block.items.length;
+      const align = block.align ?? "center";
+      const cells = block.items.map((it, i) => `<td class="col" width="${Math.floor(100 / n)}%" valign="top" style="padding:0 8px;text-align:${align};">${icon(i, it.icon)}${title(i, it.title)}${desc(i, it.text)}</td>`).join("");
+      return row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${cells}</tr></table>`, pad(ctx, block, 20, 20));
+    }
+    case "countdown": {
+      const color = block.color || theme.text;
+      const boxBg = block.boxBg || mix(theme.text, 0.06);
+      const live = countdownParts(block.until, Date.now());
+      const units: Array<[CountdownUnit, string]> = [
+        ["days", "jours"],
+        ["hours", "heures"],
+        ["minutes", "minutes"],
+      ];
+      if (block.showSeconds) units.push(["seconds", "secondes"]);
+      const value = (u: CountdownUnit) => (ctx.canvas ? live[u] : `{{countdown_${u}|${block.until}}}`);
+      const cells = units
+        .map(
+          ([u, label]) =>
+            `<td align="center" style="padding:0 5px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="${boxBg}" style="background:${boxBg};border-radius:12px;width:68px;padding:12px 0 10px;"><p style="margin:0;font-family:${hFont()};font-size:32px;line-height:1;font-weight:${theme.headingWeight};color:${color};">${value(u)}</p><p style="margin:6px 0 0;font-family:${bFont()};font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:${mix(color, 0.6)};">${label}</p></td></tr></table></td>`,
+        )
+        .join("");
+      return row(
+        `<div style="${css({ background: block.bg, padding: block.bg ? "24px 12px" : undefined, "border-radius": block.bg ? "16px" : undefined, "text-align": "center" })}"><p style="margin:0 0 14px;font-family:${bFont()};font-size:13px;font-weight:bold;letter-spacing:0.14em;text-transform:uppercase;color:${color};">${inlineField(ctx, "title", block.title)}</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;"><tr>${cells}</tr></table></div>`,
+        pad(ctx, block, 18, 18),
+      );
+    }
+    case "event": {
+      const ac = block.accent || theme.accent;
+      const line = (emoji: string, path: string, v: string) => (v || ctx.canvas ? `<p style="margin:0 0 6px;font-family:${bFont()};font-size:15px;line-height:1.5;color:${bodyColor(theme)};">${emoji}&nbsp; ${inlineField(ctx, path, v)}</p>` : "");
+      return row(
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"${block.cardBg ? ` bgcolor="${block.cardBg}"` : ""} style="${css({ background: block.cardBg || mix(ac, 0.06), "border-radius": "16px", "border-left": `4px solid ${ac}` })}"><tr><td style="padding:22px 24px;">
+<p style="margin:0 0 6px;font-family:${bFont()};font-size:11px;font-weight:bold;letter-spacing:0.16em;text-transform:uppercase;color:${ac};">Événement</p>
+<p style="margin:0 0 14px;font-family:${hFont()};font-size:24px;line-height:1.2;font-weight:${theme.headingWeight};${theme.headingTransform === "uppercase" ? "text-transform:uppercase;" : ""}color:${theme.text};">${inlineField(ctx, "title", block.title)}</p>
+${line("📅", "date", block.date)}${line("🕒", "time", block.time)}${line("📍", "place", block.place)}
+<div style="height:12px;line-height:12px;font-size:0;">&nbsp;</div>
+${buttonHtml(ctx, block.cta, block.href, false, "cta", { bg: block.accent })}
+</td></tr></table>`,
+        pad(ctx, block, 14, 14),
+      );
+    }
+    case "survey": {
+      const color = block.color || theme.accent;
+      const href = (v: string) => {
+        const base = safeHref(block.href);
+        return `${base}${base.includes("?") ? "&" : "?"}note=${encodeURIComponent(v)}`;
+      };
+      const opts: Array<[string, string]> =
+        block.scale === "emoji"
+          ? [["1", "😞"], ["2", "🙁"], ["3", "😐"], ["4", "🙂"], ["5", "😍"]]
+          : block.scale === "nps"
+            ? Array.from({ length: 11 }, (_, i) => [String(i), String(i)] as [string, string])
+            : block.scale === "yesno"
+              ? [["oui", "Oui"], ["non", "Non"]]
+              : [["1", "★"], ["2", "★★"], ["3", "★★★"], ["4", "★★★★"], ["5", "★★★★★"]];
+      const cell = ([v, label]: [string, string]) => {
+        if (block.scale === "emoji") return `<td style="padding:0 4px;"><a href="${href(v)}" target="_blank" style="display:inline-block;font-size:34px;line-height:1;text-decoration:none;">${label}</a></td>`;
+        if (block.scale === "nps") return `<td style="padding:0 2px;"><a href="${href(v)}" target="_blank" style="display:inline-block;width:30px;line-height:34px;border-radius:8px;border:1px solid ${mix(color, 0.35)};font-family:${bFont()};font-size:13px;font-weight:bold;color:${color};text-align:center;text-decoration:none;">${label}</a></td>`;
+        if (block.scale === "yesno") return `<td style="padding:0 6px;"><a href="${href(v)}" target="_blank" style="display:inline-block;padding:12px 30px;border-radius:${Math.min(theme.radius, 999)}px;border:2px solid ${color};font-family:${bFont()};font-size:15px;font-weight:bold;color:${color};text-decoration:none;">${label}</a></td>`;
+        return `<td style="padding:0 0 6px;"><a href="${href(v)}" target="_blank" style="display:block;font-size:20px;letter-spacing:2px;color:${color};text-decoration:none;">${label}</a></td>`;
+      };
+      const stars = block.scale === "stars" || !block.scale;
+      const body = stars
+        ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">${opts.map((o) => `<tr>${cell(o)}</tr>`).reverse().join("")}</table>`
+        : `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;"><tr>${opts.map(cell).join("")}</tr></table>`;
+      const scaleLabels =
+        block.scale === "nps" || block.scale === "emoji"
+          ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:${block.scale === "nps" ? 374 : 240}px;margin:8px auto 0;"><tr><td style="font-family:${bFont()};font-size:11px;color:${muted};text-align:left;">${inlineField(ctx, "lowLabel", block.lowLabel ?? "")}</td><td style="font-family:${bFont()};font-size:11px;color:${muted};text-align:right;">${inlineField(ctx, "highLabel", block.highLabel ?? "")}</td></tr></table>`
+          : "";
+      return row(
+        `<div style="text-align:center;"><p style="margin:0 0 16px;font-family:${hFont()};font-size:20px;line-height:1.3;font-weight:${theme.headingWeight};color:${theme.text};">${inlineField(ctx, "question", block.question)}</p>${body}${scaleLabels}</div>`,
+        pad(ctx, block, 20, 20),
+      );
+    }
+    case "apps": {
+      const bg = block.color || "#000000";
+      const badge = (url: string, small: string, big: string, icon: string) =>
+        url.trim() && url.trim() !== "https://"
+          ? `<td style="padding:4px;"><a href="${safeHref(url)}" target="_blank" style="display:inline-block;background:${bg};border-radius:10px;padding:8px 16px 8px 14px;text-decoration:none;color:#FFFFFF;font-family:Helvetica,Arial,sans-serif;text-align:left;">${icon ? `<span style="font-size:20px;line-height:1;vertical-align:middle;">${icon}</span>&nbsp;` : ""}<span style="display:inline-block;vertical-align:middle;"><span style="display:block;font-size:9px;line-height:1.2;letter-spacing:0.04em;">${small}</span><span style="display:block;font-size:16px;line-height:1.15;font-weight:bold;">${big}</span></span></a></td>`
+          : "";
+      const cells = badge(block.iosUrl, "Télécharger dans", "l'App Store", "") + badge(block.androidUrl, "Disponible sur", "Google Play", "▶");
+      if (!cells) return ctx.canvas ? row(placeholder(ctx, 60, "Ajoutez les liens de vos applis"), pad(ctx, block, 12, 12)) : "";
+      return row(`<table role="presentation" cellpadding="0" cellspacing="0" border="0"${block.align === "left" ? "" : ` align="${block.align}"`} style="${block.align === "center" ? "margin:0 auto;" : block.align === "right" ? "margin-left:auto;" : ""}"><tr>${cells}</tr></table>`, pad(ctx, block, 16, 16));
+    }
+    case "menu": {
+      const color = block.color || theme.text;
+      const sep = block.separator ? `<span style="color:${mix(color, 0.3)};padding:0 4px;">·</span>` : "";
+      const links = block.links
+        .map(
+          (l, i) =>
+            `<a href="${safeHref(l.href)}" target="_blank" style="display:inline-block;padding:4px 10px;font-family:${bFont()};font-size:${block.fontSize ?? 13}px;font-weight:bold;${block.uppercase ? "text-transform:uppercase;letter-spacing:0.1em;" : ""}color:${color};text-decoration:none;">${inlineField(ctx, `links.${i}.label`, l.label)}</a>`,
+        )
+        .join(sep);
+      return row(`<div style="text-align:${block.align};">${links}</div>`, pad(ctx, block, 12, 12));
+    }
+    case "signature": {
+      const avatar = block.avatarUrl
+        ? `<img src="${esc(block.avatarUrl)}" alt="${esc(block.name)}" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:999px;border:0;">`
+        : `<div style="width:56px;height:56px;line-height:56px;border-radius:999px;background:${mix(theme.accent, 0.12)};text-align:center;font-family:${hFont()};font-size:20px;font-weight:bold;color:${theme.accent};">${esc((block.name.trim()[0] ?? "?").toUpperCase())}</div>`;
+      return row(
+        `<div style="margin:0 0 18px;font-family:${bFont()};font-size:${theme.bodySize}px;line-height:${theme.bodyLineHeight};color:${bodyColor(theme)};">${field(ctx, "text", block.text, true, linkColor(theme))}</div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td valign="middle" style="padding-right:14px;">${avatar}</td><td valign="middle"><p style="margin:0;font-family:${hFont()};font-size:16px;font-weight:bold;color:${block.nameColor || theme.text};">${inlineField(ctx, "name", block.name)}</p><p style="margin:2px 0 0;font-family:${bFont()};font-size:13px;color:${muted};">${inlineField(ctx, "role", block.role)}</p></td></tr></table>`,
+        pad(ctx, block, 16, 16),
+      );
+    }
   }
 }
 
@@ -1095,7 +1444,7 @@ export function setPath(block: Block, path: string, value: string): Block {
 }
 
 export function isRichPath(block: Block, path: string): boolean {
-  return RICH_FIELDS.has(`${block.type}.${path}`) || (block.type === "columns" && /^items\.\d+\.text$/.test(path));
+  return RICH_FIELDS.has(`${block.type}.${path}`) || (block.type === "columns" && /^items\.\d+\.text$/.test(path)) || (block.type === "faq" && /^items\.\d+\.a$/.test(path));
 }
 
 /** Short human summary of a block, for the layers panel. */
@@ -1127,6 +1476,34 @@ export function blockSummary(block: Block): string {
       return `${block.height} px`;
     case "html":
       return "Code personnalisé";
+    case "hero":
+    case "imageText":
+    case "event":
+      return block.title;
+    case "list":
+      return block.items.map((i) => strip(i.text)).join(" · ");
+    case "gallery":
+      return `${block.images.length} images`;
+    case "buttons":
+      return `${block.primary.label} · ${block.secondary.label}`;
+    case "stats":
+      return block.items.map((i) => i.value).join(" · ");
+    case "review":
+      return `${"★".repeat(block.rating)} ${block.author}`;
+    case "faq":
+      return block.items.map((i) => i.q).join(" · ");
+    case "features":
+      return block.items.map((i) => i.title).join(" · ");
+    case "countdown":
+      return formatUntil(block.until);
+    case "survey":
+      return block.question;
+    case "apps":
+      return "App Store · Google Play";
+    case "menu":
+      return block.links.map((l) => l.label).join(" · ");
+    case "signature":
+      return block.name;
     default:
       return "";
   }

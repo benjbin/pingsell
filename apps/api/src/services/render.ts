@@ -64,6 +64,12 @@ export function applyMergeTags(
         break;
       case 'unsubscribe_url':
         return space + unsubscribeUrl;
+      case 'countdown_days':
+      case 'countdown_hours':
+      case 'countdown_minutes':
+      case 'countdown_seconds':
+        // Countdown block: the fallback holds the target date, computed when the email is sent.
+        return space + countdownPart(name.slice(10) as CountdownUnit, fallback ?? '', Date.now());
       default:
         return match;
     }
@@ -72,6 +78,20 @@ export function applyMergeTags(
     if (!resolved) return '';
     return space + (mode === 'html' ? escapeHtml(resolved) : resolved);
   });
+}
+
+type CountdownUnit = 'days' | 'hours' | 'minutes' | 'seconds';
+
+export function countdownPart(unit: CountdownUnit, iso: string, now: number): string {
+  const end = Date.parse(iso);
+  let left = Number.isFinite(end) ? Math.max(0, Math.floor((end - now) / 1000)) : 0;
+  const days = Math.floor(left / 86400);
+  left -= days * 86400;
+  const hours = Math.floor(left / 3600);
+  left -= hours * 3600;
+  const minutes = Math.floor(left / 60);
+  const parts = { days, hours, minutes, seconds: left - minutes * 60 };
+  return String(parts[unit]).padStart(2, '0');
 }
 
 export function hasUnsubscribeTag(html: string): boolean {

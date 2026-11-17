@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import { AlignCenter, AlignLeft, AlignRight, CaseSensitive, CaseUpper, Italic, MonitorOff, MousePointerClick, Plus, RotateCcw, SmartphoneNfc } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, ArrowDown, ArrowUp, CaseSensitive, CaseUpper, Italic, MonitorOff, MousePointerClick, Plus, RotateCcw, SmartphoneNfc, Trash2 } from "lucide-react";
 import { cx } from "../../lib/format";
 import { Field, Input, Segmented, Select, Textarea } from "../ui/primitives";
 import { ImageField } from "./media";
-import { FONT_LIST, SOCIAL_LABELS, THEME_SWATCHES, type Align, type Block, type BlockStyle, type ColumnItem, type SocialNetwork, type Theme, type Transform } from "./model";
+import { FONT_LIST, SOCIAL_LABELS, formatUntil, THEME_SWATCHES, type Align, type Block, type BlockStyle, type ColumnItem, type SocialNetwork, type Theme, type Transform } from "./model";
 
 // --- Controls ---------------------------------------------------------------------------
 
@@ -191,6 +191,71 @@ const EDIT_TIP = (
   </Hint>
 );
 
+
+/** Editable list of sub-items (add, reorder, remove). */
+function ListEditor<T>({ items, onChange, make, render, title, min = 1, max = 8, addLabel = "Ajouter" }: { items: T[]; onChange: (items: T[]) => void; make: (n: number) => T; render: (item: T, set: (patch: Partial<T>) => void, i: number) => ReactNode; title: (item: T, i: number) => string; min?: number; max?: number; addLabel?: string }) {
+  const move = (i: number, d: number) => {
+    const next = [...items];
+    const [it] = next.splice(i, 1);
+    next.splice(i + d, 0, it);
+    onChange(next);
+  };
+  const iconBtn = "rounded-full p-1 text-slate-400 hover:bg-white hover:text-slate-900 disabled:opacity-30 dark:hover:bg-white/10 dark:hover:text-white";
+  return (
+    <div className="space-y-2">
+      {items.map((it, i) => (
+        <details key={i} open={items.length <= 3 && i === 0} className="group/item rounded-2xl bg-slate-50 ring-1 ring-slate-900/[0.06] dark:bg-white/[0.03] dark:ring-white/10">
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5">
+            <span className="min-w-0 flex-1 truncate font-display text-xs font-bold text-slate-900 dark:text-white">
+              <span className="mr-1.5 text-brand-500">{i + 1}.</span>
+              {title(it, i) || "Sans titre"}
+            </span>
+            <button type="button" className={iconBtn} disabled={i === 0} onClick={(e) => (e.preventDefault(), move(i, -1))} aria-label="Monter">
+              <ArrowUp className="size-3.5" />
+            </button>
+            <button type="button" className={iconBtn} disabled={i === items.length - 1} onClick={(e) => (e.preventDefault(), move(i, 1))} aria-label="Descendre">
+              <ArrowDown className="size-3.5" />
+            </button>
+            <button type="button" className={cx(iconBtn, "hover:text-red-600")} disabled={items.length <= min} onClick={(e) => (e.preventDefault(), onChange(items.filter((_, j) => j !== i)))} aria-label="Supprimer">
+              <Trash2 className="size-3.5" />
+            </button>
+          </summary>
+          <div className="space-y-3 px-3.5 pb-3.5">{render(it, (patch) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x))), i)}</div>
+        </details>
+      ))}
+      {items.length < max && (
+        <button type="button" onClick={() => onChange([...items, make(items.length + 1)])} className="flex w-full items-center justify-center gap-1.5 rounded-full py-2 font-display text-xs font-semibold text-brand-600 ring-1 ring-brand-500/30 ring-dashed hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-900/30">
+          <Plus className="size-3.5" /> {addLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Choice<V extends string>({ label, value, onChange, options }: { label: string; value: V; onChange: (v: V) => void; options: Array<{ value: V; label: string }> }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <Segmented value={value} onChange={onChange} options={options} />
+    </div>
+  );
+}
+
+function TextInput({ label, value, onChange, placeholder, hint }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; hint?: string }) {
+  return (
+    <Field label={label} hint={hint}>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+    </Field>
+  );
+}
+
+const toLocalInput = (iso: string) => {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
 // --- Block inspector ------------------------------------------------------------------
 
 const DEFAULT_PAD: Partial<Record<Block["type"], [number, number]>> = {
@@ -208,6 +273,21 @@ const DEFAULT_PAD: Partial<Record<Block["type"], [number, number]>> = {
   divider: [18, 18],
   html: [12, 12],
   footer: [28, 36],
+  hero: [72, 72],
+  imageText: [16, 16],
+  list: [10, 4],
+  gallery: [12, 2],
+  buttons: [18, 18],
+  stats: [20, 20],
+  review: [18, 18],
+  faq: [8, 8],
+  features: [20, 20],
+  countdown: [18, 18],
+  event: [14, 14],
+  survey: [20, 20],
+  apps: [16, 16],
+  menu: [12, 12],
+  signature: [16, 16],
 };
 
 type Setter = (patch: Record<string, unknown>) => void;
@@ -630,6 +710,341 @@ function BlockFields({ block, theme, set }: { block: Block; theme: Theme; set: S
             <Slider label="Taille" value={block.fontSize} inherit={12} min={9} max={18} onChange={(fontSize) => set({ fontSize })} />
             <ColorField label="Couleur du texte" value={block.color} onChange={(color) => set({ color })} allowEmpty />
             <ColorField label="Couleur des liens" value={block.linkColor} onChange={(linkColor) => set({ linkColor })} allowEmpty />
+          </Section>
+        </>
+      );
+    case "hero":
+      return (
+        <>
+          <Section title="Contenu">
+            {EDIT_TIP}
+            <ImageField label="Image de fond" value={block.imageUrl} onChange={(imageUrl) => set({ imageUrl })} />
+            <Toggle label="Afficher le bouton" checked={block.showCta !== false} onChange={(v) => set({ showCta: v ? undefined : false })} />
+            {block.showCta !== false && (
+              <>
+                <TextInput label="Texte du bouton" value={block.cta} onChange={(cta) => set({ cta })} />
+                <TextInput label="Lien du bouton" value={block.href} onChange={(href) => set({ href })} placeholder="https://" />
+              </>
+            )}
+            <AlignField value={block.align} onChange={(align) => set({ align })} />
+          </Section>
+          <Section title="Style">
+            <Slider label="Assombrir l'image" value={block.overlay} inherit={35} min={0} max={90} step={5} unit="%" onChange={(overlay) => set({ overlay })} />
+            <Slider label="Taille du titre" value={block.titleSize} inherit={40} min={20} max={72} onChange={(titleSize) => set({ titleSize })} />
+            <ColorField label="Couleur du texte" value={block.textColor} inherit="#FFFFFF" onChange={(textColor) => set({ textColor })} />
+            <ColorField label="Fond (sans image)" value={block.bg} inherit={theme.text} onChange={(bg) => set({ bg })} />
+            <Row>
+              <ColorField label="Bouton" value={block.buttonBg} inherit={theme.accent} onChange={(buttonBg) => set({ buttonBg })} />
+              <ColorField label="Texte bouton" value={block.buttonText} inherit={theme.accentText} onChange={(buttonText) => set({ buttonText })} />
+            </Row>
+            <Hint>La hauteur se règle dans « Espacement » (haut et bas).</Hint>
+          </Section>
+        </>
+      );
+    case "imageText":
+      return (
+        <>
+          <Section title="Contenu">
+            {EDIT_TIP}
+            <ImageField value={block.imageUrl} onChange={(imageUrl) => set({ imageUrl })} />
+            <Toggle label="Afficher le bouton" checked={block.showCta !== false} onChange={(v) => set({ showCta: v ? undefined : false })} />
+            {block.showCta !== false && (
+              <>
+                <TextInput label="Texte du bouton" value={block.cta} onChange={(cta) => set({ cta })} />
+                <TextInput label="Lien" value={block.href} onChange={(href) => set({ href })} placeholder="https://" />
+              </>
+            )}
+          </Section>
+          <Section title="Style">
+            <Choice label="Image" value={block.layout ?? "left"} onChange={(layout) => set({ layout })} options={[{ value: "left", label: "À gauche" }, { value: "right", label: "À droite" }]} />
+            <Choice label="Alignement vertical" value={block.valign ?? "middle"} onChange={(valign) => set({ valign })} options={[{ value: "top", label: "Haut" }, { value: "middle", label: "Centre" }]} />
+            <Slider label="Largeur de l'image" value={block.imageWidth} inherit={45} min={25} max={65} step={5} unit="%" onChange={(imageWidth) => set({ imageWidth })} />
+            <Slider label="Arrondi de l'image" value={block.imageRadius} inherit={12} min={0} max={40} onChange={(imageRadius) => set({ imageRadius })} />
+          </Section>
+        </>
+      );
+    case "list":
+      return (
+        <>
+          <Section title="Éléments">
+            <ListEditor items={block.items} onChange={(items) => set({ items })} make={() => ({ text: "Nouvel élément" })} title={(it) => it.text} max={15} render={(it, setIt) => <TextInput label="Texte" value={it.text} onChange={(text) => setIt({ text })} />} />
+          </Section>
+          <Section title="Style">
+            <div>
+              <Label>Puce</Label>
+              <Segmented
+                value={block.marker ?? "bullet"}
+                onChange={(marker) => set({ marker })}
+                options={[
+                  { value: "bullet", label: "●" },
+                  { value: "number", label: "1." },
+                  { value: "check", label: "✓" },
+                  { value: "arrow", label: "→" },
+                  { value: "star", label: "★" },
+                ]}
+              />
+            </div>
+            <ColorField label="Couleur des puces" value={block.markerColor} inherit={theme.accent} onChange={(markerColor) => set({ markerColor })} />
+            <ColorField label="Couleur du texte" value={block.color} inherit={theme.body || theme.text} onChange={(color) => set({ color })} />
+            <Slider label="Taille" value={block.fontSize} inherit={theme.bodySize} min={11} max={24} onChange={(fontSize) => set({ fontSize })} />
+            <Slider label="Espace entre éléments" value={block.gap} inherit={10} min={0} max={30} onChange={(gap) => set({ gap })} />
+          </Section>
+        </>
+      );
+    case "gallery":
+      return (
+        <>
+          <Section title="Images">
+            <ListEditor
+              items={block.images}
+              onChange={(images) => set({ images })}
+              make={() => ({ src: "", href: "", alt: "" })}
+              title={(it, i) => it.alt || (it.src ? it.src.split("/").pop() ?? "" : `Image ${i + 1} (vide)`)}
+              max={9}
+              addLabel="Ajouter une image"
+              render={(it, setIt) => (
+                <>
+                  <ImageField value={it.src} onChange={(src) => setIt({ src })} />
+                  <TextInput label="Lien au clic" value={it.href} onChange={(href) => setIt({ href })} placeholder="https://" />
+                  <TextInput label="Texte alternatif" value={it.alt} onChange={(alt) => setIt({ alt })} />
+                </>
+              )}
+            />
+          </Section>
+          <Section title="Style">
+            <Choice label="Colonnes" value={String(block.columns ?? 2) as "2" | "3"} onChange={(v) => set({ columns: Number(v) })} options={[{ value: "2", label: "2" }, { value: "3", label: "3" }]} />
+            <Slider label="Espacement" value={block.gap} inherit={10} min={0} max={30} onChange={(gap) => set({ gap })} />
+            <Slider label="Arrondi" value={block.radius} inherit={10} min={0} max={40} onChange={(radius) => set({ radius })} />
+          </Section>
+        </>
+      );
+    case "buttons":
+      return (
+        <>
+          <Section title="Contenu">
+            <TextInput label="Bouton principal" value={block.primary.label} onChange={(label) => set({ primary: { ...block.primary, label } })} />
+            <TextInput label="Lien principal" value={block.primary.href} onChange={(href) => set({ primary: { ...block.primary, href } })} placeholder="https://" />
+            <TextInput label="Bouton secondaire" value={block.secondary.label} onChange={(label) => set({ secondary: { ...block.secondary, label } })} />
+            <TextInput label="Lien secondaire" value={block.secondary.href} onChange={(href) => set({ secondary: { ...block.secondary, href } })} placeholder="https://" />
+          </Section>
+          <Section title="Style">
+            <AlignField value={block.align} onChange={(align) => set({ align })} />
+            <Choice label="Bouton secondaire" value={block.secondaryStyle ?? "outline"} onChange={(secondaryStyle) => set({ secondaryStyle })} options={[{ value: "outline", label: "Contour" }, { value: "text", label: "Lien" }]} />
+            <Hint>Couleurs, arrondi et taille suivent le style global (onglet Style).</Hint>
+          </Section>
+        </>
+      );
+    case "stats":
+      return (
+        <>
+          <Section title="Chiffres">
+            <ListEditor
+              items={block.items}
+              onChange={(items) => set({ items })}
+              make={() => ({ value: "100 %", label: "légende" })}
+              title={(it) => `${it.value} ${it.label}`}
+              max={4}
+              render={(it, setIt) => (
+                <>
+                  <TextInput label="Chiffre" value={it.value} onChange={(value) => setIt({ value })} />
+                  <TextInput label="Légende" value={it.label} onChange={(label) => setIt({ label })} />
+                </>
+              )}
+            />
+          </Section>
+          <Section title="Style">
+            <Slider label="Taille des chiffres" value={block.valueSize} inherit={34} min={18} max={64} onChange={(valueSize) => set({ valueSize })} />
+            <ColorField label="Couleur des chiffres" value={block.color} inherit={theme.accent} onChange={(color) => set({ color })} />
+            <ColorField label="Couleur des légendes" value={block.labelColor} onChange={(labelColor) => set({ labelColor })} allowEmpty />
+          </Section>
+        </>
+      );
+    case "review":
+      return (
+        <>
+          <Section title="Contenu">
+            {EDIT_TIP}
+            <Slider label="Note" value={block.rating} min={1} max={5} unit=" ★" onChange={(rating) => set({ rating: rating ?? 5 })} />
+            <TextInput label="Auteur" value={block.author} onChange={(author) => set({ author })} />
+            <ImageField label="Photo (optionnelle)" value={block.avatarUrl} onChange={(avatarUrl) => set({ avatarUrl })} />
+          </Section>
+          <Section title="Style">
+            <AlignField value={block.align ?? "center"} onChange={(align) => set({ align })} />
+            <ColorField label="Étoiles" value={block.starColor} inherit="#F5B301" onChange={(starColor) => set({ starColor })} />
+            <ColorField label="Fond de la carte" value={block.cardBg} onChange={(cardBg) => set({ cardBg })} allowEmpty />
+          </Section>
+        </>
+      );
+    case "faq":
+      return (
+        <>
+          <Section title="Questions">
+            <ListEditor
+              items={block.items}
+              onChange={(items) => set({ items })}
+              make={() => ({ q: "Nouvelle question ?", a: "La réponse." })}
+              title={(it) => it.q}
+              max={10}
+              addLabel="Ajouter une question"
+              render={(it, setIt) => (
+                <>
+                  <TextInput label="Question" value={it.q} onChange={(q) => setIt({ q })} />
+                  <Field label="Réponse" hint="Vous pouvez aussi l'écrire directement dans l'email.">
+                    <Textarea rows={3} value={it.a} onChange={(e) => setIt({ a: e.target.value })} />
+                  </Field>
+                </>
+              )}
+            />
+          </Section>
+          <Section title="Style">
+            <ColorField label="Couleur des questions" value={block.qColor} inherit={theme.text} onChange={(qColor) => set({ qColor })} />
+            <Toggle label="Lignes de séparation" checked={block.separators !== false} onChange={(v) => set({ separators: v ? undefined : false })} />
+          </Section>
+        </>
+      );
+    case "features":
+      return (
+        <>
+          <Section title="Avantages">
+            <ListEditor
+              items={block.items}
+              onChange={(items) => set({ items })}
+              make={() => ({ icon: "⭐", title: "Avantage", text: "Courte précision" })}
+              title={(it) => `${it.icon} ${it.title}`}
+              max={block.layout === "list" ? 8 : 4}
+              render={(it, setIt) => (
+                <>
+                  <Field label="Icône" hint="Un emoji : 🚚 ↩️ 🔒 🎁 🌱 ⭐ 💬 🇫🇷 ✨ 🏷️">
+                    <Input value={it.icon} onChange={(e) => setIt({ icon: e.target.value })} className="w-24 text-center text-lg" />
+                  </Field>
+                  <TextInput label="Titre" value={it.title} onChange={(title) => setIt({ title })} />
+                  <TextInput label="Texte" value={it.text} onChange={(text) => setIt({ text })} />
+                </>
+              )}
+            />
+          </Section>
+          <Section title="Style">
+            <Choice label="Disposition" value={block.layout ?? "row"} onChange={(layout) => set({ layout })} options={[{ value: "row", label: "En ligne" }, { value: "list", label: "En liste" }]} />
+            {block.layout !== "list" && <AlignField value={block.align ?? "center"} onChange={(align) => set({ align })} />}
+            <ColorField label="Fond des icônes" value={block.iconBg} onChange={(iconBg) => set({ iconBg })} allowEmpty />
+          </Section>
+        </>
+      );
+    case "countdown":
+      return (
+        <>
+          <Section title="Contenu">
+            <Field label="Fin de l'offre" hint={`Le temps restant est calculé au moment de l'envoi à chaque contact. ${formatUntil(block.until)}`}>
+              <Input type="datetime-local" value={toLocalInput(block.until)} onChange={(e) => e.target.value && set({ until: new Date(e.target.value).toISOString() })} />
+            </Field>
+            <TextInput label="Titre" value={block.title} onChange={(title) => set({ title })} />
+            <Toggle label="Afficher les secondes" checked={!!block.showSeconds} onChange={(v) => set({ showSeconds: v || undefined })} />
+          </Section>
+          <Section title="Style">
+            <ColorField label="Couleur des chiffres" value={block.color} inherit={theme.text} onChange={(color) => set({ color })} />
+            <ColorField label="Fond des cases" value={block.boxBg} onChange={(boxBg) => set({ boxBg })} allowEmpty />
+            <ColorField label="Fond du bloc" value={block.bg} onChange={(bg) => set({ bg })} allowEmpty />
+          </Section>
+        </>
+      );
+    case "event":
+      return (
+        <>
+          <Section title="Contenu">
+            <TextInput label="Nom de l'événement" value={block.title} onChange={(title) => set({ title })} />
+            <TextInput label="Date" value={block.date} onChange={(date) => set({ date })} placeholder="Samedi 6 décembre" />
+            <TextInput label="Horaires" value={block.time} onChange={(time) => set({ time })} placeholder="14 h – 19 h" />
+            <TextInput label="Lieu" value={block.place} onChange={(place) => set({ place })} placeholder="Adresse ou « En ligne »" />
+            <TextInput label="Texte du bouton" value={block.cta} onChange={(cta) => set({ cta })} />
+            <TextInput label="Lien d'inscription" value={block.href} onChange={(href) => set({ href })} placeholder="https://" />
+          </Section>
+          <Section title="Style">
+            <ColorField label="Couleur d'accent" value={block.accent} inherit={theme.accent} onChange={(accent) => set({ accent })} />
+            <ColorField label="Fond de la carte" value={block.cardBg} onChange={(cardBg) => set({ cardBg })} allowEmpty />
+          </Section>
+        </>
+      );
+    case "survey":
+      return (
+        <>
+          <Section title="Contenu">
+            <TextInput label="Question" value={block.question} onChange={(question) => set({ question })} />
+            <Choice
+              label="Type de réponse"
+              value={block.scale}
+              onChange={(scale) => set({ scale })}
+              options={[
+                { value: "stars", label: "Étoiles" },
+                { value: "emoji", label: "Emoji" },
+                { value: "nps", label: "0 à 10" },
+                { value: "yesno", label: "Oui/Non" },
+              ]}
+            />
+            <TextInput label="Page de réponse" value={block.href} onChange={(href) => set({ href })} placeholder="https://" hint="Chaque choix ouvre ce lien avec ?note=… (ex. un formulaire ou une page de remerciement)." />
+            {(block.scale === "nps" || block.scale === "emoji") && (
+              <Row>
+                <TextInput label="Légende basse" value={block.lowLabel ?? ""} onChange={(lowLabel) => set({ lowLabel })} />
+                <TextInput label="Légende haute" value={block.highLabel ?? ""} onChange={(highLabel) => set({ highLabel })} />
+              </Row>
+            )}
+          </Section>
+          <Section title="Style">
+            <ColorField label="Couleur" value={block.color} inherit={theme.accent} onChange={(color) => set({ color })} />
+          </Section>
+        </>
+      );
+    case "apps":
+      return (
+        <>
+          <Section title="Liens">
+            <TextInput label="App Store (iPhone)" value={block.iosUrl} onChange={(iosUrl) => set({ iosUrl })} placeholder="https://apps.apple.com/…" hint="Laissez vide pour masquer." />
+            <TextInput label="Google Play (Android)" value={block.androidUrl} onChange={(androidUrl) => set({ androidUrl })} placeholder="https://play.google.com/…" />
+          </Section>
+          <Section title="Style">
+            <AlignField value={block.align} onChange={(align) => set({ align })} />
+            <ColorField label="Couleur des badges" value={block.color} inherit="#000000" onChange={(color) => set({ color })} />
+          </Section>
+        </>
+      );
+    case "menu":
+      return (
+        <>
+          <Section title="Liens">
+            <ListEditor
+              items={block.links}
+              onChange={(links) => set({ links })}
+              make={() => ({ label: "Lien", href: "https://" })}
+              title={(it) => it.label}
+              max={7}
+              addLabel="Ajouter un lien"
+              render={(it, setIt) => (
+                <>
+                  <TextInput label="Libellé" value={it.label} onChange={(label) => setIt({ label })} />
+                  <TextInput label="Lien" value={it.href} onChange={(href) => setIt({ href })} placeholder="https://" />
+                </>
+              )}
+            />
+          </Section>
+          <Section title="Style">
+            <AlignField value={block.align} onChange={(align) => set({ align })} />
+            <Slider label="Taille" value={block.fontSize} inherit={13} min={10} max={20} onChange={(fontSize) => set({ fontSize })} />
+            <ColorField label="Couleur" value={block.color} inherit={theme.text} onChange={(color) => set({ color })} />
+            <Toggle label="Majuscules" checked={!!block.uppercase} onChange={(v) => set({ uppercase: v || undefined })} />
+            <Toggle label="Séparateurs « · »" checked={!!block.separator} onChange={(v) => set({ separator: v || undefined })} />
+          </Section>
+        </>
+      );
+    case "signature":
+      return (
+        <>
+          <Section title="Contenu">
+            {EDIT_TIP}
+            <ImageField label="Photo" value={block.avatarUrl} onChange={(avatarUrl) => set({ avatarUrl })} />
+            <TextInput label="Nom" value={block.name} onChange={(name) => set({ name })} />
+            <TextInput label="Fonction" value={block.role} onChange={(role) => set({ role })} />
+          </Section>
+          <Section title="Style">
+            <ColorField label="Couleur du nom" value={block.nameColor} inherit={theme.text} onChange={(nameColor) => set({ nameColor })} />
           </Section>
         </>
       );
