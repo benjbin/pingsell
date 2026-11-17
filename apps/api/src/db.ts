@@ -228,6 +228,69 @@ const MIGRATIONS: string[] = [
   CREATE INDEX idx_invitations_account ON invitations(account_id);
   CREATE UNIQUE INDEX idx_invitations_email ON invitations(account_id, email);
   `,
+  // v6 — push notifications to the merchant's own iOS / Android app (FCM, APNs, Expo).
+  `
+  CREATE TABLE push_config (
+    account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    app_key TEXT NOT NULL UNIQUE,
+    fcm TEXT,
+    apns TEXT,
+    expo TEXT,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE push_devices (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL,
+    token TEXT NOT NULL,
+    platform TEXT NOT NULL CHECK (platform IN ('ios','android')),
+    provider TEXT NOT NULL CHECK (provider IN ('fcm','apns','expo')),
+    app_version TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX idx_push_devices_token ON push_devices(account_id, token);
+  CREATE INDEX idx_push_devices_contact ON push_devices(contact_id);
+
+  CREATE TABLE push_campaigns (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    image_url TEXT,
+    url TEXT,
+    audience TEXT NOT NULL DEFAULT '{"type":"all"}',
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sending','sent')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    sent_at TEXT
+  );
+  CREATE INDEX idx_push_campaigns_account ON push_campaigns(account_id, created_at);
+
+  CREATE TABLE push_messages (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    push_campaign_id TEXT REFERENCES push_campaigns(id) ON DELETE CASCADE,
+    automation_id TEXT REFERENCES automations(id) ON DELETE SET NULL,
+    device_id TEXT NOT NULL REFERENCES push_devices(id) ON DELETE CASCADE,
+    contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    image_url TEXT,
+    url TEXT,
+    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sent','failed')),
+    error TEXT,
+    provider_id TEXT,
+    created_at TEXT NOT NULL,
+    sent_at TEXT,
+    opened_at TEXT
+  );
+  CREATE INDEX idx_push_messages_status ON push_messages(status, created_at);
+  CREATE INDEX idx_push_messages_campaign ON push_messages(push_campaign_id);
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

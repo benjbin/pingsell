@@ -2,6 +2,7 @@ import type { AppConfig } from './config.js';
 import { all, get, now, run, type DatabaseSync } from './db.js';
 import { finalizeCampaigns, queueCampaign } from './services/campaigns.js';
 import { processDueRuns } from './services/automations.js';
+import { finalizePushCampaigns, queuePushCampaigns, sendPushBatch } from './services/push.js';
 import { accountSender, markFailed, markSent } from './services/messages.js';
 import { htmlToText } from './services/render.js';
 import type { EmailProvider } from './services/mailer.js';
@@ -20,6 +21,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  *  3. advances due automation runs
  *  4. sends queued messages in rate-limited batches
  *  5. marks finished campaigns as `sent`
+ *  6. queues / sends push notifications (campaigns, automation steps, tests)
  */
 export class SendingWorker {
   private timer: NodeJS.Timeout | undefined;
@@ -64,8 +66,11 @@ export class SendingWorker {
         processDueRuns(this.db, this.config);
         const sent = await this.sendBatch();
         finalizeCampaigns(this.db);
+        queuePushCampaigns(this.db);
+        const pushed = await sendPushBatch(this.db, this.config, this.config.worker.batchSize);
+        finalizePushCampaigns(this.db);
         // Keep draining while there is a full batch of work pending.
-        if (sent >= this.config.worker.batchSize) this.rerun = true;
+        if (sent >= this.config.worker.batchSize || pushed >= this.config.worker.batchSize) this.rerun = true;
       } while (this.rerun && this.timer);
     } catch (err) {
       this.log.error(`[worker] ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);

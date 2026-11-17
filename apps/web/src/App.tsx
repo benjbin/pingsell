@@ -18,6 +18,7 @@ import { AutomationsPage } from "./pages/automations/AutomationsPage";
 import { AutomationEditorPage } from "./pages/automations/AutomationEditorPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { OutboxPage } from "./pages/OutboxPage";
+import { PushPage } from "./pages/PushPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ProfilePage } from "./pages/ProfilePage";
@@ -90,6 +91,7 @@ export function App() {
                 <Route path="automatisations" element={<AutomationsPage />} />
                 <Route path="automatisations/nouvelle" element={<AutomationEditorPage />} />
                 <Route path="automatisations/:id" element={<AutomationEditorPage />} />
+                <Route path="notifications" element={<PushPage />} />
                 <Route path="integrations" element={<IntegrationsPage />} />
                 <Route path="boite-envoi" element={<OutboxPage />} />
                 <Route path="parametres" element={<SettingsPage />} />

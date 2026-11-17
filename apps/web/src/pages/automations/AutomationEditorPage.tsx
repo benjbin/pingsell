@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  BellRing,
   Clock,
   Eye,
   EyeOff,
@@ -51,6 +52,25 @@ const keyed = (step: AutomationStep): KeyedStep => ({ key: `s${++keySeq}`, step 
 
 const newEmailStep = (): AutomationStep => ({ type: "email", subject: "", html: DEFAULT_EMAIL_HTML });
 const newWaitStep = (): AutomationStep => ({ type: "wait", hours: 24 });
+const newPushStep = (): AutomationStep => ({ type: "push", title: "", body: "", url: "" });
+
+type PushStep = Extract<AutomationStep, { type: "push" }>;
+
+function PushStepEditor({ step, onChange }: { step: PushStep; onChange: (s: PushStep) => void }) {
+  return (
+    <div className="space-y-3">
+      <Field label="Titre">
+        <Input maxLength={120} value={step.title} onChange={(e) => onChange({ ...step, title: e.target.value })} placeholder="{{first_name|Bonjour}}, votre panier vous attend" />
+      </Field>
+      <Field label="Texte">
+        <Textarea rows={2} maxLength={500} value={step.body} onChange={(e) => onChange({ ...step, body: e.target.value })} placeholder="Finalisez votre commande, la livraison est offerte." />
+      </Field>
+      <Field label="Lien à l'ouverture (optionnel)" hint="Envoyée sur tous les appareils du contact enregistrés dans votre application.">
+        <Input value={step.url ?? ""} onChange={(e) => onChange({ ...step, url: e.target.value })} placeholder="https://… ou monapp://panier" />
+      </Field>
+    </div>
+  );
+}
 
 function WaitStepEditor({ step, onChange }: { step: Extract<AutomationStep, { type: "wait" }>; onChange: (s: AutomationStep) => void }) {
   const [unit, setUnit] = useState<"hours" | "days">(() => (step.hours >= 24 && step.hours % 24 === 0 ? "days" : "hours"));
@@ -149,6 +169,9 @@ function InsertStep({ onInsert }: { onInsert: (s: AutomationStep) => void }) {
       <Button variant="secondary" size="sm" icon={Mail} onClick={() => onInsert(newEmailStep())}>
         Email
       </Button>
+      <Button variant="secondary" size="sm" icon={BellRing} onClick={() => onInsert(newPushStep())}>
+        Push
+      </Button>
     </div>
   );
 }
@@ -203,9 +226,10 @@ export function AutomationEditorPage() {
   function validate(): string | null {
     if (!name.trim()) return "Donnez un nom à l'automatisation";
     if (trigger === "tag_added" && !tag.trim()) return "Indiquez le tag qui déclenche l'automatisation";
-    if (!steps.some((s) => s.step.type === "email")) return "Ajoutez au moins une étape email";
+    if (!steps.some((s) => s.step.type === "email" || s.step.type === "push")) return "Ajoutez au moins une étape email ou push";
     for (const { step } of steps) {
       if (step.type === "email" && !step.subject.trim()) return "Chaque email doit avoir un objet";
+      if (step.type === "push" && (!step.title.trim() || !step.body.trim())) return "Chaque notification push doit avoir un titre et un texte";
       if (step.type === "wait" && !(step.hours > 0)) return "Chaque attente doit durer au moins 1 heure";
     }
     return null;
@@ -364,13 +388,15 @@ export function AutomationEditorPage() {
                     "flex size-8 items-center justify-center rounded-lg",
                     step.type === "email"
                       ? "bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300"
-                      : "bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300",
+                      : step.type === "push"
+                        ? "bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300"
+                        : "bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300",
                   )}
                 >
-                  {step.type === "email" ? <Mail className="size-4" /> : <Clock className="size-4" />}
+                  {step.type === "email" ? <Mail className="size-4" /> : step.type === "push" ? <BellRing className="size-4" /> : <Clock className="size-4" />}
                 </span>
                 <h3 className="flex-1 text-sm font-semibold text-slate-900 dark:text-white">
-                  Étape {index + 1} · {step.type === "email" ? "Envoyer un email" : "Attendre"}
+                  Étape {index + 1} · {step.type === "email" ? "Envoyer un email" : step.type === "push" ? "Notification push" : "Attendre"}
                 </h3>
                 <div className="flex gap-0.5">
                   <Button variant="ghost" size="sm" icon={ArrowUp} onClick={() => move(index, -1)} disabled={index === 0} aria-label="Monter" />
@@ -380,6 +406,8 @@ export function AutomationEditorPage() {
               </div>
               {step.type === "wait" ? (
                 <WaitStepEditor step={step} onChange={(s) => updateStep(key, s)} />
+              ) : step.type === "push" ? (
+                <PushStepEditor step={step} onChange={(s) => updateStep(key, s)} />
               ) : (
                 <EmailStepEditor step={step} onChange={(s) => updateStep(key, s)} brand={account?.name} />
               )}

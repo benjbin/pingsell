@@ -58,7 +58,7 @@ curl_exec($ch);`,
 };
 
 /** Minimal highlighting: comments, strings, keys. */
-function Line({ text }: { text: string }) {
+export function Line({ text }: { text: string }) {
   if (/^\s*(\/\/|#)/.test(text)) return <span className="text-slate-500">{text}</span>;
   const parts = text.split(/("(?:[^"\\]|\\.)*"|'[^']*'|`[^`]*`)/g);
   return (

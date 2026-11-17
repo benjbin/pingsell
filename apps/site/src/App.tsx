@@ -29,6 +29,7 @@ import { Hero } from "./sections/Hero";
 import { EditorDemo } from "./sections/EditorDemo";
 import { BrandShowcase } from "./sections/BrandShowcase";
 import { ApiSection } from "./sections/ApiSection";
+import { PushSection } from "./sections/PushSection";
 import { PricingSection } from "./sections/PricingSection";
 import { MagneticLink, useFinePointer } from "./sections/motion-kit";
 
@@ -37,6 +38,7 @@ const NAV = [
   ["Éditeur", "#editeur"],
   ["Shopify", "#shopify"],
   ["API", "#integration"],
+  ["Push", "#push"],
   ["Tarifs", "#tarifs"],
   ["FAQ", "#faq"],
 ] as const;
@@ -155,7 +157,7 @@ function Integrations() {
   const items = [
     [ShoppingBag, "Shopify", "Clients et commandes synchronisés"],
     [Code2, "API & back-office", "Branchez votre site ou votre CRM"],
-    [Smartphone, "App iOS & Android", "Vos chiffres dans la poche"],
+    [Smartphone, "App Missive iOS & Android", "Vos chiffres dans la poche"],
   ] as const;
   return (
     <section className="border-y border-slate-900/[0.07] bg-slate-50">
@@ -499,6 +501,7 @@ export function App() {
         <Personalisation />
         <Shopify />
         <ApiSection />
+        <PushSection />
         <Reports />
         <TeamMobile />
         <Why />

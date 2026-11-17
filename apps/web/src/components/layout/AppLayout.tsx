@@ -18,6 +18,7 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
       { to: "/", label: "Tableau de bord", end: true },
       { to: "/campagnes", label: "Campagnes" },
       { to: "/automatisations", label: "Automatisations" },
+      { to: "/notifications", label: "Notifications push" },
     ],
   },
   {

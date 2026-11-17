@@ -283,7 +283,8 @@ export type AutomationTrigger = "contact_created" | "tag_added" | "order_created
 
 export type AutomationStep =
   | { type: "wait"; hours: number }
-  | { type: "email"; subject: string; html: string };
+  | { type: "email"; subject: string; html: string }
+  | { type: "push"; title: string; body: string; url?: string | null; image_url?: string | null };
 
 export interface Automation {
   id: string;
@@ -294,6 +295,7 @@ export interface Automation {
   status: "active" | "paused";
   runs_active?: number;
   emails_sent?: number;
+  push_sent?: number;
   created_at: string;
   updated_at: string;
 }
@@ -372,3 +374,74 @@ export interface SavedTemplate {
   created_at: string;
   updated_at: string;
 }
+
+// --- Push notifications ---------------------------------------------------
+
+export type PushPlatform = "ios" | "android";
+export type PushProvider = "fcm" | "apns" | "expo";
+
+export interface PushConfig {
+  app_key: string;
+  mode: "log" | "live";
+  fcm: { configured: boolean; project_id?: string; client_email?: string };
+  apns: { configured: boolean; key_id?: string; team_id?: string; bundle_id?: string; production?: boolean };
+  expo: { configured: boolean; has_access_token?: boolean };
+  devices: {
+    total: number;
+    ios: number;
+    android: number;
+    linked: number;
+    by_provider: Record<PushProvider, number>;
+  };
+}
+
+export interface PushConfigInput {
+  /** Firebase service-account JSON as a string, or null to remove. */
+  fcm?: string | null;
+  apns?: { key_p8: string; key_id: string; team_id: string; bundle_id: string; production: boolean } | null;
+  expo?: { access_token?: string } | null;
+}
+
+export interface PushDevice {
+  id: string;
+  platform: PushPlatform;
+  provider: PushProvider;
+  token_preview: string;
+  contact_id: string | null;
+  contact_email: string | null;
+  app_version: string | null;
+  active: boolean;
+  created_at: string;
+  last_seen_at: string;
+}
+
+export type PushAudience = { type: "all" } | { type: "segment"; segment_id: string } | { type: "tag"; tag: string };
+
+export interface PushContent {
+  title: string;
+  body: string;
+  image_url?: string | null;
+  url?: string | null;
+}
+
+export interface PushCampaignStats {
+  total: number;
+  sent: number;
+  failed: number;
+  queued: number;
+  opened: number;
+  open_rate: number;
+}
+
+export interface PushCampaign extends PushContent {
+  id: string;
+  name: string;
+  audience: PushAudience;
+  status: "draft" | "sending" | "sent";
+  created_at: string;
+  updated_at: string;
+  sent_at: string | null;
+  stats: PushCampaignStats;
+}
+
+export type PushCampaignInput = PushContent & { name: string; audience: PushAudience };

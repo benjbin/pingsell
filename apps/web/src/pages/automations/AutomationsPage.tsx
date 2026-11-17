@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Clock, Mail, Pause, Play, Plus, Trash2, Workflow, Zap } from "lucide-react";
+import { BellRing, Clock, Mail, Pause, Play, Plus, Trash2, Workflow, Zap } from "lucide-react";
 import { api } from "../../lib/api";
 import { useAsync } from "../../lib/useAsync";
 import { TRIGGERS } from "../../lib/constants";
@@ -92,6 +92,7 @@ export function AutomationsPage() {
           {automations.data!.map((a) => {
             const emails = a.steps.filter((s) => s.type === "email").length;
             const waits = a.steps.filter((s) => s.type === "wait").length;
+            const pushes = a.steps.filter((s) => s.type === "push").length;
             return (
               <Card key={a.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                 <button onClick={() => navigate(`/automatisations/${a.id}`)} className="flex min-w-0 flex-1 items-start gap-4 text-left">
@@ -119,6 +120,11 @@ export function AutomationsPage() {
                       <span className="inline-flex items-center gap-1">
                         <Clock className="size-3.5" /> {waits} attente{waits > 1 ? "s" : ""}
                       </span>
+                      {pushes > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <BellRing className="size-3.5" /> {pushes} push
+                        </span>
+                      )}
                     </div>
                   </div>
                 </button>

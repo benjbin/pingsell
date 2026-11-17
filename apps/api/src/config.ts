@@ -39,6 +39,14 @@ export interface AppConfig {
   defaultFromEmail: string;
   shopifyApiKey?: string;
   shopifyApiSecret?: string;
+  push: {
+    /** 'log' = nothing leaves the machine (default in development), 'live' = real FCM / APNs / Expo calls. */
+    mode: 'log' | 'live';
+    fcmUrl: string;
+    apnsProductionUrl: string;
+    apnsSandboxUrl: string;
+    expoUrl: string;
+  };
   worker: {
     intervalMs: number;
     batchSize: number;
@@ -64,6 +72,13 @@ function loadConfig(): AppConfig {
     defaultFromEmail: str('MAIL_FROM_EMAIL', 'bonjour@missive.local'),
     shopifyApiKey: optional('SHOPIFY_API_KEY'),
     shopifyApiSecret: optional('SHOPIFY_API_SECRET'),
+    push: {
+      mode: str('PUSH_MODE', process.env.NODE_ENV === 'production' ? 'live' : 'log').toLowerCase() === 'live' ? 'live' : 'log',
+      fcmUrl: str('PUSH_FCM_URL', 'https://fcm.googleapis.com').replace(/\/+$/, ''),
+      apnsProductionUrl: str('PUSH_APNS_URL', 'https://api.push.apple.com').replace(/\/+$/, ''),
+      apnsSandboxUrl: str('PUSH_APNS_SANDBOX_URL', 'https://api.sandbox.push.apple.com').replace(/\/+$/, ''),
+      expoUrl: str('PUSH_EXPO_URL', 'https://exp.host/--/api/v2/push/send'),
+    },
     worker: {
       intervalMs: int('WORKER_INTERVAL_MS', 2000),
       batchSize: int('SEND_BATCH_SIZE', 50),

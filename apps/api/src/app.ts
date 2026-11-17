@@ -21,6 +21,7 @@ import { automationRoutes } from './routes/automations.js';
 import { templateRoutes, integrationRoutes, outboxRoutes, statsRoutes } from './routes/misc.js';
 import { trackingRoutes } from './routes/tracking.js';
 import { libraryRoutes, publicUploadRoutes } from './routes/library.js';
+import { pushAppRoutes, pushRoutes } from './routes/push.js';
 
 export const API_PREFIX = '/api/v1';
 
@@ -136,6 +137,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     async (api) => {
       await api.register(async (pub) => authRoutes(pub, deps));
       await api.register(async (pub) => invitationRoutes(pub, deps));
+      await api.register(async (pub) => pushAppRoutes(pub, deps));
       await api.register(async (priv) => {
         priv.addHook('preHandler', requireAuth);
         await accountRoutes(priv, deps);
@@ -150,6 +152,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         await integrationRoutes(priv, deps);
         await libraryRoutes(priv, deps);
         await teamRoutes(priv, deps);
+        await pushRoutes(priv, deps);
       });
     },
     { prefix: API_PREFIX },

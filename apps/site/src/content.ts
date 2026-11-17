@@ -55,6 +55,7 @@ export const PLANS: Plan[] = [
       "Automatisations : bienvenue, après achat, panier abandonné",
       "Chiffre d'affaires Shopify par campagne",
       "API et clés API",
+      "Notifications push vers votre app iOS et Android",
       "Jusqu'à 3 utilisateurs",
     ],
     cta: "Essayer Pro",
@@ -88,8 +89,9 @@ export const PLAN_TABLE: Array<[string, string | boolean, string | boolean, stri
   ["Segments et import CSV", true, true, true],
   ["Connexion Shopify", true, true, true],
   ["Rapports d'ouvertures et de clics", true, true, true],
-  ["App iOS et Android", true, true, true],
+  ["App Missive iOS et Android (pour gérer votre compte)", true, true, true],
   ["Automatisations", false, true, true],
+  ["Notifications push (votre app iOS / Android)", false, true, true],
   ["Chiffre d'affaires par campagne", false, true, true],
   ["API et clés API", false, true, true],
   ["Utilisateurs", "1", "3", "Illimités"],
@@ -149,6 +151,10 @@ export const FAQ: Array<{ q: string; a: string }> = [
   {
     q: "Ma boutique n'est pas sur Shopify, est-ce que ça marche quand même ?",
     a: "Oui. L'API Missive et les clés API permettent de brancher votre back-office ou votre site : ajout de contacts, événements, déclenchement d'automatisations.",
+  },
+  {
+    q: "Puis-je envoyer des notifications push à ma propre app ?",
+    a: "Oui, en Pro et Business. Votre app iOS ou Android (native, React Native, Flutter ou Expo) enregistre ses appareils auprès de Missive avec une clé publique d'app, et l'email relie chaque appareil à un contact. Missive envoie ensuite via Firebase Cloud Messaging, APNs ou Expo. Vous créez des campagnes push avec titre, texte, image et un lien profond qui ouvre la bonne page de l'app, et vous ajoutez une étape « Notification push » dans vos automatisations, à côté de vos emails. À ne pas confondre avec l'app Missive, qui sert à suivre votre compte depuis votre téléphone.",
   },
   {
     q: "Je viens d'un autre outil, comment récupérer mes contacts ?",

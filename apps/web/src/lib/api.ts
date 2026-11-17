@@ -31,6 +31,13 @@ import type {
   ShopifySyncResult,
   StatsOverview,
   TagCount,
+  PushCampaign,
+  PushCampaignInput,
+  PushConfig,
+  PushConfigInput,
+  PushContent,
+  PushDevice,
+  PushAudience,
 } from "./types";
 
 export const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:4000";
@@ -236,6 +243,22 @@ export const api = {
     remove: (id: string) => del(`/automations/${id}`),
     activate: (id: string) => post<unknown>(`/automations/${id}/activate`),
     pause: (id: string) => post<unknown>(`/automations/${id}/pause`),
+  },
+
+  push: {
+    config: () => get<PushConfig>("/push/config"),
+    saveConfig: (input: PushConfigInput) => put<PushConfig>("/push/config", input),
+    rotateAppKey: () => post<PushConfig>("/push/config/rotate-app-key"),
+    devices: (page = 1, limit = 50) => get<Paginated<PushDevice>>("/push/devices", { page, limit }),
+    removeDevice: (id: string) => del(`/push/devices/${id}`),
+    test: (deviceId: string, content: PushContent) => post<{ ok: boolean }>("/push/test", { device_id: deviceId, ...content }),
+    audienceCount: (audience: PushAudience) => post<{ devices: number }>("/push/audience-count", { audience }),
+    campaigns: () => get<Paginated<PushCampaign>>("/push/campaigns", { limit: 100 }).then((r) => r.data),
+    campaign: (id: string) => get<PushCampaign>(`/push/campaigns/${id}`),
+    createCampaign: (input: PushCampaignInput) => post<PushCampaign>("/push/campaigns", input),
+    updateCampaign: (id: string, input: Partial<PushCampaignInput>) => patch<PushCampaign>(`/push/campaigns/${id}`, input),
+    removeCampaign: (id: string) => del(`/push/campaigns/${id}`),
+    sendCampaign: (id: string) => post<PushCampaign>(`/push/campaigns/${id}/send`),
   },
 
   stats: {

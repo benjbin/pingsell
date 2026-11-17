@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { all, get, newId, now, parseJson, run, scalar, transaction, type DatabaseSync, type Row } from '../db.js';
 import { accountSender, createMessage } from './messages.js';
+import { queuePushForContact } from './push.js';
 
 export const TRIGGERS = ['contact_created', 'tag_added', 'order_created', 'cart_abandoned'] as const;
 export type Trigger = (typeof TRIGGERS)[number];
@@ -16,6 +17,13 @@ export const stepSchema = z.discriminatedUnion('type', [
     subject: z.string().trim().min(1).max(300),
     html: z.string().min(1).max(500_000),
     preheader: z.string().max(300).optional(),
+  }),
+  z.object({
+    type: z.literal('push'),
+    title: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(500),
+    url: z.string().trim().max(2000).nullable().optional(),
+    image_url: z.string().trim().url().max(2000).nullable().optional(),
   }),
 ]);
 export const stepsSchema = z.array(stepSchema).min(1).max(50);
@@ -47,6 +55,7 @@ export function automationStats(db: DatabaseSync, automationId: string) {
   return {
     runs_active: scalar(db, "SELECT COUNT(*) FROM automation_runs WHERE automation_id = ? AND status = 'pending'", automationId),
     emails_sent: scalar(db, "SELECT COUNT(*) FROM messages WHERE automation_id = ? AND status = 'sent'", automationId),
+    push_sent: scalar(db, "SELECT COUNT(*) FROM push_messages WHERE automation_id = ? AND status = 'sent'", automationId),
   };
 }
 
@@ -130,7 +139,7 @@ export function cancelRunsForContact(db: DatabaseSync, contactId: string): void 
 }
 
 /**
- * Advances due automation runs: consecutive email steps are queued immediately,
+ * Advances due automation runs: consecutive email / push steps are queued immediately,
  * a wait step reschedules the run. Paused automations keep their runs pending.
  */
 export function processDueRuns(db: DatabaseSync, config: AppConfig, limit = 200): number {
@@ -168,6 +177,11 @@ export function processDueRuns(db: DatabaseSync, config: AppConfig, limit = 200)
           nextRunAt = new Date(Date.now() + step.hours * 3_600_000).toISOString();
           waiting = true;
           break;
+        }
+        if (step.type === 'push') {
+          // Contacts without the app simply skip this step.
+          queuePushForContact(db, automation.account_id, contact.id, step, automation.id);
+          continue;
         }
         createMessage(db, config, {
           accountId: automation.account_id,
