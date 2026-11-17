@@ -52,16 +52,17 @@ export const FONTS: Record<Theme["font"], { label: string; heading: string; body
 };
 
 export const DEFAULT_THEME: Theme = {
-  background: "#F3F1EA",
+  background: "#F1F5F9",
   surface: "#FFFFFF",
-  text: "#0E0E0C",
-  accent: "#0E0E0C",
+  text: "#0F172A",
+  accent: "#2563EB",
   accentText: "#FFFFFF",
-  font: "serif",
-  radius: 999,
+  font: "sans",
+  radius: 12,
 };
 
 export const THEME_SWATCHES: Array<{ name: string; theme: Partial<Theme> }> = [
+  { name: "Bleu", theme: { background: "#F1F5F9", surface: "#FFFFFF", text: "#0F172A", accent: "#2563EB", accentText: "#FFFFFF" } },
   { name: "Encre", theme: { background: "#F3F1EA", surface: "#FFFFFF", text: "#0E0E0C", accent: "#0E0E0C", accentText: "#FFFFFF" } },
   { name: "Vermillon", theme: { background: "#FFF3EE", surface: "#FFFFFF", text: "#1A1A18", accent: "#FF4D1C", accentText: "#FFFFFF" } },
   { name: "Forêt", theme: { background: "#EEF2EC", surface: "#FFFFFF", text: "#16241B", accent: "#1F4D36", accentText: "#FFFFFF" } },

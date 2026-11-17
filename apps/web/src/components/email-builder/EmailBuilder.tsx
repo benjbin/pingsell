@@ -141,7 +141,7 @@ export function EmailBuilder({
   const canvasWidth = device === "desktop" ? 600 : 375;
 
   return (
-    <div className="grid grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-white/70 xl:grid-cols-[200px_minmax(0,1fr)_300px] dark:border-slate-800 dark:bg-slate-900/60">
+    <div className="grid grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs xl:grid-cols-[200px_minmax(0,1fr)_300px] dark:border-slate-800 dark:bg-slate-900">
       {/* Palette */}
       <aside className="border-b border-slate-200/80 p-4 xl:border-r xl:border-b-0 dark:border-slate-800">
         <p className="eyebrow mb-3">Blocs</p>
@@ -161,7 +161,7 @@ export function EmailBuilder({
                 onDragEnd={() => setDropIndex(null)}
                 onClick={() => insert(b.type)}
                 title={b.hint}
-                className="group flex cursor-grab items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] text-slate-700 ring-1 ring-transparent transition hover:bg-slate-950 hover:text-paper active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-paper dark:hover:text-slate-950"
+                className="group flex cursor-grab items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-slate-700 ring-1 ring-slate-200 transition hover:bg-brand-50 hover:text-brand-700 hover:ring-brand-200 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-brand-900/40 dark:hover:text-brand-200"
               >
                 <Icon className="size-4 shrink-0 text-slate-400 group-hover:text-brand-500" strokeWidth={1.5} />
                 {b.label}
@@ -178,7 +178,7 @@ export function EmailBuilder({
             onClick={() => setSelectedId(null)}
             className={cx(
               "mt-2 flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition",
-              !selected ? "text-brand-600 dark:text-brand-400" : "text-slate-500 hover:text-slate-950 dark:hover:text-white",
+              !selected ? "text-brand-600 dark:text-brand-400" : "text-slate-500 hover:text-slate-900 dark:hover:text-white",
             )}
           >
             <Palette className="size-3.5" /> Style global
@@ -187,7 +187,7 @@ export function EmailBuilder({
       </aside>
 
       {/* Canvas */}
-      <section className="min-w-0 bg-slate-950/[0.03] dark:bg-black/20">
+      <section className="min-w-0 bg-slate-50 dark:bg-slate-950/40">
         <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-2.5 dark:border-slate-800">
           <p className="eyebrow">Canevas · {design.blocks.length} blocs</p>
           <Segmented
@@ -215,7 +215,7 @@ export function EmailBuilder({
             style={{ width: canvasWidth, maxWidth: "100%", background: design.theme.surface, borderRadius: 20 }}
           >
             {design.blocks.length === 0 && (
-              <div className="px-8 py-20 text-center font-mono text-xs text-slate-400">Glissez un bloc ici, ou choisissez un modèle.</div>
+              <div className="px-8 py-20 text-center text-sm text-slate-400">Glissez un bloc ici, ou choisissez un modèle.</div>
             )}
             {design.blocks.map((block, index) => (
               <CanvasBlock
@@ -250,9 +250,9 @@ export function EmailBuilder({
       {/* Inspector */}
       <aside className="border-t border-slate-200/80 xl:border-t-0 xl:border-l dark:border-slate-800">
         <div className="flex items-center justify-between border-b border-slate-200/80 px-5 py-3 dark:border-slate-800">
-          <p className="display text-[22px] leading-none text-slate-950 dark:text-white">{selected ? LABELS[selected.type] : "Style global"}</p>
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">{selected ? LABELS[selected.type] : "Style global"}</p>
           {selected && (
-            <button type="button" onClick={() => setSelectedId(null)} className="rounded-full p-1 text-slate-400 hover:text-slate-950 dark:hover:text-white" aria-label="Désélectionner">
+            <button type="button" onClick={() => setSelectedId(null)} className="rounded-full p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white" aria-label="Désélectionner">
               <X className="size-4" />
             </button>
           )}
@@ -343,11 +343,11 @@ function CanvasBlock(props: {
           </span>
           <div
             className={cx(
-              "absolute top-2 right-2 z-20 flex items-center gap-0.5 rounded-full bg-ink p-1 text-paper shadow-lg transition-opacity",
+              "absolute top-2 right-2 z-20 flex items-center gap-0.5 rounded-lg bg-slate-900 p-1 text-white shadow-lg transition-opacity",
               selected ? "opacity-100" : "pointer-events-none opacity-0",
             )}
           >
-            <span className="px-2 font-mono text-[10px] tracking-wider text-white/60 uppercase">{LABELS[block.type]}</span>
+            <span className="px-2 text-[11px] font-medium text-white/70">{LABELS[block.type]}</span>
             <ToolBtn label="Monter" disabled={props.isFirst} onClick={props.onUp} icon={ArrowUp} />
             <ToolBtn label="Descendre" disabled={props.isLast} onClick={props.onDown} icon={ArrowDown} />
             <ToolBtn label="Dupliquer" onClick={props.onDuplicate} icon={Copy} />
@@ -405,7 +405,7 @@ function AlignPicker({ value, onChange }: { value: Align; onChange: (v: Align) =
 }
 
 function Hint({ children }: { children: ReactNode }) {
-  return <p className="font-mono text-[10.5px] leading-relaxed text-slate-400">{children}</p>;
+  return <p className="text-xs leading-relaxed text-slate-400">{children}</p>;
 }
 
 function BlockInspector({ block, onChange }: { block: Block; onChange: (patch: Partial<Block>) => void }) {
@@ -575,7 +575,7 @@ function ThemeInspector({ theme, onChange }: { theme: Theme; onChange: (patch: P
     <>
       <div>
         <p className="eyebrow mb-2">Ambiances</p>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-6 gap-1.5">
           {THEME_SWATCHES.map((s) => (
             <button
               key={s.name}
@@ -586,14 +586,14 @@ function ThemeInspector({ theme, onChange }: { theme: Theme; onChange: (patch: P
             >
               <span
                 className={cx(
-                  "relative size-10 overflow-hidden rounded-full ring-1 transition group-hover:scale-110",
-                  theme.accent === s.theme.accent && theme.background === s.theme.background ? "ring-2 ring-brand-500 ring-offset-2 ring-offset-paper dark:ring-offset-slate-900" : "ring-slate-300 dark:ring-slate-700",
+                  "relative size-8 overflow-hidden rounded-full ring-1 transition group-hover:scale-110",
+                  theme.accent === s.theme.accent && theme.background === s.theme.background ? "ring-2 ring-brand-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-900" : "ring-slate-300 dark:ring-slate-700",
                 )}
                 style={{ background: s.theme.background }}
               >
                 <span className="absolute right-0 bottom-0 size-5 rounded-tl-full" style={{ background: s.theme.accent }} />
               </span>
-              <span className="font-mono text-[9.5px] text-slate-500">{s.name}</span>
+              <span className="text-[10px] text-slate-500">{s.name}</span>
             </button>
           ))}
         </div>
@@ -648,7 +648,7 @@ function PresetsModal({ open, onClose, onPick, brand }: { open: boolean; onClose
               <span className="mt-1 h-3.5 w-14 rounded-full" style={{ background: d.theme.accent }} />
             </div>
             <div className="p-3">
-              <p className="display text-xl leading-none text-slate-950 group-hover:text-brand-500 dark:text-white">{p.name}</p>
+              <p className="text-sm font-semibold text-slate-900 group-hover:text-brand-600 dark:text-white">{p.name}</p>
               <p className="mt-1 text-xs text-slate-500">{p.description}</p>
             </div>
           </button>

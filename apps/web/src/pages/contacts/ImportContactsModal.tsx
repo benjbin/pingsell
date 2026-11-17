@@ -104,7 +104,7 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
       {result ? (
         <div className="flex flex-col items-center py-6 text-center">
           <CheckCircle2 className="size-12 text-emerald-500" />
-          <p className="mt-3 display text-[26px] leading-tight text-slate-950 dark:text-white">Import terminé</p>
+          <p className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">Import terminé</p>
           <div className="mt-4 grid w-full max-w-sm grid-cols-3 gap-3">
             {[
               { label: "Créés", value: result.created },
@@ -112,7 +112,7 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
               { label: "Erreurs", value: errorCount(result.errors) },
             ].map((s) => (
               <div key={s.label} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
-                <p className="display text-[34px] leading-none text-slate-950 tabular-nums dark:text-white">{s.value}</p>
+                <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{s.value}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{s.label}</p>
               </div>
             ))}

@@ -16,21 +16,20 @@ type Variant = "primary" | "accent" | "secondary" | "ghost" | "danger" | "outlin
 type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
-  primary:
-    "bg-slate-950 text-paper hover:bg-brand-500 hover:text-white dark:bg-paper dark:text-slate-950 dark:hover:bg-brand-500 dark:hover:text-white",
-  accent: "bg-brand-500 text-white hover:bg-slate-950 dark:hover:bg-paper dark:hover:text-slate-950",
+  primary: "bg-brand-500 text-white shadow-sm shadow-brand-500/20 hover:bg-brand-600 focus-visible:outline-brand-500",
+  accent: "bg-brand-500 text-white shadow-sm shadow-brand-500/20 hover:bg-brand-600 focus-visible:outline-brand-500",
   secondary:
-    "bg-transparent text-slate-900 ring-1 ring-inset ring-slate-300 hover:ring-slate-950 hover:bg-white/60 dark:text-slate-100 dark:ring-slate-700 dark:hover:ring-slate-300 dark:hover:bg-white/5",
+    "bg-white text-slate-700 shadow-xs ring-1 ring-inset ring-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800",
   outline:
-    "bg-transparent text-brand-600 ring-1 ring-inset ring-brand-300 hover:bg-brand-500 hover:text-white hover:ring-brand-500 dark:text-brand-400 dark:ring-brand-800",
-  ghost: "text-slate-600 hover:bg-slate-950/5 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white",
+    "bg-transparent text-brand-600 ring-1 ring-inset ring-brand-200 hover:bg-brand-50 dark:text-brand-400 dark:ring-brand-800 dark:hover:bg-brand-900/40",
+  ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white",
   danger: "bg-red-600 text-white hover:bg-red-700 focus-visible:outline-red-600",
 };
 
 const sizes: Record<Size, string> = {
-  sm: "h-8 px-3.5 text-xs gap-1.5",
-  md: "h-10 px-5 text-[13px] gap-2",
-  lg: "h-12 px-6 text-sm gap-2",
+  sm: "h-8 px-3 text-xs gap-1.5",
+  md: "h-9 px-4 text-sm gap-2",
+  lg: "h-11 px-5 text-sm gap-2",
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -50,8 +49,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type}
       disabled={disabled || loading}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center rounded-full font-medium tracking-[-0.01em] whitespace-nowrap transition-all duration-200 active:scale-[0.97]",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100",
+        "inline-flex shrink-0 items-center justify-center rounded-lg font-medium whitespace-nowrap transition-colors",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
         variants[variant],
         sizes[size],
         className,
@@ -70,7 +69,7 @@ export function Card({ className, children }: { className?: string; children: Re
   return (
     <div
       className={cx(
-        "rounded-2xl border border-slate-200 bg-white/70 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/60",
+        "rounded-xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900",
         className,
       )}
     >
@@ -91,10 +90,10 @@ export function CardHeader({
   className?: string;
 }) {
   return (
-    <div className={cx("flex flex-wrap items-end justify-between gap-3 border-b border-slate-200/80 px-6 pt-5 pb-4 dark:border-slate-800", className)}>
+    <div className={cx("flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800", className)}>
       <div className="min-w-0">
-        <h3 className="display text-[22px] leading-tight text-slate-950 dark:text-white">{title}</h3>
-        {description && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{description}</p>}
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
+        {description && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{description}</p>}
       </div>
       {action}
     </div>
@@ -104,19 +103,19 @@ export function CardHeader({
 // --- Badge ----------------------------------------------------------------
 
 const tones: Record<Tone, string> = {
-  brand: "text-brand-600 ring-brand-500/40 dark:text-brand-400 dark:ring-brand-400/40",
-  green: "text-emerald-700 ring-emerald-700/30 dark:text-emerald-400 dark:ring-emerald-400/30",
-  amber: "text-amber-700 ring-amber-600/40 dark:text-amber-400 dark:ring-amber-400/30",
-  red: "text-red-700 ring-red-600/30 dark:text-red-400 dark:ring-red-400/30",
-  slate: "text-slate-600 ring-slate-400/50 dark:text-slate-300 dark:ring-slate-600",
-  blue: "text-sky-700 ring-sky-600/30 dark:text-sky-400 dark:ring-sky-400/30",
+  brand: "bg-brand-50 text-brand-700 ring-brand-600/15 dark:bg-brand-900/40 dark:text-brand-300 dark:ring-brand-400/20",
+  green: "bg-emerald-50 text-emerald-700 ring-emerald-600/15 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-400/20",
+  amber: "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-400/20",
+  red: "bg-red-50 text-red-700 ring-red-600/15 dark:bg-red-900/30 dark:text-red-300 dark:ring-red-400/20",
+  slate: "bg-slate-100 text-slate-600 ring-slate-500/15 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-400/20",
+  blue: "bg-sky-50 text-sky-700 ring-sky-600/15 dark:bg-sky-900/30 dark:text-sky-300 dark:ring-sky-400/20",
 };
 
 export function Badge({ tone = "slate", children, dot, className }: { tone?: Tone; children: ReactNode; dot?: boolean; className?: string }) {
   return (
     <span
       className={cx(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-[10.5px] font-medium tracking-wider whitespace-nowrap uppercase ring-1 ring-inset",
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset",
         tones[tone],
         className,
       )}
@@ -129,7 +128,7 @@ export function Badge({ tone = "slate", children, dot, className }: { tone?: Ton
 
 export function TagChip({ tag, onRemove }: { tag: string; onRemove?: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-950/[0.06] px-2 py-0.5 font-mono text-[10.5px] text-slate-700 dark:bg-white/10 dark:text-slate-300">
+    <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
       #{tag}
       {onRemove && (
         <button type="button" onClick={onRemove} className="ml-0.5 rounded hover:text-brand-900 dark:hover:text-white" aria-label={`Retirer ${tag}`}>
@@ -143,9 +142,9 @@ export function TagChip({ tag, onRemove }: { tag: string; onRemove?: () => void 
 // --- Form controls --------------------------------------------------------
 
 const controlBase =
-  "block rounded-xl border-0 bg-white/80 px-3.5 text-sm text-slate-950 ring-1 ring-inset ring-slate-300/80 placeholder:text-slate-400 transition " +
-  "hover:ring-slate-400 focus:bg-white focus:ring-2 focus:ring-inset focus:ring-slate-950 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 " +
-  "dark:bg-white/[0.03] dark:text-slate-100 dark:ring-slate-700 dark:placeholder:text-slate-500 dark:hover:ring-slate-500 dark:focus:bg-white/[0.05] dark:focus:ring-slate-200 dark:disabled:bg-slate-900";
+  "block rounded-lg border-0 bg-white px-3 text-sm text-slate-900 shadow-xs ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 " +
+  "focus:ring-2 focus:ring-inset focus:ring-brand-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 " +
+  "dark:bg-slate-950 dark:text-slate-100 dark:ring-slate-700 dark:placeholder:text-slate-500 dark:disabled:bg-slate-900";
 
 /** Default width/height unless the caller sets its own (avoids conflicting utilities). */
 function sizing(className: string | undefined, height: string | null): string {
@@ -192,7 +191,7 @@ export function Field({
 }) {
   return (
     <div className={className}>
-      <label htmlFor={htmlFor} className="eyebrow mb-2 block">
+      <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
         {label}
       </label>
       {children}
@@ -204,7 +203,7 @@ export function Field({
 // --- Feedback -------------------------------------------------------------
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cx("animate-pulse rounded-lg bg-slate-950/[0.06] dark:bg-white/[0.06]", className)} />;
+  return <div className={cx("animate-pulse rounded-md bg-slate-200/70 dark:bg-slate-800", className)} />;
 }
 
 export function Spinner({ className }: { className?: string }) {
@@ -226,10 +225,10 @@ export function EmptyState({
 }) {
   return (
     <div className={cx("flex flex-col items-center justify-center px-6 py-14 text-center", className)}>
-      <div className="mb-5 flex size-14 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-400 dark:border-slate-700 dark:text-slate-500">
-        <Icon className="size-5" strokeWidth={1.5} />
+      <div className="mb-4 flex size-12 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
+        <Icon className="size-6" />
       </div>
-      <h3 className="display text-2xl text-slate-950 dark:text-white">{title}</h3>
+      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
       {description && <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">{description}</p>}
       {action && <div className="mt-5">{action}</div>}
     </div>
@@ -263,11 +262,11 @@ export function PageHeader({
   back?: ReactNode;
 }) {
   return (
-    <div className="mb-8 flex animate-rise flex-col gap-5 border-b border-slate-950/10 pb-7 sm:mb-10 sm:flex-row sm:items-end sm:justify-between dark:border-white/10">
+    <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         {back}
-        <h1 className="display text-[44px] leading-[0.95] text-slate-950 sm:text-[56px] dark:text-white">{title}</h1>
-        {description && <p className="mt-3 max-w-xl text-sm text-slate-500 dark:text-slate-400">{description}</p>}
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h1>
+        {description && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -288,18 +287,21 @@ export function StatCard({
   loading?: boolean;
 }) {
   return (
-    <Card className="group relative overflow-hidden p-6">
-      <div className="flex items-center justify-between gap-3">
-        <p className="eyebrow">{label}</p>
-        {Icon && <Icon className="size-4 text-slate-400 transition-colors group-hover:text-brand-500" strokeWidth={1.5} />}
+    <Card className="p-5">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
+        {Icon && (
+          <span className="flex size-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
+            <Icon className="size-[18px]" />
+          </span>
+        )}
       </div>
       {loading ? (
-        <Skeleton className="mt-5 h-12 w-28" />
+        <Skeleton className="mt-3 h-8 w-24" />
       ) : (
-        <p className="display mt-4 text-[56px] leading-none text-slate-950 tabular-nums dark:text-white">{value}</p>
+        <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{value}</p>
       )}
-      {hint && !loading && <p className="mt-3 font-mono text-[11px] text-slate-500 dark:text-slate-400">{hint}</p>}
-      <span className="absolute inset-x-0 bottom-0 h-px origin-left scale-x-0 bg-brand-500 transition-transform duration-500 group-hover:scale-x-100" />
+      {hint && !loading && <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
     </Card>
   );
 }
@@ -319,7 +321,7 @@ export function Pagination({
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(total, page * limit);
   return (
-    <div className="flex items-center justify-between gap-3 border-t border-slate-200/80 px-6 py-3 font-mono text-xs dark:border-slate-800">
+    <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm dark:border-slate-800">
       <p className="text-slate-500 dark:text-slate-400">
         <span className="font-medium text-slate-700 tabular-nums dark:text-slate-200">
           {from}–{to}
@@ -349,16 +351,16 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={cx("inline-flex rounded-full p-1 ring-1 ring-inset ring-slate-300/80 dark:ring-slate-700", className)}>
+    <div className={cx("inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800", className)}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cx(
-            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[11px] font-medium whitespace-nowrap transition",
+            "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap transition",
             value === o.value
-              ? "bg-slate-950 text-paper dark:bg-paper dark:text-slate-950"
+              ? "bg-white text-slate-900 shadow-xs dark:bg-slate-950 dark:text-white"
               : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200",
           )}
         >
@@ -374,7 +376,7 @@ export function Avatar({ text, className }: { text: string; className?: string }
   return (
     <span
       className={cx(
-        "inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-500 font-display text-base text-slate-950 italic",
+        "inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white",
         className,
       )}
     >
@@ -385,7 +387,7 @@ export function Avatar({ text, className }: { text: string; className?: string }
 
 export function TableSkeleton({ rows = 6, cols = 4 }: { rows?: number; cols?: number }) {
   return (
-    <div className="divide-y divide-slate-200/70 dark:divide-slate-800">
+    <div className="divide-y divide-slate-100 dark:divide-slate-800">
       {Array.from({ length: rows }).map((_, r) => (
         <div key={r} className="flex items-center gap-4 px-5 py-4">
           {Array.from({ length: cols }).map((__, c) => (

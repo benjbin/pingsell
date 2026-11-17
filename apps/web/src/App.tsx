@@ -36,7 +36,7 @@ function ApiUnreachable({ message, onRetry, onLogout }: { message: string; onRet
         <span className="mx-auto flex size-12 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400">
           <WifiOff className="size-6" />
         </span>
-        <h1 className="mt-4 display text-[26px] leading-tight text-slate-950 dark:text-white">API injoignable</h1>
+        <h1 className="mt-4 text-lg font-semibold text-slate-900 dark:text-white">API injoignable</h1>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{message}</p>
         <div className="mt-6 flex justify-center gap-2">
           <Button variant="secondary" onClick={onLogout}>

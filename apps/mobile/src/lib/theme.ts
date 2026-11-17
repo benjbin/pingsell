@@ -23,19 +23,19 @@ export interface Palette {
   infoSoft: string;
 }
 
-/** « Encre & Signal » : papier crème, noir d'encre, accent vermillon (même système que le back-office). */
+/** Thème SaaS : neutres slate, accent bleu #2563EB (même système que le back-office). */
 const light: Palette = {
   scheme: 'light',
-  background: '#F3F1EA',
+  background: '#F8FAFC',
   surface: '#FFFFFF',
-  surfaceMuted: '#EFEDE6',
-  border: '#E3E0D6',
-  text: '#0E0E0C',
-  textMuted: '#5B5850',
-  textSubtle: '#A29D90',
-  accent: '#FF4D1C',
-  accentSoft: '#FFE3D8',
-  accentText: '#E83C0B',
+  surfaceMuted: '#F1F5F9',
+  border: '#E2E8F0',
+  text: '#0F172A',
+  textMuted: '#475569',
+  textSubtle: '#94A3B8',
+  accent: '#2563EB',
+  accentSoft: '#DBEAFE',
+  accentText: '#1D4ED8',
   onAccent: '#FFFFFF',
   success: '#047857',
   successSoft: '#D1FAE5',
@@ -43,22 +43,22 @@ const light: Palette = {
   warningSoft: '#FEF3C7',
   danger: '#B91C1C',
   dangerSoft: '#FEE2E2',
-  info: '#0E0E0C',
-  infoSoft: '#EFEDE6',
+  info: '#0369A1',
+  infoSoft: '#E0F2FE',
 };
 
 const dark: Palette = {
   scheme: 'dark',
-  background: '#0E0E0C',
-  surface: '#181816',
-  surfaceMuted: '#282723',
-  border: '#282723',
-  text: '#F3F1EA',
-  textMuted: '#A29D90',
-  textSubtle: '#79746A',
-  accent: '#FF4D1C',
-  accentSoft: '#421005',
-  accentText: '#FF7148',
+  background: '#0B1220',
+  surface: '#0F172A',
+  surfaceMuted: '#1E293B',
+  border: '#1E293B',
+  text: '#F1F5F9',
+  textMuted: '#94A3B8',
+  textSubtle: '#64748B',
+  accent: '#3B82F6',
+  accentSoft: '#172554',
+  accentText: '#60A5FA',
   onAccent: '#FFFFFF',
   success: '#34D399',
   successSoft: '#064E3B',
@@ -66,8 +66,8 @@ const dark: Palette = {
   warningSoft: '#451A03',
   danger: '#F87171',
   dangerSoft: '#450A0A',
-  info: '#F3F1EA',
-  infoSoft: '#282723',
+  info: '#38BDF8',
+  infoSoft: '#0C4A6E',
 };
 
 export function useColors(): Palette {

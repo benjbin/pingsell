@@ -527,7 +527,7 @@ export function CampaignEditorPage() {
               {recipients == null ? (
                 <Skeleton className="h-7 w-16" />
               ) : (
-                <p className="display text-[34px] leading-none text-slate-950 tabular-nums dark:text-white">{formatNumber(recipients)}</p>
+                <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{formatNumber(recipients)}</p>
               )}
               <p className="text-sm text-slate-600 dark:text-slate-300">
                 destinataires abonnés · {selectedSegment ? `segment « ${selectedSegment.name} »` : "tous les abonnés"}

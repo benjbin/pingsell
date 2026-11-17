@@ -124,11 +124,11 @@ export function AutomationsPage() {
                 </button>
                 <div className="flex items-center gap-6 sm:gap-8">
                   <div className="text-center">
-                    <p className="display text-[34px] leading-none text-slate-950 tabular-nums dark:text-white">{formatNumber(a.runs_active)}</p>
+                    <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{formatNumber(a.runs_active)}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">en cours</p>
                   </div>
                   <div className="text-center">
-                    <p className="display text-[34px] leading-none text-slate-950 tabular-nums dark:text-white">{formatNumber(a.emails_sent)}</p>
+                    <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{formatNumber(a.emails_sent)}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">emails envoyés</p>
                   </div>
                   <div className="ml-auto flex gap-1">

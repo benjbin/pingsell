@@ -35,7 +35,7 @@ function page(reply: FastifyReply, status: number, title: string, body: string) 
 </head>
 <body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;color:#0f172a;">
   <main style="max-width:440px;margin:24px;padding:40px 32px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;text-align:center;box-shadow:0 1px 2px rgba(15,23,42,.04);">
-    <div style="width:48px;height:48px;margin:0 auto 20px;border-radius:50%;background:#FF4D1C;color:#0E0E0C;font-size:28px;line-height:46px;font-family:Georgia,serif;font-style:italic;">m</div>
+    <div style="width:48px;height:48px;margin:0 auto 20px;border-radius:12px;background:#2563EB;color:#fff;font-size:24px;line-height:48px;font-weight:800;">M</div>
     <h1 style="margin:0 0 12px;font-size:22px;line-height:30px;">${escapeHtml(title)}</h1>
     ${body}
   </main>

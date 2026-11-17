@@ -53,14 +53,14 @@ export function AiGeneratePanel({
   }
 
   return (
-    <div className="relative overflow-hidden rounded-xl grain bg-ink p-6 text-paper ring-1 ring-white/10">
+    <div className="relative overflow-hidden rounded-xl bg-brand-50/60 p-5 ring-1 ring-brand-100 dark:bg-brand-950/40 dark:ring-brand-900">
       <div className="mb-4 flex items-center gap-2">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-brand-500 text-white">
+        <span className="flex size-8 items-center justify-center rounded-lg bg-brand-500 text-white shadow-sm">
           <Sparkles className="size-4" />
         </span>
         <div>
-          <h3 className="display text-[24px] leading-none text-white">Partir d'un modèle</h3>
-          <p className="mt-1 text-xs text-white/50">Objet, pré-en-tête et HTML responsive en quelques secondes.</p>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Partir d'un modèle</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Objet, pré-en-tête et HTML responsive en quelques secondes.</p>
         </div>
       </div>
       <div className="space-y-3">
@@ -78,7 +78,7 @@ export function AiGeneratePanel({
                 key={idea}
                 type="button"
                 onClick={() => setPrompt(idea)}
-                className="rounded-full px-3 py-1 text-xs text-white/70 ring-1 ring-white/15 transition hover:bg-brand-500 hover:text-white hover:ring-brand-500"
+                className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-600 ring-1 ring-slate-200 transition hover:text-brand-700 hover:ring-brand-300 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700"
               >
                 {idea}
               </button>

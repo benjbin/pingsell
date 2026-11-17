@@ -10,13 +10,13 @@ export interface SeriesDef {
 
 /** Ink, signal vermilion, sand. "sent" flips to paper in dark mode (see useSeriesColor). */
 export const SERIES_COLORS = {
-  sent: "#0e0e0c",
-  opened: "#ff4d1c",
-  clicked: "#b59a62",
+  sent: "#94a3b8",
+  opened: "#2563eb",
+  clicked: "#10b981",
 };
 
-function themed(color: string, dark: boolean): string {
-  return dark && color.toLowerCase() === "#0e0e0c" ? "#efede6" : color;
+function themed(color: string, _dark: boolean): string {
+  return color;
 }
 
 /** Multi-series area chart, themed for light/dark. */
@@ -35,8 +35,8 @@ export function TimeAreaChart({
 }) {
   const { theme } = useTheme();
   const dark = theme === "dark";
-  const grid = dark ? "#282723" : "#e3e0d6";
-  const axis = dark ? "#79746a" : "#a29d90";
+  const grid = dark ? "#1e293b" : "#eef2f7";
+  const axis = dark ? "#64748b" : "#94a3b8";
 
   return (
     <div style={{ height }} className="w-full">
@@ -45,39 +45,34 @@ export function TimeAreaChart({
           <defs>
             {series.map((s) => (
               <linearGradient key={s.key} id={`grad-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={themed(s.color, dark)} stopOpacity={s.key === "sent" ? 0.06 : 0.18} />
+                <stop offset="0%" stopColor={themed(s.color, dark)} stopOpacity={0.18} />
                 <stop offset="100%" stopColor={themed(s.color, dark)} stopOpacity={0} />
               </linearGradient>
             ))}
           </defs>
-          <CartesianGrid stroke={grid} strokeDasharray="2 4" vertical={false} />
+          <CartesianGrid stroke={grid} vertical={false} />
           <XAxis
             dataKey={xKey}
             tickFormatter={(v: string) => (formatX ? formatX(v) : v)}
-            tick={{ fill: axis, fontSize: 10.5, fontFamily: "Geist Mono, monospace" }}
+            tick={{ fill: axis, fontSize: 12 }}
             axisLine={false}
             tickLine={false}
             minTickGap={24}
           />
-          <YAxis tick={{ fill: axis, fontSize: 10.5, fontFamily: "Geist Mono, monospace" }} axisLine={false} tickLine={false} allowDecimals={false} width={48} />
+          <YAxis tick={{ fill: axis, fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} width={48} />
           <Tooltip
             labelFormatter={(v) => (formatX ? formatX(String(v)) : String(v))}
             formatter={(value, name) => [formatNumber(Number(value)), String(name)]}
-            cursor={{ stroke: dark ? "#3f3d38" : "#cfcabd", strokeDasharray: "2 3" }}
             contentStyle={{
-              borderRadius: 14,
-              border: "none",
-              background: dark ? "#efede6" : "#0e0e0c",
-              color: dark ? "#0e0e0c" : "#efede6",
-              boxShadow: "0 12px 32px rgba(14,14,12,0.25)",
+              borderRadius: 12,
+              border: `1px solid ${dark ? "#334155" : "#e2e8f0"}`,
+              background: dark ? "#0f172a" : "#ffffff",
+              boxShadow: "0 8px 24px rgba(15,23,42,0.08)",
               fontSize: 12,
-              fontFamily: "Geist Mono, monospace",
-              padding: "10px 12px",
             }}
-            itemStyle={{ color: dark ? "#0e0e0c" : "#efede6", padding: 0 }}
-            labelStyle={{ color: dark ? "#79746a" : "#a29d90", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.12em", fontSize: 10 }}
+            labelStyle={{ color: dark ? "#e2e8f0" : "#0f172a", fontWeight: 600, marginBottom: 4 }}
           />
-          <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 11, paddingTop: 12, fontFamily: "Geist Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em" }} />
+          <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
           {series.map((s) => (
             <Area
               key={s.key}
@@ -85,7 +80,7 @@ export function TimeAreaChart({
               dataKey={s.key}
               name={s.label}
               stroke={themed(s.color, dark)}
-              strokeWidth={s.key === "opened" ? 2.25 : 1.5}
+              strokeWidth={2}
               fill={`url(#grad-${s.key})`}
               dot={false}
               activeDot={{ r: 4, strokeWidth: 0 }}

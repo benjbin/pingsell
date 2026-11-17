@@ -118,7 +118,7 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
           <div className="flex items-start gap-4">
             <Avatar text={initials(c)} className="size-12 text-sm" />
             <div className="min-w-0 flex-1">
-              <p className="truncate display text-[26px] leading-tight text-slate-950 dark:text-white">{fullName(c)}</p>
+              <p className="truncate text-lg font-semibold text-slate-900 dark:text-white">{fullName(c)}</p>
               <p className="truncate text-sm text-slate-500 dark:text-slate-400">{c.email}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge tone={CONTACT_STATUS[c.status]?.tone} dot>

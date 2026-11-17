@@ -84,7 +84,7 @@ export function SegmentsPage() {
               </div>
               <div className="mt-5 flex items-end justify-between">
                 <div>
-                  <p className="flex items-center gap-1.5 display text-[34px] leading-none text-slate-950 tabular-nums dark:text-white">
+                  <p className="flex items-center gap-1.5 text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">
                     <Users className="size-4 text-slate-400" />
                     {formatNumber(s.count)}
                   </p>
