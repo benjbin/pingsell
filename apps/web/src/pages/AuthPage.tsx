@@ -164,7 +164,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
 
           {!isLogin && (
             <ul className="mt-6 space-y-2 text-sm text-slate-600 dark:text-slate-400">
-              {["5 000 emails offerts chaque mois", "Sans carte bancaire", "Shopify branché en deux minutes"].map((t) => (
+              {["5 000 emails offerts chaque mois", "Sans carte bancaire", "Branché sur votre site en deux minutes"].map((t) => (
                 <li key={t} className="flex items-center gap-2.5">
                   <Check className="size-4 text-brand-500" strokeWidth={2.5} />
                   {t}
@@ -244,7 +244,7 @@ function StoryPanel() {
       <div className="relative grid grid-cols-3 gap-6 border-t border-white/15 pt-6">
         {[
           { n: "01", t: "Email et push au même endroit" },
-          { n: "02", t: "Shopify et paniers abandonnés" },
+          { n: "02", t: "Votre site et ses paniers abandonnés" },
           { n: "03", t: "Le revenu de chaque message" },
         ].map((f) => (
           <div key={f.n}>
