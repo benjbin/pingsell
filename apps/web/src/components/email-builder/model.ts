@@ -52,22 +52,22 @@ export const FONTS: Record<Theme["font"], { label: string; heading: string; body
 };
 
 export const DEFAULT_THEME: Theme = {
-  background: "#F1F5F9",
+  background: "#EEF2F8",
   surface: "#FFFFFF",
-  text: "#0F172A",
-  accent: "#2563EB",
+  text: "#0B214A",
+  accent: "#145CFF",
   accentText: "#FFFFFF",
   font: "sans",
   radius: 12,
 };
 
 export const THEME_SWATCHES: Array<{ name: string; theme: Partial<Theme> }> = [
-  { name: "Bleu", theme: { background: "#F1F5F9", surface: "#FFFFFF", text: "#0F172A", accent: "#2563EB", accentText: "#FFFFFF" } },
+  { name: "Neokrome", theme: { background: "#EEF2F8", surface: "#FFFFFF", text: "#0B214A", accent: "#145CFF", accentText: "#FFFFFF" } },
   { name: "Encre", theme: { background: "#F3F1EA", surface: "#FFFFFF", text: "#0E0E0C", accent: "#0E0E0C", accentText: "#FFFFFF" } },
   { name: "Vermillon", theme: { background: "#FFF3EE", surface: "#FFFFFF", text: "#1A1A18", accent: "#FF4D1C", accentText: "#FFFFFF" } },
   { name: "Forêt", theme: { background: "#EEF2EC", surface: "#FFFFFF", text: "#16241B", accent: "#1F4D36", accentText: "#FFFFFF" } },
   { name: "Océan", theme: { background: "#EDF2F7", surface: "#FFFFFF", text: "#0F1E2E", accent: "#1D4ED8", accentText: "#FFFFFF" } },
-  { name: "Nuit", theme: { background: "#0E0E0C", surface: "#181816", text: "#F3F1EA", accent: "#C9B48A", accentText: "#0E0E0C" } },
+  { name: "Nuit", theme: { background: "#071733", surface: "#0B214A", text: "#FFFFFF", accent: "#145CFF", accentText: "#FFFFFF" } },
 ];
 
 // --- Factories --------------------------------------------------------------

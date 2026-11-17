@@ -1,80 +1,84 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
-import {
-  BarChart3,
-  Filter,
-  Inbox,
-  LogOut,
-  Mail,
-  Menu,
-  Moon,
-  Plug,
-  Send,
-  Settings,
-  Sun,
-  Users,
-  Workflow,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { LogOut, Menu, Moon, Sun, X } from "lucide-react";
 import { useAuth } from "../../lib/auth";
 import { useTheme } from "../../lib/theme";
 import { cx, formatNumber } from "../../lib/format";
-import { Avatar } from "../ui/primitives";
 
 interface NavItem {
   to: string;
   label: string;
-  icon: LucideIcon;
   end?: boolean;
 }
 
-const NAV: Array<{ section?: string; items: NavItem[] }> = [
+const NAV: Array<{ section: string; items: NavItem[] }> = [
   {
+    section: "Studio",
     items: [
-      { to: "/", label: "Tableau de bord", icon: BarChart3, end: true },
-      { to: "/campagnes", label: "Campagnes", icon: Send },
-      { to: "/automatisations", label: "Automatisations", icon: Workflow },
-      { to: "/contacts", label: "Contacts", icon: Users },
-      { to: "/segments", label: "Segments", icon: Filter },
+      { to: "/", label: "Tableau de bord", end: true },
+      { to: "/campagnes", label: "Campagnes" },
+      { to: "/automatisations", label: "Automatisations" },
     ],
   },
   {
-    section: "Configuration",
+    section: "Audience",
     items: [
-      { to: "/integrations", label: "Intégrations", icon: Plug },
-      { to: "/boite-envoi", label: "Boîte d'envoi", icon: Inbox },
-      { to: "/parametres", label: "Paramètres", icon: Settings },
+      { to: "/contacts", label: "Contacts" },
+      { to: "/segments", label: "Segments" },
+    ],
+  },
+  {
+    section: "Réglages",
+    items: [
+      { to: "/integrations", label: "Intégrations" },
+      { to: "/boite-envoi", label: "Boîte d'envoi" },
+      { to: "/parametres", label: "Paramètres" },
     ],
   },
 ];
 
-export function Logo({ className }: { className?: string; tone?: "auto" | "light" }) {
+/** Geometric cube mark: blue top facet, white + soft-blue sides. */
+export function LogoMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={cx("size-8", className)} aria-hidden>
+      <path d="M16 3 28 10 16 17 4 10Z" fill="#145CFF" />
+      <path d="M4 10 16 17V30L4 23Z" fill="currentColor" />
+      <path d="M28 10 16 17V30L28 23Z" fill="#4D82FF" />
+    </svg>
+  );
+}
+
+/** Wordmark. `tone` controls the text colour. */
+export function Logo({ className, tone = "auto" }: { className?: string; tone?: "auto" | "light" }) {
+  const color = tone === "light" ? "text-white" : "text-slate-900 dark:text-white";
   return (
     <div className={cx("flex items-center gap-2.5", className)}>
-      <span className="flex size-8 items-center justify-center rounded-lg bg-brand-500 text-white shadow-sm shadow-brand-500/30">
-        <Mail className="size-4" />
+      <LogoMark className={color} />
+      <span className={cx("font-display text-[21px] leading-none font-extrabold tracking-[-0.03em] uppercase", color)}>
+        Missive<span className="text-brand-500">.</span>
       </span>
-      <span className="text-[17px] font-semibold tracking-tight text-slate-900 dark:text-white">Missive</span>
     </div>
   );
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { account, usage, logout } = useAuth();
+  // Visual quota: a soft monthly reference so the bar means something at a glance.
   const quota = 10000;
   const pct = usage ? Math.min(100, (usage.emails_sent_month / quota) * 100) : 0;
 
   return (
-    <div className="flex h-full flex-col bg-white dark:bg-slate-900">
-      <div className="flex h-16 items-center px-5">
-        <Logo />
+    <div className="flex h-full flex-col bg-slate-900 text-white">
+      <div className="flex h-20 items-center px-6">
+        <Logo tone="light" />
       </div>
 
-      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-3">
-        {NAV.map((group, i) => (
-          <div key={i}>
-            {group.section && <p className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">{group.section}</p>}
+      <nav className="flex-1 space-y-8 overflow-y-auto px-4 pt-4 pb-6">
+        {NAV.map((group, gi) => (
+          <div key={group.section}>
+            <p className="mb-3 px-3 font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/40 uppercase">
+              {String(gi + 1).padStart(2, "0")} — {group.section}
+            </p>
             <ul className="space-y-0.5">
               {group.items.map((item) => (
                 <li key={item.to}>
@@ -84,24 +88,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                     onClick={onNavigate}
                     className={({ isActive }) =>
                       cx(
-                        "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                        isActive
-                          ? "bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-200"
-                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white",
+                        "group relative flex items-center rounded-full px-4 py-2.5 font-display text-[14.5px] font-medium transition-colors duration-300",
+                        isActive ? "bg-brand-500 text-white" : "text-white/60 hover:bg-white/[0.06] hover:text-white",
                       )
                     }
                   >
-                    {({ isActive }) => (
-                      <>
-                        <item.icon
-                          className={cx(
-                            "size-[18px]",
-                            isActive ? "text-brand-500 dark:text-brand-300" : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300",
-                          )}
-                        />
-                        {item.label}
-                      </>
-                    )}
+                    {item.label}
                   </NavLink>
                 </li>
               ))}
@@ -111,33 +103,37 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       {usage && (
-        <div className="mx-3 mb-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/50">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Emails ce mois</span>
-            <span className="text-slate-500 tabular-nums dark:text-slate-400">
-              {formatNumber(usage.emails_sent_month)} / {formatNumber(quota)}
-            </span>
+        <div className="mx-4 mb-4 rounded-[20px] bg-white/[0.06] p-5">
+          <div className="flex items-baseline justify-between">
+            <p className="font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/50 uppercase">Ce mois</p>
+            <p className="text-[11px] text-white/50">{formatNumber(usage.contacts)} contacts</p>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+          <p className="mt-3 font-display text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
+            {formatNumber(usage.emails_sent_month)}
+            <span className="ml-1.5 font-sans text-xs font-medium tracking-normal text-white/50">emails</span>
+          </p>
+          <div className="mt-4 h-1 overflow-hidden rounded-full bg-white/10">
             <div className="h-full rounded-full bg-brand-500 transition-all duration-700" style={{ width: `${Math.max(2, pct)}%` }} />
           </div>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{formatNumber(usage.contacts)} contacts · facturé au volume</p>
+          <p className="mt-2.5 text-[11px] text-white/50">Facturé au volume d'emails</p>
         </div>
       )}
 
-      <div className="flex items-center gap-3 border-t border-slate-200 px-4 py-3 dark:border-slate-800">
-        <Avatar text={(account?.name ?? "M").slice(0, 2).toUpperCase()} />
+      <div className="flex items-center gap-3 border-t border-white/10 px-5 py-4">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white font-display text-base font-extrabold text-slate-900">
+          {(account?.name ?? "M").slice(0, 1).toUpperCase()}
+        </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{account?.name}</p>
-          <p className="truncate text-xs text-slate-500 dark:text-slate-400">{account?.email}</p>
+          <p className="truncate text-sm font-semibold text-white">{account?.name}</p>
+          <p className="truncate text-[11px] text-white/50">{account?.email}</p>
         </div>
         <button
           onClick={logout}
-          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          className="rounded-full p-2 text-white/50 transition hover:bg-white/10 hover:text-white"
           title="Se déconnecter"
           aria-label="Se déconnecter"
         >
-          <LogOut className="size-4" />
+          <LogOut className="size-4" strokeWidth={1.5} />
         </button>
       </div>
     </div>
@@ -150,15 +146,20 @@ export function ThemeToggle({ className }: { className?: string }) {
     <button
       onClick={toggle}
       className={cx(
-        "flex size-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white",
+        "flex size-10 items-center justify-center rounded-full text-slate-900 ring-1 ring-inset ring-slate-900/15 transition duration-300 hover:bg-slate-900 hover:text-white dark:text-white dark:ring-white/15 dark:hover:bg-white dark:hover:text-slate-900",
         className,
       )}
       aria-label={theme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"}
       title={theme === "dark" ? "Mode clair" : "Mode sombre"}
     >
-      {theme === "dark" ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
+      {theme === "dark" ? <Sun className="size-4" strokeWidth={1.5} /> : <Moon className="size-4" strokeWidth={1.5} />}
     </button>
   );
+}
+
+function Today() {
+  const label = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+  return <span className="eyebrow hidden sm:inline">{label}</span>;
 }
 
 export function AppLayout() {
@@ -174,19 +175,19 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen">
-      {/* Desktop sidebar — always ink, in both themes */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-200 lg:block dark:border-slate-800">
+      {/* Desktop sidebar — deep navy in both themes */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] lg:block">
         <SidebarContent />
       </aside>
 
       {/* Mobile drawer */}
       {drawerOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 animate-fade-in bg-slate-950/50" onClick={() => setDrawerOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] animate-slide-in-left shadow-2xl">
+          <div className="absolute inset-0 animate-fade-in bg-slate-900/60 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 w-[280px] max-w-[85vw] animate-slide-in-left shadow-2xl">
             <button
               onClick={() => setDrawerOpen(false)}
-              className="absolute top-4 right-3 z-10 rounded-md p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="absolute top-6 right-4 z-10 rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
               aria-label="Fermer le menu"
             >
               <X className="size-5" />
@@ -196,23 +197,24 @@ export function AppLayout() {
         </div>
       )}
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/80 px-4 backdrop-blur-md sm:px-6 lg:px-8 dark:border-slate-800 dark:bg-slate-900/80">
+      <div className="lg:pl-[264px]">
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-900/[0.06] bg-white/85 px-4 backdrop-blur-xl sm:px-8 lg:px-12 dark:border-white/[0.06] dark:bg-slate-950/85">
           <button
             onClick={() => setDrawerOpen(true)}
-            className="-ml-1 rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden dark:text-slate-300 dark:hover:bg-slate-800"
+            className="-ml-1 rounded-full p-2 text-slate-900 hover:bg-slate-900/5 lg:hidden dark:text-slate-300 dark:hover:bg-white/5"
             aria-label="Ouvrir le menu"
           >
             <Menu className="size-5" />
           </button>
           <Logo className="lg:hidden" />
+          <Today />
           <div className="flex-1" />
-          <span className="hidden items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 md:flex dark:bg-emerald-900/30 dark:text-emerald-300">
-            <span className="size-1.5 rounded-full bg-emerald-500" /> Envois actifs
+          <span className="hidden items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 font-display text-[11px] font-semibold tracking-wider text-slate-900 uppercase md:flex dark:bg-white/5 dark:text-slate-200">
+            <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" /> Envois actifs
           </span>
           <ThemeToggle />
         </header>
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <main className="mx-auto w-full max-w-[1320px] px-4 pt-6 pb-16 sm:px-8 sm:pt-10 lg:px-12">
           <Outlet />
         </main>
       </div>

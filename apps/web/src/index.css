@@ -3,28 +3,41 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Missive — thème SaaS : neutres « slate » de Tailwind, accent bleu, typographie Inter.
- * brand-500 est la couleur d'action principale (bleu #2563EB).
+ * Missive — DA inspirée de Neokrome : bleu nuit, bleu électrique, gris-bleu clair.
+ * Titres Outfit extra-gras en capitales serrées, texte Manrope.
+ * La palette « slate » est redéfinie en neutres bleutés : toute l'app en hérite.
  */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-300: #93c5fd;
-  --color-brand-400: #60a5fa;
-  --color-brand-500: #2563eb;
-  --color-brand-600: #1d4ed8;
-  --color-brand-700: #1e40af;
-  --color-brand-800: #1e3a8a;
-  --color-brand-900: #172554;
-  --color-brand-950: #0b1533;
+  --color-slate-50: #f6f8fc;
+  --color-slate-100: #eef2f8;
+  --color-slate-200: #dde4f0;
+  --color-slate-300: #c3cddf;
+  --color-slate-400: #8f9bb5;
+  --color-slate-500: #66738f;
+  --color-slate-600: #4a5878;
+  --color-slate-700: #2e3f63;
+  --color-slate-800: #142a55;
+  --color-slate-900: #0b214a;
+  --color-slate-950: #071733;
 
-  --color-paper: #f8fafc;
-  --color-ink: #0b1220;
+  --color-brand-50: #eef3ff;
+  --color-brand-100: #dce6ff;
+  --color-brand-200: #b9cdff;
+  --color-brand-300: #85a8ff;
+  --color-brand-400: #4d82ff;
+  --color-brand-500: #145cff;
+  --color-brand-600: #0a3fcc;
+  --color-brand-700: #0a35a8;
+  --color-brand-800: #0c2c80;
+  --color-brand-900: #0b214a;
+  --color-brand-950: #071733;
+
+  --color-paper: #ffffff;
+  --color-ink: #0b214a;
 
   --animate-fade-in: fade-in 180ms ease-out;
   --animate-slide-in-right: slide-in-right 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -62,7 +75,7 @@
     color-scheme: dark;
   }
   body {
-    @apply bg-slate-50 text-slate-900 antialiased dark:bg-ink dark:text-slate-100;
+    @apply bg-white text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
     font-feature-settings: "cv11", "ss01", "ss03";
   }
   em {
@@ -78,12 +91,12 @@
 
 @layer utilities {
   .grain {
-    /* conservé pour compatibilité, sans effet dans le thème SaaS */
+    /* conservé pour compatibilité */
   }
   .eyebrow {
-    @apply font-sans text-[11px] font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400;
+    @apply font-sans text-[11px] font-semibold tracking-[0.18em] text-slate-600 uppercase dark:text-slate-400;
   }
   .display {
-    @apply font-sans font-semibold tracking-tight;
+    @apply font-display font-extrabold tracking-[-0.035em] uppercase;
   }
 }

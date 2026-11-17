@@ -16,10 +16,10 @@ type Variant = "primary" | "accent" | "secondary" | "ghost" | "danger" | "outlin
 type Size = "sm" | "md" | "lg";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-brand-500 text-white shadow-sm shadow-brand-500/20 hover:bg-brand-600 focus-visible:outline-brand-500",
-  accent: "bg-brand-500 text-white shadow-sm shadow-brand-500/20 hover:bg-brand-600 focus-visible:outline-brand-500",
+  primary: "bg-slate-900 text-white hover:bg-brand-500 focus-visible:outline-brand-500 dark:bg-white dark:text-slate-900 dark:hover:bg-brand-500 dark:hover:text-white",
+  accent: "bg-brand-500 text-white shadow-lg shadow-brand-500/25 hover:bg-brand-600 focus-visible:outline-brand-500",
   secondary:
-    "bg-white text-slate-700 shadow-xs ring-1 ring-inset ring-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-800",
+    "bg-white text-slate-900 ring-1 ring-inset ring-slate-900/15 hover:ring-slate-900/40 dark:bg-white/5 dark:text-slate-100 dark:ring-white/15 dark:hover:ring-white/40",
   outline:
     "bg-transparent text-brand-600 ring-1 ring-inset ring-brand-200 hover:bg-brand-50 dark:text-brand-400 dark:ring-brand-800 dark:hover:bg-brand-900/40",
   ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white",
@@ -27,9 +27,9 @@ const variants: Record<Variant, string> = {
 };
 
 const sizes: Record<Size, string> = {
-  sm: "h-8 px-3 text-xs gap-1.5",
-  md: "h-9 px-4 text-sm gap-2",
-  lg: "h-11 px-5 text-sm gap-2",
+  sm: "h-8 px-3.5 text-xs gap-1.5",
+  md: "h-10 px-5 text-sm gap-2",
+  lg: "h-12 px-6 text-[15px] gap-2",
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -49,7 +49,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type}
       disabled={disabled || loading}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center rounded-lg font-medium whitespace-nowrap transition-colors",
+        "inline-flex shrink-0 items-center justify-center rounded-full font-display font-semibold whitespace-nowrap transition-all duration-300 ease-[cubic-bezier(.2,.8,.2,1)]",
         "focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
         variants[variant],
         sizes[size],
@@ -69,7 +69,7 @@ export function Card({ className, children }: { className?: string; children: Re
   return (
     <div
       className={cx(
-        "rounded-xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900",
+        "rounded-[20px] border border-slate-900/10 bg-white dark:border-white/10 dark:bg-slate-900",
         className,
       )}
     >
@@ -90,9 +90,9 @@ export function CardHeader({
   className?: string;
 }) {
   return (
-    <div className={cx("flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800", className)}>
+    <div className={cx("flex flex-wrap items-center justify-between gap-3 border-b border-slate-900/10 px-6 py-5 dark:border-white/10", className)}>
       <div className="min-w-0">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
+        <h3 className="font-display text-[15px] font-bold tracking-tight text-slate-900 uppercase dark:text-white">{title}</h3>
         {description && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{description}</p>}
       </div>
       {action}
@@ -142,9 +142,9 @@ export function TagChip({ tag, onRemove }: { tag: string; onRemove?: () => void 
 // --- Form controls --------------------------------------------------------
 
 const controlBase =
-  "block rounded-lg border-0 bg-white px-3 text-sm text-slate-900 shadow-xs ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 " +
+  "block rounded-xl border-0 bg-white px-3.5 text-sm text-slate-900 ring-1 ring-inset ring-slate-900/15 placeholder:text-slate-400 " +
   "focus:ring-2 focus:ring-inset focus:ring-brand-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 " +
-  "dark:bg-slate-950 dark:text-slate-100 dark:ring-slate-700 dark:placeholder:text-slate-500 dark:disabled:bg-slate-900";
+  "dark:bg-slate-950 dark:text-slate-100 dark:ring-white/15 dark:placeholder:text-slate-500 dark:disabled:bg-slate-900";
 
 /** Default width/height unless the caller sets its own (avoids conflicting utilities). */
 function sizing(className: string | undefined, height: string | null): string {
@@ -228,7 +228,7 @@ export function EmptyState({
       <div className="mb-4 flex size-12 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
         <Icon className="size-6" />
       </div>
-      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
+      <h3 className="font-display text-[15px] font-bold tracking-tight text-slate-900 uppercase dark:text-white">{title}</h3>
       {description && <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">{description}</p>}
       {action && <div className="mt-5">{action}</div>}
     </div>
@@ -262,11 +262,14 @@ export function PageHeader({
   back?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-8 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         {back}
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h1>
-        {description && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>}
+        <h1 className="display text-[34px] leading-[0.95] text-slate-900 sm:text-[44px] dark:text-white">
+          {title}
+          <span className="text-brand-500">.</span>
+        </h1>
+        {description && <p className="mt-3 max-w-2xl text-[15px] text-slate-600 dark:text-slate-400">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -287,22 +290,22 @@ export function StatCard({
   loading?: boolean;
 }) {
   return (
-    <Card className="p-5">
+    <div className="rounded-[20px] bg-slate-100 p-6 dark:bg-white/[0.05]">
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
+        <p className="eyebrow">{label}</p>
         {Icon && (
-          <span className="flex size-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
-            <Icon className="size-[18px]" />
+          <span className="flex size-9 items-center justify-center rounded-full text-slate-900 ring-1 ring-slate-900/15 dark:text-white dark:ring-white/15">
+            <Icon className="size-4" strokeWidth={1.5} />
           </span>
         )}
       </div>
       {loading ? (
         <Skeleton className="mt-3 h-8 w-24" />
       ) : (
-        <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{value}</p>
+        <p className="mt-4 font-display text-[40px] leading-none font-extrabold tracking-[-0.03em] text-slate-900 tabular-nums dark:text-white">{value}</p>
       )}
       {hint && !loading && <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">{hint}</p>}
-    </Card>
+    </div>
   );
 }
 
@@ -351,16 +354,16 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={cx("inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800", className)}>
+    <div className={cx("inline-flex rounded-full bg-slate-100 p-1 dark:bg-white/5", className)}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cx(
-            "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap transition",
+            "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-display text-xs font-semibold whitespace-nowrap transition",
             value === o.value
-              ? "bg-white text-slate-900 shadow-xs dark:bg-slate-950 dark:text-white"
+              ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
               : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200",
           )}
         >

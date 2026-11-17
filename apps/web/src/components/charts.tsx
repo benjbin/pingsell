@@ -10,13 +10,14 @@ export interface SeriesDef {
 
 /** Ink, signal vermilion, sand. "sent" flips to paper in dark mode (see useSeriesColor). */
 export const SERIES_COLORS = {
-  sent: "#94a3b8",
-  opened: "#2563eb",
-  clicked: "#10b981",
+  sent: "#0b214a",
+  opened: "#145cff",
+  clicked: "#4d82ff",
 };
 
-function themed(color: string, _dark: boolean): string {
-  return color;
+/** Navy series would vanish on the navy dark background: lift it to light grey-blue. */
+function themed(color: string, dark: boolean): string {
+  return dark && color === SERIES_COLORS.sent ? "#c3cddf" : color;
 }
 
 /** Multi-series area chart, themed for light/dark. */
@@ -35,8 +36,8 @@ export function TimeAreaChart({
 }) {
   const { theme } = useTheme();
   const dark = theme === "dark";
-  const grid = dark ? "#1e293b" : "#eef2f7";
-  const axis = dark ? "#64748b" : "#94a3b8";
+  const grid = dark ? "#142a55" : "#eef2f8";
+  const axis = dark ? "#8f9bb5" : "#66738f";
 
   return (
     <div style={{ height }} className="w-full">

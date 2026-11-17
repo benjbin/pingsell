@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { ArrowRight, Euro, MailOpen, MousePointerClick, Plus, Send, UserPlus, Users } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Euro, MousePointerClick, Plus, Send, UserPlus, Users } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useAsync } from "../lib/useAsync";
@@ -22,27 +22,35 @@ export function DashboardPage() {
     .sort((a, b) => (b.sent_at ?? b.updated_at).localeCompare(a.sent_at ?? a.updated_at))
     .slice(0, 5);
 
+  const firstName = account?.name ?? "";
+  const hour = new Date().getHours();
+  const greeting = hour < 6 ? "Bonne nuit" : hour < 18 ? "Bonjour" : "Bonsoir";
+
   return (
     <>
-      <div className="mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-10 flex animate-rise flex-col gap-6 pb-4 lg:flex-row lg:items-end lg:justify-between dark:border-white/10">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Tableau de bord</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Bonjour{account ? ` ${account.name}` : ""}, voici la performance de vos emails sur les {range} derniers jours.
-          </p>
+          <p className="eyebrow">Tableau de bord — {range} derniers jours</p>
+          <h1 className="display mt-4 text-[52px] leading-[0.88] text-slate-900 sm:text-[76px] dark:text-white">
+            {greeting},
+            <br />
+            <em className="text-brand-500">{firstName}.</em>
+          </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <Segmented
             value={range}
             onChange={setRange}
             options={[
-              { value: "7", label: "7 jours" },
-              { value: "30", label: "30 jours" },
-              { value: "90", label: "90 jours" },
+              { value: "7", label: "7 j" },
+              { value: "30", label: "30 j" },
+              { value: "90", label: "90 j" },
             ]}
           />
           <Link to="/campagnes/nouvelle">
-            <Button icon={Plus}>Nouvelle campagne</Button>
+            <Button variant="accent" size="lg" icon={Plus}>
+              Nouvelle campagne
+            </Button>
           </Link>
         </div>
       </div>
@@ -53,47 +61,70 @@ export function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Contacts abonnés"
-          icon={Users}
-          loading={stats.loading}
-          value={formatNumber(s?.contacts_subscribed)}
-          hint={s && `${formatNumber(s.contacts_total)} au total · +${formatNumber(s.contacts_new)} nouveaux`}
-        />
-        <StatCard
-          label="Emails envoyés"
-          icon={Send}
-          loading={stats.loading}
-          value={formatNumber(s?.emails_sent)}
-          hint={s && `${formatNumber(s.campaigns_sent)} campagne${s.campaigns_sent > 1 ? "s" : ""} envoyée${s.campaigns_sent > 1 ? "s" : ""}`}
-        />
-        <StatCard
-          label="Taux d'ouverture"
-          icon={MailOpen}
-          loading={stats.loading}
-          value={formatPercent(s?.open_rate)}
-          hint={s && `Clics ${formatPercent(s.click_rate)} · Désabonnements ${formatPercent(s.unsubscribe_rate)}`}
-        />
-        <StatCard
-          label="Revenu Shopify"
-          icon={Euro}
-          loading={stats.loading}
-          value={formatCurrency(s?.revenue_shopify)}
-          hint="Commandes des contacts sur la période"
-        />
+      {/* Hero metric + secondary metrics */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="relative overflow-hidden rounded-[24px] bg-slate-900 p-8 text-white lg:col-span-5 dark:bg-brand-500">
+          <div className="pointer-events-none absolute -right-20 -bottom-20 size-64 rounded-full border-[40px] border-brand-500 dark:border-slate-900" />
+          <Link
+            to="/campagnes"
+            aria-label="Voir les campagnes"
+            className="absolute top-6 right-6 flex size-10 items-center justify-center rounded-full ring-1 ring-white/25 transition duration-300 hover:bg-white hover:text-slate-900"
+          >
+            <ArrowUpRight className="size-4" strokeWidth={1.5} />
+          </Link>
+          <p className="relative font-display text-[11px] font-semibold tracking-[0.2em] uppercase opacity-60">01 — Taux d'ouverture</p>
+          {stats.loading ? (
+            <Skeleton className="relative mt-6 h-28 w-48 !bg-white/10" />
+          ) : (
+            <p className="display relative mt-4 text-[112px] leading-[0.85] tabular-nums">{formatPercent(s?.open_rate)}</p>
+          )}
+          <div className="relative mt-8 flex gap-8 font-display text-[11px] font-semibold tracking-wider">
+            <div>
+              <p className="opacity-50">CLICS</p>
+              <p className="mt-1 text-lg font-bold">{formatPercent(s?.click_rate)}</p>
+            </div>
+            <div>
+              <p className="opacity-50">DÉSABO.</p>
+              <p className="mt-1 text-lg font-bold">{formatPercent(s?.unsubscribe_rate)}</p>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:col-span-7">
+          <StatCard
+            label="Abonnés"
+            icon={Users}
+            loading={stats.loading}
+            value={formatNumber(s?.contacts_subscribed)}
+            hint={s && `${formatNumber(s.contacts_total)} au total · +${formatNumber(s.contacts_new)}`}
+          />
+          <StatCard
+            label="Emails envoyés"
+            icon={Send}
+            loading={stats.loading}
+            value={formatNumber(s?.emails_sent)}
+            hint={s && `${formatNumber(s.campaigns_sent)} campagne${s.campaigns_sent > 1 ? "s" : ""}`}
+          />
+          <StatCard
+            label="Revenu Shopify"
+            icon={Euro}
+            loading={stats.loading}
+            value={formatCurrency(s?.revenue_shopify)}
+            hint="Commandes sur la période"
+          />
+        </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
-          <CardHeader title="Activité des emails" description="Envois, ouvertures et clics par jour" />
-          <div className="p-4 sm:p-5">
+          <CardHeader title="Activité" description="Envois, ouvertures et clics, jour par jour" />
+          <div className="p-4 sm:p-6">
             {stats.loading ? (
-              <Skeleton className="h-[280px] w-full" />
+              <Skeleton className="h-[300px] w-full" />
             ) : s && s.timeseries.length > 0 ? (
               <TimeAreaChart
                 data={s.timeseries}
                 xKey="date"
+                height={300}
                 formatX={formatShortDate}
                 series={[
                   { key: "sent", label: "Envoyés", color: SERIES_COLORS.sent },
@@ -108,32 +139,33 @@ export function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Utilisation ce mois" description="Facturation au volume d'emails" />
-          <div className="space-y-4 p-5">
+          <CardHeader title="Ce mois-ci" description="Facturation au volume d'emails" />
+          <dl className="divide-y divide-slate-200/80 px-6 dark:divide-slate-800">
             <UsageRow icon={Send} label="Emails envoyés" value={usage ? formatNumber(usage.emails_sent_month) : undefined} />
             <UsageRow icon={Users} label="Contacts" value={usage ? formatNumber(usage.contacts) : undefined} />
-            <UsageRow icon={UserPlus} label={`Nouveaux contacts (${range} j)`} value={s ? formatNumber(s.contacts_new) : undefined} />
+            <UsageRow icon={UserPlus} label={`Nouveaux (${range} j)`} value={s ? formatNumber(s.contacts_new) : undefined} />
             <UsageRow icon={MousePointerClick} label="Taux de clic" value={s ? formatPercent(s.click_rate) : undefined} />
-            <Link to="/parametres" className="flex items-center gap-1 pt-1 text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
-              Gérer mon compte <ArrowRight className="size-4" />
+          </dl>
+          <div className="px-6 pt-2 pb-6">
+            <Link to="/parametres" className="group inline-flex items-center gap-1.5 text-sm font-medium text-slate-950 dark:text-white">
+              <span className="underline decoration-brand-500 decoration-2 underline-offset-4">Gérer mon compte</span>
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
             </Link>
           </div>
         </Card>
       </div>
 
-      <Card className="mt-6">
-        <CardHeader
-          title="Campagnes récentes"
-          action={
-            <Link to="/campagnes" className="text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
-              Tout voir
-            </Link>
-          }
-        />
+      <section className="mt-14">
+        <div className="mb-5 flex items-end justify-between border-b border-slate-900/10 pb-4 dark:border-white/10">
+          <h2 className="display text-[36px] leading-none text-slate-900 dark:text-white">Campagnes récentes<span className="text-brand-500">.</span></h2>
+          <Link to="/campagnes" className="group inline-flex items-center gap-1.5 font-display text-[11px] font-semibold tracking-wider text-slate-600 uppercase hover:text-brand-500 dark:hover:text-white">
+            Tout voir <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" />
+          </Link>
+        </div>
         {campaigns.loading ? (
-          <div className="space-y-3 p-5">
+          <div className="space-y-3">
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-10 w-full" />
+              <Skeleton key={i} className="h-16 w-full" />
             ))}
           </div>
         ) : recent.length === 0 ? (
@@ -148,48 +180,57 @@ export function DashboardPage() {
             }
           />
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {recent.map((c) => (
-              <li key={c.id}>
+          <ol>
+            {recent.map((c, i) => (
+              <li key={c.id} className="border-b border-slate-900/10 dark:border-white/10">
                 <Link
                   to={c.status === "draft" || c.status === "scheduled" ? `/campagnes/${c.id}` : `/campagnes/${c.id}/rapport`}
-                  className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                  className="group grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-x-4 py-5 transition-colors sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto]"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{c.name}</p>
-                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{c.subject}</p>
+                  <span className="font-display text-xs font-semibold text-brand-500">{String(i + 1).padStart(2, "0")}</span>
+                  <div className="min-w-0">
+                    <p className="display truncate text-[22px] leading-tight text-slate-900 transition-colors group-hover:text-brand-500 dark:text-white">
+                      {c.name}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{c.subject}</p>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-slate-500 tabular-nums dark:text-slate-400">
-                    {c.stats && c.status === "sent" && (
+                  <div className="hidden items-center gap-6 font-display text-[11px] text-slate-500 tabular-nums sm:flex dark:text-slate-400">
+                    {c.stats && c.status === "sent" ? (
                       <>
-                        <span>{formatNumber(c.stats.sent)} envois</span>
-                        <span>{formatPercent(c.stats.open_rate)} ouv.</span>
-                        <span className="hidden sm:inline">{formatPercent(c.stats.click_rate)} clics</span>
+                        <span>
+                          <span className="text-slate-950 dark:text-white">{formatNumber(c.stats.sent)}</span> envois
+                        </span>
+                        <span>
+                          <span className="text-brand-600 dark:text-brand-400">{formatPercent(c.stats.open_rate)}</span> ouv.
+                        </span>
+                        <span className="hidden md:inline">{formatPercent(c.stats.click_rate)} clics</span>
                       </>
+                    ) : (
+                      <span className="hidden md:inline">{formatDate(c.sent_at ?? c.scheduled_at ?? c.updated_at)}</span>
                     )}
-                    <span className="hidden md:inline">{formatDate(c.sent_at ?? c.scheduled_at ?? c.updated_at)}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
                     <Badge tone={CAMPAIGN_STATUS[c.status]?.tone} dot>
                       {CAMPAIGN_STATUS[c.status]?.label ?? c.status}
                     </Badge>
+                    <ArrowRight className="hidden size-4 -translate-x-2 text-brand-500 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100 sm:block" />
                   </div>
                 </Link>
               </li>
             ))}
-          </ul>
+          </ol>
         )}
-      </Card>
+      </section>
     </>
   );
 }
 
 function UsageRow({ icon: Icon, label, value }: { icon: typeof Send; label: string; value?: string }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="flex size-9 items-center justify-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-        <Icon className="size-4" />
-      </span>
-      <span className="flex-1 text-sm text-slate-600 dark:text-slate-300">{label}</span>
-      {value === undefined ? <Skeleton className="h-5 w-12" /> : <span className="text-sm font-semibold text-slate-900 tabular-nums dark:text-white">{value}</span>}
+    <div className="flex items-center gap-3 py-4">
+      <Icon className="size-4 text-slate-400" strokeWidth={1.5} />
+      <dt className="flex-1 text-sm text-slate-600 dark:text-slate-300">{label}</dt>
+      {value === undefined ? <Skeleton className="h-5 w-12" /> : <dd className="display text-2xl leading-none text-slate-900 tabular-nums dark:text-white">{value}</dd>}
     </div>
   );
 }
