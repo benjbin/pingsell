@@ -503,3 +503,58 @@ export type PushCampaignInput = PushContent & {
   resend_title?: string | null;
   resend_body?: string | null;
 };
+
+/* ---- Statistiques (GET /stats/analytics) ---- */
+
+export interface AnalyticsKpis {
+  revenue_attributed: number;
+  orders_attributed: number;
+  revenue_total: number;
+  orders_total: number;
+  emails_sent: number;
+  emails_delivered: number;
+  emails_opened: number;
+  emails_clicked: number;
+  open_rate: number;
+  click_rate: number;
+  click_to_open_rate: number;
+  bounce_rate: number;
+  unsubscribes: number;
+  unsubscribe_rate: number;
+  push_sent: number;
+  push_opened: number;
+  push_open_rate: number;
+  new_contacts: number;
+  net_growth: number;
+}
+
+export interface AnalyticsDay {
+  date: string;
+  emails_sent: number;
+  opens: number;
+  clicks: number;
+  push_sent: number;
+  push_opens: number;
+  orders: number;
+  revenue: number;
+  revenue_attributed: number;
+  new_contacts: number;
+  unsubscribes: number;
+}
+
+export interface Analytics {
+  range: { from: string; to: string; days: number; previous: { from: string; to: string } };
+  attribution_days: number;
+  kpis: AnalyticsKpis;
+  previous: AnalyticsKpis;
+  daily: AnalyticsDay[];
+  daily_previous: AnalyticsDay[];
+  revenue_split: { campaigns: number; automations: number; push: number; unattributed: number };
+  /** Email opens, [weekday 0 = lundi][hour 0-23], local time. */
+  heatmap: number[][];
+  campaigns: Array<{ id: string; name: string; subject: string; sent_at: string; sent: number; open_rate: number; click_rate: number; unsubscribe_rate: number; revenue: number; orders: number }>;
+  automations: Array<{ id: string; name: string; trigger: string; status: string; entered: number; emails_sent: number; open_rate: number; click_rate: number; push_sent: number; push_open_rate: number; revenue: number; orders: number }>;
+  push_campaigns: Array<{ id: string; name: string; title: string; sent_at: string | null; sent: number; open_rate: number; revenue: number; orders: number }>;
+  top_links: Array<{ url: string; clicks: number; contacts: number }>;
+  sources: Array<{ source: string; contacts: number }>;
+}

@@ -2,10 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { all, parseJson } from '../db.js';
 import type { Deps } from '../deps.js';
-import { clampInt, parse } from '../lib/http.js';
+import { badRequest, clampInt, parse } from '../lib/http.js';
 import { generateEmail } from '../services/templates.js';
 import { serializeMessage } from '../services/messages.js';
 import { overviewStats } from '../services/stats.js';
+import { analytics } from '../services/analytics.js';
 
 const generateSchema = z.object({
   prompt: z.string().trim().min(3, 'Décrivez l’email à générer').max(4000),
@@ -17,6 +18,27 @@ export async function statsRoutes(app: FastifyInstance, { db }: Deps) {
   app.get('/stats/overview', async (request) => {
     const days = clampInt((request.query as Record<string, unknown>)?.days, 30, 1, 365);
     return overviewStats(db, request.accountId, days);
+  });
+
+  /** Full analytics: ?from=YYYY-MM-DD&to=YYYY-MM-DD&tz=<getTimezoneOffset()>, or ?days=30. */
+  app.get('/stats/analytics', async (request) => {
+    const q = (request.query ?? {}) as Record<string, unknown>;
+    const tz = clampInt(q.tz, 0, -840, 840);
+    const today = new Date(Date.now() - tz * 60_000).toISOString().slice(0, 10);
+    const isDate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+    let from: string;
+    let to: string;
+    if (isDate(q.from) && isDate(q.to)) {
+      from = q.from;
+      to = q.to;
+    } else {
+      const days = clampInt(q.days, 30, 1, 366);
+      to = today;
+      from = new Date(Date.parse(`${today}T00:00:00Z`) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+    }
+    if (from > to) throw badRequest('La date de début doit précéder la date de fin');
+    if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 366) throw badRequest('Période limitée à 1 an');
+    return analytics(db, request.accountId, { from, to, tz });
   });
 }
 

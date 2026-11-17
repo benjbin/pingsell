@@ -1,5 +1,6 @@
 // Typed client for the Missive REST API (see SPEC.md, base /api/v1).
 import type {
+  Analytics,
   ApiKey,
   Asset,
   AuthResponse,
@@ -271,6 +272,8 @@ export const api = {
 
   stats: {
     overview: (days = 30) => get<StatsOverview>("/stats/overview", { days }),
+    analytics: (q: { days?: number; from?: string; to?: string }) =>
+      get<Analytics>("/stats/analytics", { ...q, tz: new Date().getTimezoneOffset() }),
   },
 
   ai: {

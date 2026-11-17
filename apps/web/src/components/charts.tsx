@@ -8,16 +8,17 @@ export interface SeriesDef {
   color: string;
 }
 
-/** Ink, signal vermilion, sand. "sent" flips to paper in dark mode (see useSeriesColor). */
+/** Ink, brand blue, orange: validated as distinct for colour-blind readers (opened and clicked used to be two blues). */
 export const SERIES_COLORS = {
   sent: "#0b214a",
   opened: "#145cff",
-  clicked: "#4d82ff",
+  clicked: "#eb6834",
 };
 
-/** Navy series would vanish on the navy dark background: lift it to light grey-blue. */
+/** Dark-mode steps of the same hues (navy would vanish on the navy background). */
+const DARK: Record<string, string> = { "#0b214a": "#c3cddf", "#145cff": "#4d82ff", "#eb6834": "#d95926" };
 function themed(color: string, dark: boolean): string {
-  return dark && color === SERIES_COLORS.sent ? "#c3cddf" : color;
+  return dark ? (DARK[color] ?? color) : color;
 }
 
 /** Multi-series area chart, themed for light/dark. */

@@ -123,7 +123,7 @@ export function DashboardPage() {
             hint={s && `${formatNumber(s.campaigns_sent)} campagne${s.campaigns_sent > 1 ? "s" : ""}`}
           />
           <StatCard
-            label="Revenu Shopify"
+            label="Chiffre d'affaires"
             icon={Euro}
             loading={stats.loading}
             value={formatCurrency(s?.revenue_shopify)}
@@ -134,7 +134,15 @@ export function DashboardPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
-          <CardHeader title="Activité" description="Envois, ouvertures et clics, jour par jour" />
+          <CardHeader
+            title="Activité"
+            description="Envois, ouvertures et clics, jour par jour"
+            action={
+              <Link to="/statistiques" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300">
+                Statistiques détaillées <ArrowRight className="size-4" />
+              </Link>
+            }
+          />
           <div className="p-4 sm:p-6">
             {stats.loading ? (
               <Skeleton className="h-[300px] w-full" />
