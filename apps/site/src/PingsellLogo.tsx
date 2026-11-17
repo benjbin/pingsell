@@ -1,7 +1,7 @@
 // Pingsell brand mark and lockup (piste A V5, see brand/pingsell/a). Generated from the master SVGs.
 // Colours follow the brand rules: ink = sale (navy/white), echo = ping (blue), dot = notification (coral).
 
-type Tone = "auto" | "light" | "dark";
+type Tone = "auto" | "light" | "dark" | "mono";
 
 const TONES: Record<Tone, { ink: string; echo: string; dot: string }> = {
   // Light surfaces, switching to the dark palette when the app is in dark mode.
@@ -14,6 +14,8 @@ const TONES: Record<Tone, { ink: string; echo: string; dot: string }> = {
   dark: { ink: "fill-[#0b214a]", echo: "fill-[#145cff]", dot: "fill-[#e9542f]" },
   // Always on navy / dark surfaces.
   light: { ink: "fill-white", echo: "fill-[#4d82ff]", dot: "fill-[#f8603a]" },
+  // Single colour (currentColor), for watermarks and print.
+  mono: { ink: "fill-current", echo: "fill-current", dot: "fill-current" },
 };
 
 /** Symbol only (price tag + notification dot + ping echo). */

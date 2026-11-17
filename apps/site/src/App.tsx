@@ -432,26 +432,82 @@ function FinalCTA() {
   );
 }
 
+const FOOTER_COLUMNS: Array<{ title: string; links: Array<[string, string]> }> = [
+  {
+    title: "Produit",
+    links: [
+      ["Fonctionnalités", "#fonctionnalites"],
+      ["Éditeur d'emails", "#editeur"],
+      ["Notifications push", "#push"],
+      ["Tarifs", "#tarifs"],
+    ],
+  },
+  {
+    title: "Intégrations",
+    links: [
+      ["Shopify", "#shopify"],
+      ["Votre boutique", "#adapte"],
+      ["API & SDK", "#integration"],
+    ],
+  },
+  {
+    title: "Compte",
+    links: [
+      ["Créer un compte", SIGNUP_URL],
+      ["Se connecter", LOGIN_URL],
+      ["Questions fréquentes", "#faq"],
+    ],
+  },
+];
+
 function Footer() {
   return (
-    <footer className="border-t border-slate-900/[0.07]">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-12 sm:px-6 md:flex-row md:items-start md:justify-between">
-        <div>
-          <Logo />
-          <p className="mt-3 max-w-xs text-sm text-slate-500">L'emailing pensé pour les e-commerçants.</p>
+    <footer className="relative overflow-hidden border-t border-slate-900/[0.07] bg-slate-50">
+      <div className="mx-auto max-w-6xl px-4 pt-16 sm:px-6 lg:pt-20">
+        <div className="grid gap-12 lg:grid-cols-[1.3fr_2fr]">
+          <div>
+            <Logo />
+            <p className="mt-5 font-display text-2xl leading-tight font-bold tracking-[-0.02em] text-slate-900">
+              Chaque notif,
+              <br />
+              <span className="text-brand-500">une vente.</span>
+            </p>
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-slate-500">
+              Emails, notifications push et automatisations pour les e-commerçants. Chaque message, son chiffre d'affaires.
+            </p>
+          </div>
+
+          <nav aria-label="Pied de page" className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-3">
+            {FOOTER_COLUMNS.map((col) => (
+              <div key={col.title}>
+                <p className="font-display text-[11px] font-semibold tracking-[0.2em] text-slate-400 uppercase">{col.title}</p>
+                <ul className="mt-4 space-y-3">
+                  {col.links.map(([label, href]) => (
+                    <li key={label}>
+                      <a href={href} className="text-[15px] text-slate-600 transition-colors hover:text-brand-500">
+                        {label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </nav>
         </div>
-        <nav className="grid grid-cols-2 gap-x-12 gap-y-2.5 text-sm sm:grid-cols-3">
-          {NAV.map(([l, h]) => (
-            <a key={h} href={h} className="text-slate-600 hover:text-slate-900">
-              {l}
-            </a>
-          ))}
-          <a href={LOGIN_URL} className="text-slate-600 hover:text-slate-900">
-            Se connecter
+
+        <div className="mt-16 flex flex-col gap-3 border-t border-slate-900/[0.07] py-6 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+          <p>© {new Date().getFullYear()} Pingsell. Conçu en France.</p>
+          <a href="#top" className="inline-flex items-center gap-1.5 transition-colors hover:text-slate-900">
+            Retour en haut
+            <ArrowRight className="size-3.5 -rotate-90" />
           </a>
-        </nav>
+        </div>
       </div>
-      <div className="mx-auto max-w-6xl border-t border-slate-900/[0.07] px-4 py-6 text-xs text-slate-400 sm:px-6">© {new Date().getFullYear()} Pingsell</div>
+
+      {/* Oversized wordmark, cropped at the bottom edge as a signature. */}
+      <div aria-hidden className="pointer-events-none mx-auto max-w-6xl px-4 sm:px-6">
+        <PingsellLogo tone="mono" className="-mb-[3%] h-auto w-full translate-y-[18%] text-slate-900/[0.05]" />
+      </div>
     </footer>
   );
 }
