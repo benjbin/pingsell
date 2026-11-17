@@ -2,6 +2,8 @@
 export const APP_URL = (import.meta.env.VITE_APP_URL ?? "http://localhost:5173").replace(/\/+$/, "");
 export const SIGNUP_URL = `${APP_URL}/inscription`;
 export const LOGIN_URL = `${APP_URL}/connexion`;
+/** Public REST API base, shown in the developer examples. Set VITE_API_URL in production. */
+export const API_URL = (import.meta.env.VITE_API_URL ?? `${APP_URL}/api/v1`).replace(/\/+$/, "");
 
 /**
  * Pricing — billed on emails sent, every feature included.

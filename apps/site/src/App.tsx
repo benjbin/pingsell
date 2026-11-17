@@ -26,12 +26,14 @@ import { BrandMock, FlowMock, PhoneMock, ReportMock } from "./Mocks";
 import { Hero } from "./sections/Hero";
 import { EditorDemo } from "./sections/EditorDemo";
 import { BrandShowcase } from "./sections/BrandShowcase";
+import { ApiSection } from "./sections/ApiSection";
 import { MagneticLink, useFinePointer } from "./sections/motion-kit";
 
 const NAV = [
   ["Fonctionnalités", "#fonctionnalites"],
   ["Éditeur", "#editeur"],
   ["Shopify", "#shopify"],
+  ["API", "#integration"],
   ["Tarifs", "#tarifs"],
   ["FAQ", "#faq"],
 ] as const;
@@ -570,6 +572,7 @@ export function App() {
         <BrandShowcase />
         <Personalisation />
         <Shopify />
+        <ApiSection />
         <Reports />
         <TeamMobile />
         <Why />
