@@ -1106,7 +1106,7 @@ const userHash = createHmac("sha256", process.env.MISSIVE_IDENTITY_SECRET)
           )
         }
       />
-      <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2 [&>*]:min-w-0">
         <div className="space-y-4 text-sm text-slate-600 dark:text-slate-300">
           <p>
             Votre serveur signe l'email du client avec la clé secrète ci-dessous, et l'app envoie cette signature (<code>user_hash</code>) en enregistrant
@@ -1194,13 +1194,13 @@ await Missive.requestPermission();`;
           )
         }
       />
-      <div className="grid grid-cols-2 gap-4 border-b border-slate-900/10 p-6 sm:grid-cols-4 dark:border-white/10">
+      <div className="grid grid-cols-2 gap-4 border-b border-slate-900/10 p-6 xl:grid-cols-4 dark:border-white/10">
         <StatCard label={`Affichages (${stats.days} j)`} value={formatNumber(stats.shown)} icon={MessageSquareQuote} />
         <StatCard label="Ont touché « Activer »" value={`${stats.accept_rate.toLocaleString("fr-FR")} %`} hint={`${formatNumber(stats.accepted)} clients`} />
         <StatCard label="Taux d'opt-in" value={`${stats.opt_in_rate.toLocaleString("fr-FR")} %`} hint={`${formatNumber(stats.granted)} autorisations`} icon={BellRing} />
         <StatCard label="Clients dans l'app" value={formatNumber(config.app_users)} hint="connectés au moins une fois" icon={Smartphone} />
       </div>
-      <form onSubmit={(e) => void save(e)} className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_300px]">
+      <form onSubmit={(e) => void save(e)} className="grid grid-cols-1 gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_300px] [&>*]:min-w-0">
         <div className="space-y-4">
           <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
             <input type="checkbox" className="size-4 accent-brand-500" checked={draft.enabled} onChange={(e) => set("enabled", e.target.checked)} />
@@ -1282,7 +1282,7 @@ function TransactionalCard() {
         description="Un message à un client précis, envoyé tout de suite : commande expédiée, rendez-vous, mot de passe…"
         action={<Badge tone="blue">API</Badge>}
       />
-      <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2 [&>*]:min-w-0">
         <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
           <p className="flex gap-2">
             <Clock className="mt-0.5 size-4 shrink-0 text-brand-500" /> Envoi immédiat sur tous les appareils du client, et dans le centre de notifications de l'app.
@@ -1297,8 +1297,8 @@ function TransactionalCard() {
             Créez la clé secrète dans Réglages › Clés API. Ne l'utilisez jamais dans l'app mobile. Réponse <code>404</code> si le contact n'existe pas.
           </p>
         </div>
-        <div className="relative">
-          <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 text-[12px] leading-relaxed text-slate-200">{code}</pre>
+        <div className="relative min-w-0">
+          <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 pt-11 text-[12px] leading-relaxed text-slate-200">{code}</pre>
           <div className="absolute top-2 right-2">
             <CopyButton text={code} />
           </div>
