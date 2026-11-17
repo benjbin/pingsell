@@ -298,6 +298,10 @@ export const api = {
   integrations: {
     list: () => get<{ data: Integration[] }>("/integrations").then((r) => r.data),
     shopify: {
+      status: () =>
+        get<{ integration: Integration | null; oauth_available: boolean; sync_running: boolean }>("/integrations/shopify"),
+      /** OAuth install page of the shop ("1 clic"), when the Shopify app keys are configured on the server. */
+      installUrl: (shop: string) => get<{ url: string }>("/integrations/shopify/install", { shop, format: "json" }).then((r) => r.url),
       connect: (input: { shop_domain: string; access_token: string }) => post<unknown>("/integrations/shopify/connect", input),
       sync: () => post<ShopifySyncResult>("/integrations/shopify/sync"),
       disconnect: () => del("/integrations/shopify"),

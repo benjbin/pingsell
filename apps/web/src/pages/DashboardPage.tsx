@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { ArrowRight, ArrowUpRight, Euro, MousePointerClick, Plus, Send, UserPlus, Users } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Euro, MousePointerClick, Plug, Plus, Send, UserPlus, Users } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useAsync } from "../lib/useAsync";
@@ -54,6 +54,24 @@ export function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {usage && usage.contacts === 0 && (
+        <Link
+          to="/bienvenue"
+          className="mb-8 flex flex-col gap-4 rounded-[24px] bg-brand-500 p-6 text-white transition hover:bg-brand-600 sm:flex-row sm:items-center"
+        >
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+            <Plug className="size-6" />
+          </span>
+          <span className="flex-1">
+            <span className="block font-display text-lg font-bold">Branchez votre premier outil</span>
+            <span className="mt-0.5 block text-sm text-white/80">Shopify, votre site, votre logiciel, votre app mobile ou un fichier : quelques minutes suffisent.</span>
+          </span>
+          <span className="inline-flex items-center gap-2 font-display text-sm font-bold">
+            Commencer <ArrowRight className="size-4" />
+          </span>
+        </Link>
+      )}
 
       {stats.error && (
         <div className="mb-6">

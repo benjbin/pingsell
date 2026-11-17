@@ -25,7 +25,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
       if (isLogin) await login(email.trim(), password);
       else await register(name.trim(), email.trim(), password);
       const from = (location.state as { from?: string } | null)?.from;
-      navigate(from && from !== "/connexion" ? from : "/", { replace: true });
+      navigate(mode === "register" ? "/bienvenue" : from && from !== "/connexion" ? from : "/", { replace: true });
     } catch (err) {
       setError(errorMessage(err));
     } finally {

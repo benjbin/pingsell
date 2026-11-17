@@ -19,6 +19,7 @@ import { AutomationEditorPage } from "./pages/automations/AutomationEditorPage";
 import { IntegrationsPage } from "./pages/IntegrationsPage";
 import { OutboxPage } from "./pages/OutboxPage";
 import { PushPage } from "./pages/PushPage";
+import { OnboardingPage } from "./pages/OnboardingPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ProfilePage } from "./pages/ProfilePage";
@@ -78,6 +79,7 @@ export function App() {
               <Route path="/connexion" element={<GuestOnly><AuthPage mode="login" /></GuestOnly>} />
               <Route path="/inscription" element={<GuestOnly><AuthPage mode="register" /></GuestOnly>} />
               <Route path="/invitation/:token" element={<InvitationPage />} />
+              <Route path="/bienvenue" element={<RequireAuth><OnboardingPage /></RequireAuth>} />
               <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
                 <Route index element={<DashboardPage />} />
                 <Route path="contacts" element={<ContactsPage />} />

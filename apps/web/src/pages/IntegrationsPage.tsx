@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { ArrowRight, Code2, KeyRound, Link2, Package, RefreshCw, ShoppingBag, ShoppingCart, Unplug } from "lucide-react";
 import { API_URL, api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
@@ -17,6 +17,20 @@ function ShopifyLogo() {
 }
 
 export function IntegrationsPage() {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // Back from Shopify's OAuth page during onboarding: resume the welcome flow.
+  useEffect(() => {
+    if (params.get("shopify") !== "connected") return;
+    try {
+      if (sessionStorage.getItem("missive_onboarding_return")) {
+        sessionStorage.removeItem("missive_onboarding_return");
+        navigate("/bienvenue?shopify=connected", { replace: true });
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [params, navigate]);
   const toast = useToast();
   const integrations = useAsync(() => api.integrations.list(), []);
   const shopify = integrations.data?.find((i) => i.provider === "shopify");
