@@ -1,5 +1,6 @@
 import { all, scalar, type DatabaseSync } from '../db.js';
 import { rate } from './campaigns.js';
+import { attributedRevenue } from './analytics.js';
 
 export interface OverviewStats {
   contacts_total: number;
@@ -11,6 +12,9 @@ export interface OverviewStats {
   click_rate: number;
   unsubscribe_rate: number;
   revenue_shopify: number;
+  /** Part of the revenue credited to emails and notifications (see services/analytics.ts). */
+  revenue_attributed: number;
+  orders_attributed: number;
   timeseries: { date: string; sent: number; opened: number; clicked: number }[];
 }
 
@@ -64,6 +68,8 @@ export function overviewStats(db: DatabaseSync, accountId: string, days: number)
     since,
   )[0];
 
+  const credited = attributedRevenue(db, accountId, since, new Date(Date.now() + 1000).toISOString());
+
   const series = new Map<string, { sent: number; opened: number; clicked: number }>();
   for (let t = firstDay, i = 0; i < days; i++, t += DAY_MS) {
     series.set(new Date(t).toISOString().slice(0, 10), { sent: 0, opened: 0, clicked: 0 });
@@ -95,6 +101,8 @@ export function overviewStats(db: DatabaseSync, accountId: string, days: number)
     click_rate: rate(Number(sentRow?.clicked ?? 0), emails_sent),
     unsubscribe_rate: rate(unsubscribes, emails_sent),
     revenue_shopify: Math.round(Number(revenue?.total ?? 0) * 100) / 100,
+    revenue_attributed: credited.revenue,
+    orders_attributed: credited.orders,
     timeseries: [...series.entries()].map(([date, v]) => ({ date, ...v })),
   };
 }

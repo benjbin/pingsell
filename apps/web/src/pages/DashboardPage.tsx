@@ -122,13 +122,20 @@ export function DashboardPage() {
             value={formatNumber(s?.emails_sent)}
             hint={s && `${formatNumber(s.campaigns_sent)} campagne${s.campaigns_sent > 1 ? "s" : ""}`}
           />
-          <StatCard
-            label="Chiffre d'affaires"
-            icon={Euro}
-            loading={stats.loading}
-            value={formatCurrency(s?.revenue_shopify)}
-            hint="Commandes sur la période"
-          />
+          <Link to="/statistiques" className="block rounded-[20px] transition hover:ring-2 hover:ring-brand-500/40" aria-label="Revenu généré : voir les statistiques détaillées">
+            <StatCard
+              label="Revenu généré"
+              icon={Euro}
+              loading={stats.loading}
+              value={formatCurrency(s?.revenue_attributed)}
+              hint={
+                s &&
+                (s.revenue_shopify > 0
+                  ? `${Math.round((s.revenue_attributed / s.revenue_shopify) * 100)}\u00a0% de ${formatCurrency(s.revenue_shopify)} de CA`
+                  : "Grâce à vos emails et notifications")
+              }
+            />
+          </Link>
         </div>
       </div>
 

@@ -329,6 +329,8 @@ export interface StatsOverview {
   click_rate: number;
   unsubscribe_rate: number;
   revenue_shopify: number;
+  revenue_attributed: number;
+  orders_attributed: number;
   timeseries: Array<{ date: string; sent: number; opened: number; clicked: number }>;
 }
 
