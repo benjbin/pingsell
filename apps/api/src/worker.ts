@@ -3,6 +3,7 @@ import { all, get, now, run, type DatabaseSync } from './db.js';
 import { finalizeCampaigns, queueCampaign } from './services/campaigns.js';
 import { processDueRuns } from './services/automations.js';
 import { finalizePushCampaigns, queuePushCampaigns, sendPushBatch } from './services/push.js';
+import { processPushResends } from './services/pushGrowth.js';
 import { accountSender, markFailed, markSent } from './services/messages.js';
 import { htmlToText } from './services/render.js';
 import type { EmailProvider } from './services/mailer.js';
@@ -21,7 +22,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  *  3. advances due automation runs
  *  4. sends queued messages in rate-limited batches
  *  5. marks finished campaigns as `sent`
- *  6. queues / sends push notifications (campaigns, automation steps, tests)
+ *  6. queues / sends push notifications (campaigns, resends to non-openers, automation steps, tests)
  */
 export class SendingWorker {
   private timer: NodeJS.Timeout | undefined;
@@ -67,6 +68,7 @@ export class SendingWorker {
         const sent = await this.sendBatch();
         finalizeCampaigns(this.db);
         queuePushCampaigns(this.db);
+        processPushResends(this.db);
         const pushed = await sendPushBatch(this.db, this.config, this.config.worker.batchSize);
         finalizePushCampaigns(this.db);
         // Keep draining while there is a full batch of work pending.

@@ -9,7 +9,7 @@ export type Row = Record<string, unknown>;
  * Ordered list of schema migrations. Each entry is applied once, tracked by
  * `PRAGMA user_version`. Never edit an applied migration: append a new one.
  */
-const MIGRATIONS: string[] = [
+const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   /* 1 — initial schema (SPEC.md "Data model") */ `
   CREATE TABLE accounts (
     id TEXT PRIMARY KEY,
@@ -316,6 +316,59 @@ const MIGRATIONS: string[] = [
   CREATE INDEX idx_app_inbox_device ON app_inbox(account_id, device_id, created_at);
   CREATE INDEX idx_app_inbox_campaign ON app_inbox(push_campaign_id);
   `,
+  // v8 — push growth: pre-permission prompt, resend to non-openers, smart send time,
+  // app triggers (first sign-in, push enabled, order shipped), exit conditions.
+  // The automations table is rebuilt (new trigger values in its CHECK), so foreign keys are
+  // switched off for this migration: dropping the old table must not cascade to runs / messages.
+  {
+    foreignKeysOff: true,
+    sql: `
+  CREATE TABLE automations_v8 (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    trigger TEXT NOT NULL
+      CHECK (trigger IN ('contact_created','tag_added','order_created','cart_abandoned','order_fulfilled','app_signed_in','push_subscribed')),
+    trigger_config TEXT NOT NULL DEFAULT '{}',
+    steps TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  INSERT INTO automations_v8 (id, account_id, name, trigger, trigger_config, steps, status, created_at, updated_at)
+    SELECT id, account_id, name, trigger, trigger_config, steps, status, created_at, updated_at FROM automations;
+  DROP TABLE automations;
+  ALTER TABLE automations_v8 RENAME TO automations;
+  CREATE INDEX idx_automations_account_trigger ON automations(account_id, trigger, status);
+
+  ALTER TABLE push_config ADD COLUMN prompt TEXT;
+  CREATE TABLE push_prompt_events (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    event TEXT NOT NULL CHECK (event IN ('shown','accepted','declined','granted','denied')),
+    platform TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_push_prompt_events ON push_prompt_events(account_id, created_at);
+
+  ALTER TABLE push_campaigns ADD COLUMN send_mode TEXT NOT NULL DEFAULT 'now';
+  ALTER TABLE push_campaigns ADD COLUMN resend_after_hours INTEGER;
+  ALTER TABLE push_campaigns ADD COLUMN resend_title TEXT;
+  ALTER TABLE push_campaigns ADD COLUMN resend_body TEXT;
+  ALTER TABLE push_campaigns ADD COLUMN resend_queued_at TEXT;
+  ALTER TABLE push_messages ADD COLUMN resend INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE push_messages ADD COLUMN scheduled_at TEXT;
+  CREATE INDEX idx_push_messages_contact ON push_messages(contact_id, opened_at);
+
+  CREATE TABLE app_users (
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    PRIMARY KEY (account_id, contact_id)
+  );
+  `,
+  },
 ];
 
 export function openDatabase(path: string): DatabaseSync {
@@ -331,10 +384,22 @@ export function openDatabase(path: string): DatabaseSync {
 export function migrate(db: DatabaseSync): void {
   const current = Number((db.prepare('PRAGMA user_version').get() as Row).user_version ?? 0);
   for (let version = current; version < MIGRATIONS.length; version++) {
-    transaction(db, () => {
-      db.exec(MIGRATIONS[version]);
-      db.exec(`PRAGMA user_version = ${version + 1}`);
-    });
+    const migration = MIGRATIONS[version];
+    const { sql, foreignKeysOff } = typeof migration === 'string' ? { sql: migration, foreignKeysOff: false } : migration;
+    // Table rebuilds (SQLite's 12-step ALTER) need foreign keys off, which only works outside a transaction.
+    if (foreignKeysOff) db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      transaction(db, () => {
+        db.exec(sql);
+        if (foreignKeysOff) {
+          const broken = db.prepare('PRAGMA foreign_key_check').all();
+          if (broken.length) throw new Error(`Migration ${version + 1} : ${broken.length} clé(s) étrangère(s) invalide(s)`);
+        }
+        db.exec(`PRAGMA user_version = ${version + 1}`);
+      });
+    } finally {
+      if (foreignKeysOff) db.exec('PRAGMA foreign_keys = ON');
+    }
   }
 }
 

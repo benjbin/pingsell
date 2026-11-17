@@ -27,6 +27,11 @@ export interface MissiveConfig {
   onOpen?: (notification: MissiveNotification) => void;
   /** Keep the app icon badge equal to the unread in-app notifications (default: true). */
   syncBadge?: boolean;
+  /**
+   * Persistent key-value storage (e.g. AsyncStorage) used to count launches and remember a
+   * "Plus tard" on the pre-permission screen. Without it the SDK only remembers for the session.
+   */
+  storage?: { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void> };
   /** Android channel name shown in the system settings (default: "Notifications"). */
   androidChannelName?: string;
 }
@@ -73,7 +78,25 @@ export interface RegisterOptions {
 
 export type RegisterResult =
   | { ok: true; token: string; linked: boolean }
-  | { ok: false; reason: "permission_denied" | "unsupported" | "error"; message: string };
+  | { ok: false; reason: "permission_denied" | "declined" | "not_now" | "unsupported" | "error"; message: string };
+
+/** Pre-permission screen, configured in Missive › Notifications push › Pré-permission. */
+export interface PromptSettings {
+  enabled: boolean;
+  title: string;
+  body: string;
+  accept_label: string;
+  decline_label: string;
+  min_launches: number;
+  cooldown_days: number;
+  image_url?: string | null;
+}
+
+export interface Identity {
+  email?: string;
+  contactId?: string;
+  userHash?: string;
+}
 
 /** Android channel used by Missive notifications (high importance, full content on the lock screen). */
 export const ANDROID_CHANNEL_ID = "missive";
@@ -92,12 +115,18 @@ class MissiveClient {
   private stateListeners = new Set<Listener>();
   private bannerListeners = new Set<(n: MissiveNotification) => void>();
   private refreshing: Promise<void> | null = null;
+  private identity: Identity = {};
+  private memory = new Map<string, string>();
+  private launchCounted = false;
+  private promptListeners = new Set<(p: PromptSettings | null) => void>();
+  private promptAnswer: ((accepted: boolean) => void) | null = null;
 
   /** Call once, as early as possible (outside components, e.g. in App.tsx / _layout.tsx). */
   init(config: MissiveConfig): void {
     if (this.config) return;
     if (!config.appKey?.startsWith("msvapp_")) throw new Error("Missive : clé d'application invalide (msvapp_…)");
     this.config = { foreground: "system", syncBadge: true, tokenType: "expo", ...config, apiUrl: config.apiUrl.replace(/\/+$/, "") };
+    void this.countLaunch(this.config);
 
     Notifications.setNotificationHandler({
       handleNotification: async (notification) => {
@@ -145,6 +174,7 @@ class MissiveClient {
    */
   async register(options: RegisterOptions = {}): Promise<RegisterResult> {
     const config = this.requireConfig();
+    options = { ...this.identityOptions(), ...options };
     try {
       let { status } = await Notifications.getPermissionsAsync();
       if (status !== "granted" && options.askPermission !== false) {
@@ -169,6 +199,7 @@ class MissiveClient {
    * or a test token on a simulator. Most apps use `register()` instead.
    */
   async registerToken(token: string, options: RegisterOptions & { provider?: "expo" | "fcm" | "apns" } = {}): Promise<RegisterResult> {
+    options = { ...this.identityOptions(), ...options };
     const res = await this.request<{ linked: boolean }>("POST", "/push/app/devices", {
       token,
       platform: Platform.OS === "ios" ? "ios" : "android",
@@ -184,8 +215,110 @@ class MissiveClient {
     return { ok: true, token, linked: res.linked };
   }
 
+  /**
+   * The customer signed in to your app (call it even if notifications are off): links the phone to
+   * their Missive contact and starts the "Première connexion à l'app" automations the first time.
+   */
+  async identify(identity: Identity): Promise<{ known: boolean; first: boolean }> {
+    this.identity = identity;
+    const res = await this.request<{ known: boolean; first: boolean }>("POST", "/push/app/identify", {
+      ...(identity.email ? { email: identity.email } : {}),
+      ...(identity.contactId ? { contact_id: identity.contactId } : {}),
+      ...(identity.userHash ? { user_hash: identity.userHash } : {}),
+    });
+    if (this.token) await this.refresh();
+    return res;
+  }
+
+  /* ------------------------- Pre-permission screen ------------------------ */
+
+  /**
+   * Asks for notifications the smart way: shows <MissivePermissionPrompt /> first (your message,
+   * configured in Missive) and only opens the one-shot system dialog to customers who tapped "Activer".
+   * Returns `not_now` when the screen should not be shown yet (launch count, cooldown after "Plus tard").
+   */
+  async requestPermission(options: RegisterOptions & { force?: boolean } = {}): Promise<RegisterResult> {
+    const config = this.requireConfig();
+    const current = await Notifications.getPermissionsAsync();
+    if (current.status === "granted") return this.register(options);
+    if (current.status === "denied" && !current.canAskAgain) {
+      return { ok: false, reason: "permission_denied", message: "Notifications refusées dans les réglages du téléphone" };
+    }
+
+    const prompt = await this.request<{ prompt: PromptSettings }>("GET", "/push/app/config").then((r) => r.prompt).catch(() => null);
+    if (prompt?.enabled && this.promptListeners.size) {
+      if (!options.force && !(await this.promptDue(prompt))) {
+        return { ok: false, reason: "not_now", message: "Écran de pré-permission déjà proposé récemment" };
+      }
+      this.track("shown");
+      const accepted = await new Promise<boolean>((resolve) => {
+        this.promptAnswer = resolve;
+        this.promptListeners.forEach((l) => l(prompt));
+      });
+      this.promptAnswer = null;
+      this.promptListeners.forEach((l) => l(null));
+      if (!accepted) {
+        this.track("declined");
+        await this.store(config, "missive.prompt.declined_at", new Date().toISOString());
+        return { ok: false, reason: "declined", message: "Le client a choisi « Plus tard »" };
+      }
+      this.track("accepted");
+    }
+    const result = await this.register(options);
+    if (result.ok) this.track("granted");
+    else if (result.reason === "permission_denied") this.track("denied");
+    return result;
+  }
+
+  /** Used by <MissivePermissionPrompt />. */
+  onPrompt(listener: (prompt: PromptSettings | null) => void): () => void {
+    this.promptListeners.add(listener);
+    return () => this.promptListeners.delete(listener);
+  }
+
+  /** Answer of the pre-permission screen (true = "Activer"). */
+  answerPrompt(accepted: boolean): void {
+    this.promptAnswer?.(accepted);
+  }
+
+  private async promptDue(prompt: PromptSettings): Promise<boolean> {
+    const config = this.requireConfig();
+    const launches = Number((await this.load(config, "missive.launches")) ?? 0);
+    if (launches < prompt.min_launches) return false;
+    const declinedAt = await this.load(config, "missive.prompt.declined_at");
+    if (declinedAt && Date.now() - new Date(declinedAt).getTime() < prompt.cooldown_days * 86_400_000) return false;
+    return true;
+  }
+
+  private track(event: "shown" | "accepted" | "declined" | "granted" | "denied"): void {
+    void this.request("POST", "/push/app/prompt", { event, platform: Platform.OS === "ios" ? "ios" : "android" }).catch(() => undefined);
+  }
+
+  private async countLaunch(config: MissiveConfig): Promise<void> {
+    if (this.launchCounted) return;
+    this.launchCounted = true;
+    const launches = Number((await this.load(config, "missive.launches")) ?? 0);
+    await this.store(config, "missive.launches", String(launches + 1));
+  }
+
+  private async load(config: MissiveConfig, key: string): Promise<string | null> {
+    if (config.storage) return config.storage.getItem(key).catch(() => null);
+    return this.memory.get(key) ?? null;
+  }
+
+  private async store(config: MissiveConfig, key: string, value: string): Promise<void> {
+    if (config.storage) await config.storage.setItem(key, value).catch(() => undefined);
+    else this.memory.set(key, value);
+  }
+
+  private identityOptions(): RegisterOptions {
+    const { email, contactId, userHash } = this.identity;
+    return { ...(email ? { email } : {}), ...(contactId ? { contactId } : {}), ...(userHash ? { userHash } : {}) };
+  }
+
   /** The customer signed out: keep notifications for this phone but forget who it belongs to. */
   async logout(): Promise<void> {
+    this.identity = {};
     if (!this.token) return;
     await this.request("POST", "/push/app/devices/logout", { token: this.token });
     await this.refresh();

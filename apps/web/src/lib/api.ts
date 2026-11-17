@@ -35,6 +35,7 @@ import type {
   PushCampaignInput,
   PushConfig,
   PushConfigInput,
+  PushPrompt,
   PushContent,
   PushDevice,
   PushAudience,
@@ -252,6 +253,7 @@ export const api = {
     rotateAppKey: () => post<PushConfig>("/push/config/rotate-app-key"),
     setIdentityRequired: (required: boolean) => put<PushConfig>("/push/config/identity", { required }),
     rotateIdentitySecret: () => post<PushConfig>("/push/config/rotate-identity-secret"),
+    savePrompt: (prompt: PushPrompt) => put<PushConfig>("/push/config/prompt", prompt),
     devices: (page = 1, limit = 50) => get<Paginated<PushDevice>>("/push/devices", { page, limit }),
     removeDevice: (id: string) => del(`/push/devices/${id}`),
     test: (deviceId: string, content: PushContent, channels: PushChannel[]) =>
@@ -299,7 +301,7 @@ export const api = {
       connect: (input: { shop_domain: string; access_token: string }) => post<unknown>("/integrations/shopify/connect", input),
       sync: () => post<ShopifySyncResult>("/integrations/shopify/sync"),
       disconnect: () => del("/integrations/shopify"),
-      simulate: (input: { type: "order" | "cart_abandoned"; email: string }) =>
+      simulate: (input: { type: "order" | "order_fulfilled" | "cart_abandoned"; email: string }) =>
         post<unknown>("/integrations/shopify/simulate", input),
     },
   },

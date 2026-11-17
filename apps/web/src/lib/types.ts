@@ -279,12 +279,22 @@ export interface CampaignStats {
 
 // --- Automations ----------------------------------------------------------
 
-export type AutomationTrigger = "contact_created" | "tag_added" | "order_created" | "cart_abandoned";
+export type AutomationTrigger =
+  | "contact_created"
+  | "tag_added"
+  | "order_created"
+  | "cart_abandoned"
+  | "order_fulfilled"
+  | "app_signed_in"
+  | "push_subscribed";
+
+export type ExitCondition = "push_opened" | "email_opened" | "ordered";
 
 export type AutomationStep =
   | { type: "wait"; hours: number }
   | { type: "email"; subject: string; html: string }
-  | { type: "push"; title: string; body: string; url?: string | null; image_url?: string | null; in_app?: boolean };
+  | { type: "push"; title: string; body: string; url?: string | null; image_url?: string | null; in_app?: boolean }
+  | { type: "exit_if"; condition: ExitCondition };
 
 export interface Automation {
   id: string;
@@ -387,6 +397,9 @@ export interface PushConfig {
   apns: { configured: boolean; key_id?: string; team_id?: string; bundle_id?: string; production?: boolean };
   expo: { configured: boolean; has_access_token?: boolean };
   identity: { secret: string; required: boolean };
+  prompt: PushPrompt;
+  prompt_stats: PushPromptStats;
+  app_users: number;
   devices: {
     total: number;
     ios: number;
@@ -394,6 +407,29 @@ export interface PushConfig {
     linked: number;
     by_provider: Record<PushProvider, number>;
   };
+}
+
+/** Pre-permission screen shown by the SDK before the system dialog. */
+export interface PushPrompt {
+  enabled: boolean;
+  title: string;
+  body: string;
+  accept_label: string;
+  decline_label: string;
+  min_launches: number;
+  cooldown_days: number;
+  image_url?: string | null;
+}
+
+export interface PushPromptStats {
+  days: number;
+  shown: number;
+  accepted: number;
+  declined: number;
+  granted: number;
+  denied: number;
+  accept_rate: number;
+  opt_in_rate: number;
 }
 
 export interface PushConfigInput {
@@ -430,6 +466,9 @@ export type PushChannel = "push" | "in_app";
 
 export interface PushCampaignStats {
   in_app: { total: number; read: number; read_rate: number };
+  resend: { total: number; sent: number; opened: number; open_rate: number };
+  /** Smart send: notifications waiting for each customer's best hour. */
+  scheduled: number;
   total: number;
   sent: number;
   failed: number;
@@ -443,6 +482,8 @@ export interface PushCampaign extends PushContent {
   name: string;
   audience: PushAudience;
   channels: PushChannel[];
+  send_mode: PushSendMode;
+  resend: { after_hours: number | null; title: string | null; body: string | null; queued_at: string | null };
   status: "draft" | "sending" | "sent";
   created_at: string;
   updated_at: string;
@@ -450,4 +491,14 @@ export interface PushCampaign extends PushContent {
   stats: PushCampaignStats;
 }
 
-export type PushCampaignInput = PushContent & { name: string; audience: PushAudience; channels: PushChannel[] };
+export type PushSendMode = "now" | "smart";
+
+export type PushCampaignInput = PushContent & {
+  name: string;
+  audience: PushAudience;
+  channels: PushChannel[];
+  send_mode: PushSendMode;
+  resend_after_hours: number | null;
+  resend_title?: string | null;
+  resend_body?: string | null;
+};

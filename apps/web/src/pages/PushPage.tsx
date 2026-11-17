@@ -3,7 +3,11 @@ import {
   Apple,
   BellRing,
   Check,
+  Clock,
   Copy,
+  MessageSquareQuote,
+  Package,
+  Repeat,
   FlaskConical,
   Image as ImageIcon,
   Inbox,
@@ -16,11 +20,12 @@ import {
   Smartphone,
   Trash2,
   Upload,
+  Wand2,
 } from "lucide-react";
 import { API_URL, api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { cx, formatDateTime, formatNumber, formatRelative } from "../lib/format";
-import type { PushAudience, PushCampaign, PushChannel, PushConfig, PushDevice } from "../lib/types";
+import type { PushAudience, PushCampaign, PushChannel, PushConfig, PushDevice, PushPrompt, PushSendMode } from "../lib/types";
 import {
   Badge,
   Button,
@@ -119,9 +124,27 @@ interface Draft {
   url: string;
   audience: PushAudience;
   channels: PushChannel[];
+  send_mode: PushSendMode;
+  resend: boolean;
+  resend_after_hours: number;
+  resend_title: string;
+  resend_body: string;
 }
 
-const EMPTY: Draft = { name: "", title: "", body: "", image_url: "", url: "", audience: { type: "all" }, channels: ["push", "in_app"] };
+const EMPTY: Draft = {
+  name: "",
+  title: "",
+  body: "",
+  image_url: "",
+  url: "",
+  audience: { type: "all" },
+  channels: ["push", "in_app"],
+  send_mode: "now",
+  resend: false,
+  resend_after_hours: 24,
+  resend_title: "",
+  resend_body: "",
+};
 
 const CHANNEL_OPTIONS: Array<{ value: PushChannel; label: string; description: string; icon: typeof Lock }> = [
   { value: "push", label: "Écran verrouillé", description: "Notification système : écran verrouillé, bannière et son, même app fermée.", icon: Lock },
@@ -179,7 +202,7 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
     e.preventDefault();
     setSending(true);
     try {
-      const created = await api.push.createCampaign({ name: draft.name.trim() || draft.title.replace(/\{\{[^}]*\}\}[\s,]*/g, "").trim() || "Notification push", audience: draft.audience, channels: draft.channels, ...content() });
+      const created = await api.push.createCampaign({ name: draft.name.trim() || draft.title.replace(/\{\{[^}]*\}\}[\s,]*/g, "").trim() || "Notification push", audience: draft.audience, channels: draft.channels, send_mode: draft.send_mode, resend_after_hours: draft.resend && draft.channels.includes("push") ? draft.resend_after_hours : null, resend_title: draft.resend_title.trim() || null, resend_body: draft.resend_body.trim() || null, ...content() });
       await api.push.sendCampaign(created.id);
       toast.success("Notification en cours d'envoi", `${formatNumber(count ?? 0)} appareil(s) ciblé(s).`);
       setDraft(EMPTY);
@@ -294,6 +317,63 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
                 })}
               </div>
             </fieldset>
+
+            {draft.channels.includes("push") && (
+              <fieldset className="space-y-3">
+                <legend className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Options d'envoi</legend>
+                <label className="flex cursor-pointer gap-3 rounded-2xl p-4 ring-1 ring-slate-900/10 dark:ring-white/10">
+                  <input
+                    type="checkbox"
+                    className="mt-1 size-4 accent-brand-500"
+                    checked={draft.send_mode === "smart"}
+                    onChange={(e) => set("send_mode", e.target.checked ? "smart" : "now")}
+                  />
+                  <span>
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-white">
+                      <Wand2 className="size-4" /> Envoi intelligent
+                    </span>
+                    <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                      Chaque client la reçoit dans les 24 h, à l'heure où il ouvre d'habitude ses notifications et emails. Sans historique : la meilleure heure de
+                      votre audience.
+                    </span>
+                  </span>
+                </label>
+                <div className="rounded-2xl p-4 ring-1 ring-slate-900/10 dark:ring-white/10">
+                  <label className="flex cursor-pointer gap-3">
+                    <input type="checkbox" className="mt-1 size-4 accent-brand-500" checked={draft.resend} onChange={(e) => set("resend", e.target.checked)} />
+                    <span>
+                      <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-white">
+                        <Repeat className="size-4" /> Relancer ceux qui ne l'ont pas ouverte
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
+                        Une seule relance, uniquement aux clients qui ne l'ont ni ouverte ni lue dans l'app.
+                      </span>
+                    </span>
+                  </label>
+                  {draft.resend && (
+                    <div className="mt-4 space-y-3 pl-7">
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                        <span>Après</span>
+                        <Select
+                          className="h-9 w-auto"
+                          value={draft.resend_after_hours}
+                          onChange={(e) => set("resend_after_hours", Number(e.target.value))}
+                          aria-label="Délai de relance"
+                        >
+                          {[2, 6, 12, 24, 48, 72].map((h) => (
+                            <option key={h} value={h}>
+                              {h < 24 ? `${h} heures` : h === 24 ? "1 jour" : `${h / 24} jours`}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <Input value={draft.resend_title} onChange={(e) => set("resend_title", e.target.value)} placeholder={`Titre de la relance (par défaut : ${draft.title || "le même"})`} aria-label="Titre de la relance" maxLength={120} />
+                      <Input value={draft.resend_body} onChange={(e) => set("resend_body", e.target.value)} placeholder="Texte de la relance (par défaut : le même)" aria-label="Texte de la relance" maxLength={500} />
+                    </div>
+                  )}
+                </div>
+              </fieldset>
+            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Audience" htmlFor="push-audience">
@@ -427,6 +507,8 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
                             ? "Écran verrouillé"
                             : "Dans l'app"}{" "}
                         · {formatDateTime(c.sent_at ?? c.created_at)}
+                        {c.send_mode === "smart" && " · envoi intelligent"}
+                        {c.resend.after_hours != null && ` · relance après ${c.resend.after_hours} h`}
                       </p>
                     </td>
                     <td className="px-3 py-3">
@@ -434,7 +516,7 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
                         <Badge tone="green">Envoyée</Badge>
                       ) : c.status === "sending" ? (
                         <Badge tone="blue" dot>
-                          En cours
+                          {c.stats.scheduled > 0 ? `${formatNumber(c.stats.scheduled)} programmée(s)` : "En cours"}
                         </Badge>
                       ) : (
                         <Badge>Brouillon</Badge>
@@ -446,6 +528,11 @@ function SendTab({ ready, onSetup }: { ready: boolean; onSetup: () => void }) {
                       {c.channels.includes("push") ? (
                         <>
                           {formatNumber(c.stats.opened)} <span className="text-xs text-slate-500">({c.stats.open_rate.toLocaleString("fr-FR")} %)</span>
+                          {c.stats.resend.sent > 0 && (
+                            <span className="block text-xs text-slate-500">
+                              Relance : {formatNumber(c.stats.resend.opened)} / {formatNumber(c.stats.resend.sent)}
+                            </span>
+                          )}
                         </>
                       ) : (
                         <span className="text-slate-400">—</span>
@@ -833,7 +920,11 @@ POST ${API_URL}/api/v1/push/app/opened           // { "message_id": data.missive
         </div>
       </Card>
 
+      <PromptCard config={config} onSaved={onSaved} />
+
       <IdentityCard config={config} onSaved={onSaved} />
+
+      <TransactionalCard />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card>
@@ -1049,6 +1140,170 @@ const userHash = createHmac("sha256", process.env.MISSIVE_IDENTITY_SECRET)
         description="Les signatures calculées avec l'ancienne clé seront refusées : mettez votre serveur à jour en même temps."
         confirmLabel="Régénérer"
       />
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pre-permission screen                                                      */
+/* -------------------------------------------------------------------------- */
+
+function PromptCard({ config, onSaved }: { config: PushConfig; onSaved: (c: PushConfig) => void }) {
+  const toast = useToast();
+  const [draft, setDraft] = useState<PushPrompt>(config.prompt);
+  const [busy, setBusy] = useState(false);
+  const stats = config.prompt_stats;
+  const set = <K extends keyof PushPrompt>(key: K, value: PushPrompt[K]) => setDraft((d) => ({ ...d, [key]: value }));
+  const dirty = JSON.stringify(draft) !== JSON.stringify(config.prompt);
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const next = await api.push.savePrompt({ ...draft, image_url: draft.image_url?.trim() || null });
+      onSaved(next);
+      setDraft(next.prompt);
+      toast.success("Écran de pré-permission enregistré", "Les apps l'affichent dès leur prochain lancement.");
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const code = `import { Missive, MissivePermissionPrompt } from "@missive/expo-push";
+
+// 1. Une fois, à la racine de l'app
+<MissivePermissionPrompt />
+
+// 2. Au bon moment (après un premier achat, un suivi de commande…)
+await Missive.requestPermission();`;
+
+  return (
+    <Card>
+      <CardHeader
+        title="Écran de pré-permission"
+        description="iOS ne laisse demander les notifications qu'une fois. Expliquez d'abord : la fenêtre système ne s'ouvre que pour ceux qui acceptent."
+        action={
+          draft.enabled ? (
+            <Badge tone="green" dot>
+              Actif
+            </Badge>
+          ) : (
+            <Badge>Désactivé</Badge>
+          )
+        }
+      />
+      <div className="grid grid-cols-2 gap-4 border-b border-slate-900/10 p-6 sm:grid-cols-4 dark:border-white/10">
+        <StatCard label={`Affichages (${stats.days} j)`} value={formatNumber(stats.shown)} icon={MessageSquareQuote} />
+        <StatCard label="Ont touché « Activer »" value={`${stats.accept_rate.toLocaleString("fr-FR")} %`} hint={`${formatNumber(stats.accepted)} clients`} />
+        <StatCard label="Taux d'opt-in" value={`${stats.opt_in_rate.toLocaleString("fr-FR")} %`} hint={`${formatNumber(stats.granted)} autorisations`} icon={BellRing} />
+        <StatCard label="Clients dans l'app" value={formatNumber(config.app_users)} hint="connectés au moins une fois" icon={Smartphone} />
+      </div>
+      <form onSubmit={(e) => void save(e)} className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_300px]">
+        <div className="space-y-4">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+            <input type="checkbox" className="size-4 accent-brand-500" checked={draft.enabled} onChange={(e) => set("enabled", e.target.checked)} />
+            Afficher l'écran avant la demande système
+          </label>
+          <Field label="Titre" htmlFor="prompt-title">
+            <Input id="prompt-title" value={draft.title} maxLength={80} onChange={(e) => set("title", e.target.value)} required />
+          </Field>
+          <Field label="Message" htmlFor="prompt-body" hint="Dites ce que le client y gagne : suivi de commande, offres en avant-première…">
+            <Textarea id="prompt-body" rows={3} value={draft.body} maxLength={300} onChange={(e) => set("body", e.target.value)} required />
+          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Bouton principal" htmlFor="prompt-accept">
+              <Input id="prompt-accept" value={draft.accept_label} maxLength={30} onChange={(e) => set("accept_label", e.target.value)} required />
+            </Field>
+            <Field label="Bouton secondaire" htmlFor="prompt-decline">
+              <Input id="prompt-decline" value={draft.decline_label} maxLength={30} onChange={(e) => set("decline_label", e.target.value)} required />
+            </Field>
+            <Field label="Afficher à partir du lancement n°" htmlFor="prompt-launches">
+              <Input id="prompt-launches" type="number" min={1} max={20} value={draft.min_launches} onChange={(e) => set("min_launches", Math.max(1, Number(e.target.value) || 1))} />
+            </Field>
+            <Field label="Après « Plus tard », reproposer dans (jours)" htmlFor="prompt-cooldown">
+              <Input id="prompt-cooldown" type="number" min={1} max={90} value={draft.cooldown_days} onChange={(e) => set("cooldown_days", Math.max(1, Number(e.target.value) || 1))} />
+            </Field>
+          </div>
+          <Field label="Image (optionnelle)" htmlFor="prompt-image">
+            <Input id="prompt-image" type="url" value={draft.image_url ?? ""} onChange={(e) => set("image_url", e.target.value)} placeholder="https://…/visuel.jpg" />
+          </Field>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" loading={busy} disabled={!dirty}>
+              Enregistrer
+            </Button>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Modifiable à tout moment, sans republier l'app.</span>
+          </div>
+          <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 text-[12px] leading-relaxed text-slate-200">{code}</pre>
+        </div>
+        <div className="mx-auto w-full max-w-[300px]">
+          <div className="overflow-hidden rounded-[2.2rem] bg-slate-900 p-2 shadow-xl">
+            <div className="relative flex h-[520px] flex-col justify-end overflow-hidden rounded-[1.8rem] bg-gradient-to-b from-slate-200 to-slate-300">
+              <div className="absolute inset-0" style={{ backgroundColor: "rgba(11,33,74,0.45)" }} />
+              <div className="relative rounded-t-3xl bg-white px-5 pt-5 pb-7 text-center">
+                {draft.image_url ? (
+                  <img src={draft.image_url} alt="" className="mb-3 h-24 w-full rounded-2xl object-cover" />
+                ) : (
+                  <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-2xl">🔔</div>
+                )}
+                <p className="text-lg leading-tight font-extrabold text-[#0b214a]">{draft.title || "Titre"}</p>
+                <p className="mt-2 text-[13px] leading-snug text-slate-500">{draft.body || "Message"}</p>
+                <div className="mt-4 rounded-full bg-brand-500 py-3 text-sm font-bold text-white">{draft.accept_label || "Activer"}</div>
+                <div className="pt-3 text-sm font-semibold text-slate-500">{draft.decline_label || "Plus tard"}</div>
+              </div>
+            </div>
+          </div>
+          <p className="mt-2 text-center text-xs text-slate-500">Aperçu dans l'app</p>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Transactional push                                                         */
+/* -------------------------------------------------------------------------- */
+
+function TransactionalCard() {
+  const code = `curl -X POST ${API_URL}/api/v1/push/send \\
+  -H "Authorization: Bearer VOTRE_CLE_API_SECRETE" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "email": "camille@exemple.fr",
+    "title": "Votre commande est en route 🚚",
+    "body": "Colissimo la livre demain. Suivez-la en direct.",
+    "url": "monapp://commandes/1042"
+  }'`;
+  return (
+    <Card>
+      <CardHeader
+        title="Notifications transactionnelles"
+        description="Un message à un client précis, envoyé tout de suite : commande expédiée, rendez-vous, mot de passe…"
+        action={<Badge tone="blue">API</Badge>}
+      />
+      <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-2">
+        <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+          <p className="flex gap-2">
+            <Clock className="mt-0.5 size-4 shrink-0 text-brand-500" /> Envoi immédiat sur tous les appareils du client, et dans le centre de notifications de l'app.
+          </p>
+          <p className="flex gap-2">
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand-500" /> Transactionnel : atteint aussi les clients désabonnés des offres marketing.
+          </p>
+          <p className="flex gap-2">
+            <Package className="mt-0.5 size-4 shrink-0 text-brand-500" /> Sans code avec Shopify : créez une automatisation « Commande expédiée » avec une étape push.
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Créez la clé secrète dans Réglages › Clés API. Ne l'utilisez jamais dans l'app mobile. Réponse <code>404</code> si le contact n'existe pas.
+          </p>
+        </div>
+        <div className="relative">
+          <pre className="overflow-x-auto rounded-xl bg-slate-950 p-4 text-[12px] leading-relaxed text-slate-200">{code}</pre>
+          <div className="absolute top-2 right-2">
+            <CopyButton text={code} />
+          </div>
+        </div>
+      </div>
     </Card>
   );
 }

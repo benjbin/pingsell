@@ -345,7 +345,7 @@ export const channelsSchema = z
   .min(1, 'Choisissez au moins un canal : écran verrouillé ou dans l’app')
   .transform((list) => [...new Set(list)]);
 
-interface Recipient {
+export interface Recipient {
   device_id: string;
   contact_id: string | null;
   email: string | null;
@@ -388,11 +388,12 @@ function insertPushMessage(
   content: PushContent,
   refs: { campaignId?: string | null; automationId?: string | null },
   inboxId: string | null,
+  extra: { scheduledAt?: string | null; resend?: boolean } = {},
 ): void {
   run(
     db,
-    `INSERT INTO push_messages (id, account_id, push_campaign_id, automation_id, device_id, contact_id, title, body, image_url, url, status, created_at, inbox_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
+    `INSERT INTO push_messages (id, account_id, push_campaign_id, automation_id, device_id, contact_id, title, body, image_url, url, status, created_at, inbox_id, scheduled_at, resend)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
     newId(),
     accountId,
     refs.campaignId ?? null,
@@ -405,7 +406,54 @@ function insertPushMessage(
     content.url ?? null,
     now(),
     inboxId,
+    extra.scheduledAt ?? null,
+    extra.resend ? 1 : 0,
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Smart send time                                                            */
+/* -------------------------------------------------------------------------- */
+
+/** Most frequent hour (UTC, 0-23) at which opens happened, for a contact or the whole account. */
+function favouriteHour(db: DatabaseSync, accountId: string, contactId: string | null): number | null {
+  const filter = contactId ? 'contact_id = ?' : 'account_id = ?';
+  const id = contactId ?? accountId;
+  const row = get<{ h: string; n: number }>(
+    db,
+    `SELECT h, COUNT(*) AS n FROM (
+        SELECT strftime('%H', opened_at) AS h FROM push_messages WHERE ${filter} AND opened_at IS NOT NULL
+        UNION ALL
+        SELECT strftime('%H', opened_at) AS h FROM messages WHERE ${filter} AND opened_at IS NOT NULL
+     ) GROUP BY h ORDER BY n DESC, h LIMIT 1`,
+    id,
+    id,
+  );
+  return row?.h ? Number(row.h) : null;
+}
+
+/**
+ * Smart send time: the next occurrence (within 24 h) of the hour this customer usually opens
+ * notifications or emails; the account's best hour for customers without history; now otherwise.
+ */
+export function smartSendTime(
+  db: DatabaseSync,
+  accountId: string,
+  contactId: string | null,
+  cache: Map<string, number | null> = new Map(),
+  from = new Date(),
+): string | null {
+  const key = contactId ?? '';
+  if (!cache.has(key)) cache.set(key, contactId ? favouriteHour(db, accountId, contactId) : null);
+  if (!cache.has('__account')) cache.set('__account', favouriteHour(db, accountId, null));
+  const hour = cache.get(key) ?? cache.get('__account') ?? null;
+  if (hour === null) return null;
+  const at = new Date(from);
+  at.setUTCHours(hour, 0, 0, 0);
+  if (at.getTime() <= from.getTime()) at.setUTCDate(at.getUTCDate() + 1);
+  // Already within the hour: send right away rather than tomorrow.
+  if (at.getTime() - from.getTime() > 23 * 3_600_000) return null;
+  return at.toISOString();
 }
 
 /**
@@ -420,7 +468,9 @@ export function queueContent(
   refs: { campaignId?: string | null; automationId?: string | null },
   channels: readonly PushChannel[],
   scope: 'contact' | 'device' = 'contact',
+  options: { smart?: boolean; resend?: boolean; inboxId?: string | null } = {},
 ): { pushes: number; inbox: number } {
+  const hours = new Map<string, number | null>();
   const groups = new Map<string, Recipient[]>();
   for (const r of recipients) {
     const key = scope === 'contact' && r.contact_id ? `c:${r.contact_id}` : `d:${r.device_id}`;
@@ -431,7 +481,7 @@ export function queueContent(
   const timestamp = now();
   for (const [key, members] of groups) {
     const first = members[0];
-    let inboxId: string | null = null;
+    let inboxId: string | null = options.inboxId ?? null;
     if (channels.includes('in_app')) {
       inboxId = newId();
       const byContact = key.startsWith('c:');
@@ -454,7 +504,8 @@ export function queueContent(
       inbox++;
     }
     if (channels.includes('push')) {
-      for (const r of members) insertPushMessage(db, accountId, r, content, refs, inboxId);
+      const scheduledAt = options.smart ? smartSendTime(db, accountId, first.contact_id, hours) : null;
+      for (const r of members) insertPushMessage(db, accountId, r, content, refs, inboxId, { scheduledAt, resend: options.resend });
       pushes += members.length;
     }
   }
@@ -513,6 +564,13 @@ export function serializePushCampaign(row: Row) {
     url: (row.url as string | null) ?? null,
     audience: parseJson<PushAudience>(row.audience, { type: 'all' }),
     channels: parseJson<PushChannel[]>(row.channels, [...CHANNELS]),
+    send_mode: (row.send_mode === 'smart' ? 'smart' : 'now') as 'now' | 'smart',
+    resend: {
+      after_hours: row.resend_after_hours == null ? null : Number(row.resend_after_hours),
+      title: (row.resend_title as string | null) ?? null,
+      body: (row.resend_body as string | null) ?? null,
+      queued_at: (row.resend_queued_at as string | null) ?? null,
+    },
     status: row.status as 'draft' | 'sending' | 'sent',
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
@@ -526,9 +584,18 @@ export function pushCampaignStats(db: DatabaseSync, campaignId: string) {
     `SELECT COUNT(*) AS total,
             SUM(status = 'sent') AS sent, SUM(status = 'failed') AS failed, SUM(status = 'queued') AS queued,
             SUM(opened_at IS NOT NULL) AS opened
-       FROM push_messages WHERE push_campaign_id = ?`,
+       FROM push_messages WHERE push_campaign_id = ? AND resend = 0`,
     campaignId,
   );
+  const resend = get<{ total: number; sent: number; opened: number }>(
+    db,
+    `SELECT COUNT(*) AS total, SUM(status = 'sent') AS sent, SUM(opened_at IS NOT NULL) AS opened
+       FROM push_messages WHERE push_campaign_id = ? AND resend = 1`,
+    campaignId,
+  );
+  const scheduled = scalar(db, "SELECT COUNT(*) FROM push_messages WHERE push_campaign_id = ? AND status = 'queued' AND scheduled_at > ?", campaignId, now());
+  const resendSent = Number(resend?.sent ?? 0);
+  const resendOpened = Number(resend?.opened ?? 0);
   const sent = Number(row?.sent ?? 0);
   const opened = Number(row?.opened ?? 0);
   const inbox = get<{ total: number; read: number }>(
@@ -540,6 +607,8 @@ export function pushCampaignStats(db: DatabaseSync, campaignId: string) {
   const inboxRead = Number(inbox?.read ?? 0);
   return {
     in_app: { total: inboxTotal, read: inboxRead, read_rate: inboxTotal ? Math.round((inboxRead / inboxTotal) * 1000) / 10 : 0 },
+    resend: { total: Number(resend?.total ?? 0), sent: resendSent, opened: resendOpened, open_rate: resendSent ? Math.round((resendOpened / resendSent) * 1000) / 10 : 0 },
+    scheduled,
     total: Number(row?.total ?? 0),
     sent,
     failed: Number(row?.failed ?? 0),
@@ -562,7 +631,7 @@ export function queuePushCampaigns(db: DatabaseSync): number {
     transaction(db, () => {
       const accountId = String(get<{ account_id: string }>(db, 'SELECT account_id FROM push_campaigns WHERE id = ?', c.id)!.account_id);
       const recipients = audienceDevices(db, accountId, c.audience);
-      const result = queueContent(db, accountId, recipients, c, { campaignId: c.id }, c.channels);
+      const result = queueContent(db, accountId, recipients, c, { campaignId: c.id }, c.channels, 'contact', { smart: c.send_mode === 'smart' });
       // In-app only (or nobody): nothing to deliver through Apple / Google, the campaign is done.
       if (!result.pushes) run(db, "UPDATE push_campaigns SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ?", now(), now(), c.id);
       queued += result.pushes;
@@ -576,8 +645,8 @@ export function finalizePushCampaigns(db: DatabaseSync): void {
     db,
     `UPDATE push_campaigns SET status = 'sent', sent_at = ?, updated_at = ?
       WHERE status = 'sending'
-        AND EXISTS (SELECT 1 FROM push_messages m WHERE m.push_campaign_id = push_campaigns.id)
-        AND NOT EXISTS (SELECT 1 FROM push_messages m WHERE m.push_campaign_id = push_campaigns.id AND m.status = 'queued')`,
+        AND EXISTS (SELECT 1 FROM push_messages m WHERE m.push_campaign_id = push_campaigns.id AND m.resend = 0)
+        AND NOT EXISTS (SELECT 1 FROM push_messages m WHERE m.push_campaign_id = push_campaigns.id AND m.resend = 0 AND m.status = 'queued')`,
     now(),
     now(),
   );
@@ -838,7 +907,9 @@ export async function sendPushBatch(db: DatabaseSync, config: AppConfig, limit: 
     db,
     `SELECT m.id, m.account_id, m.device_id, d.contact_id AS device_contact_id, d.token, d.provider, m.title, m.body, m.image_url, m.url, m.inbox_id
        FROM push_messages m JOIN push_devices d ON d.id = m.device_id
-      WHERE m.status = 'queued' ORDER BY m.created_at LIMIT ?`,
+      WHERE m.status = 'queued' AND (m.scheduled_at IS NULL OR m.scheduled_at <= ?)
+      ORDER BY m.created_at LIMIT ?`,
+    now(),
     limit,
   );
   const configs = new Map<string, PushConfig>();

@@ -4,8 +4,24 @@ import { all, get, newId, now, parseJson, run, scalar, transaction, type Databas
 import { accountSender, createMessage } from './messages.js';
 import { queuePushForContact } from './push.js';
 
-export const TRIGGERS = ['contact_created', 'tag_added', 'order_created', 'cart_abandoned'] as const;
+export const TRIGGERS = [
+  'contact_created',
+  'tag_added',
+  'order_created',
+  'cart_abandoned',
+  'order_fulfilled',
+  'app_signed_in',
+  'push_subscribed',
+] as const;
 export type Trigger = (typeof TRIGGERS)[number];
+
+/** Transactional triggers reach every customer, even unsubscribed from marketing (not complaints). */
+export const TRANSACTIONAL_TRIGGERS: readonly Trigger[] = ['order_fulfilled'];
+const reachable = (trigger: Trigger, status: string) =>
+  status === 'subscribed' || (TRANSACTIONAL_TRIGGERS.includes(trigger) && status !== 'complained');
+
+/** Conditions an `exit_if` step checks since the run started. */
+export const EXIT_CONDITIONS = ['push_opened', 'email_opened', 'ordered'] as const;
 
 export const stepSchema = z.discriminatedUnion('type', [
   z.object({
@@ -26,6 +42,11 @@ export const stepSchema = z.discriminatedUnion('type', [
     image_url: z.string().trim().url().max(2000).nullable().optional(),
     /** Also add it to the notification centre inside the app (default: yes). */
     in_app: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal('exit_if'),
+    /** Ends the run when the customer already opened a notification / an email of this automation, or ordered. */
+    condition: z.enum(EXIT_CONDITIONS),
   }),
 ]);
 export const stepsSchema = z.array(stepSchema).min(1).max(50);
@@ -99,7 +120,7 @@ export function fireTrigger(
         accountId,
       );
     }
-    if (contact.status !== 'subscribed') return 0;
+    if (!reachable(trigger, contact.status)) return 0;
 
     const automations = all(
       db,
@@ -145,9 +166,9 @@ export function cancelRunsForContact(db: DatabaseSync, contactId: string): void 
  * a wait step reschedules the run. Paused automations keep their runs pending.
  */
 export function processDueRuns(db: DatabaseSync, config: AppConfig, limit = 200): number {
-  const due = all<{ id: string; automation_id: string; contact_id: string; step_index: number }>(
+  const due = all<{ id: string; automation_id: string; contact_id: string; step_index: number; created_at: string }>(
     db,
-    `SELECT r.id, r.automation_id, r.contact_id, r.step_index
+    `SELECT r.id, r.automation_id, r.contact_id, r.step_index, r.created_at
        FROM automation_runs r JOIN automations a ON a.id = r.automation_id
       WHERE r.status = 'pending' AND r.next_run_at <= ? AND a.status = 'active'
       ORDER BY r.next_run_at LIMIT ?`,
@@ -163,7 +184,7 @@ export function processDueRuns(db: DatabaseSync, config: AppConfig, limit = 200)
         'SELECT id, email, first_name, last_name, status FROM contacts WHERE id = ?',
         runRow.contact_id,
       );
-      if (!contact || contact.status !== 'subscribed') {
+      if (!contact || !reachable(automation.trigger, contact.status)) {
         run(db, "UPDATE automation_runs SET status = 'cancelled' WHERE id = ?", runRow.id);
         return;
       }
@@ -171,6 +192,7 @@ export function processDueRuns(db: DatabaseSync, config: AppConfig, limit = 200)
       let index = Number(runRow.step_index);
       let nextRunAt = now();
       let waiting = false;
+      let exited = false;
       const senderName = accountSender(db, config, automation.account_id).name;
       while (index < automation.steps.length) {
         const step = automation.steps[index];
@@ -179,6 +201,13 @@ export function processDueRuns(db: DatabaseSync, config: AppConfig, limit = 200)
           nextRunAt = new Date(Date.now() + step.hours * 3_600_000).toISOString();
           waiting = true;
           break;
+        }
+        if (step.type === 'exit_if') {
+          if (exitConditionMet(db, automation.id, contact.id, step.condition, String(runRow.created_at))) {
+            exited = true;
+            break;
+          }
+          continue;
         }
         if (step.type === 'push') {
           // Contacts without the app simply skip this step.
@@ -197,7 +226,7 @@ export function processDueRuns(db: DatabaseSync, config: AppConfig, limit = 200)
         });
       }
 
-      const finished = !waiting && index >= automation.steps.length;
+      const finished = exited || (!waiting && index >= automation.steps.length);
       run(
         db,
         'UPDATE automation_runs SET step_index = ?, next_run_at = ?, status = ? WHERE id = ?',
@@ -209,4 +238,45 @@ export function processDueRuns(db: DatabaseSync, config: AppConfig, limit = 200)
     });
   }
   return due.length;
+}
+
+/** True when the goal of the automation is already reached for this run (stop sending). */
+export function exitConditionMet(
+  db: DatabaseSync,
+  automationId: string,
+  contactId: string,
+  condition: (typeof EXIT_CONDITIONS)[number],
+  since: string,
+): boolean {
+  if (condition === 'push_opened') {
+    return (
+      scalar(
+        db,
+        'SELECT COUNT(*) FROM push_messages WHERE automation_id = ? AND contact_id = ? AND created_at >= ? AND opened_at IS NOT NULL',
+        automationId,
+        contactId,
+        since,
+      ) +
+        scalar(
+          db,
+          'SELECT COUNT(*) FROM app_inbox WHERE automation_id = ? AND contact_id = ? AND created_at >= ? AND read_at IS NOT NULL',
+          automationId,
+          contactId,
+          since,
+        ) >
+      0
+    );
+  }
+  if (condition === 'email_opened') {
+    return (
+      scalar(
+        db,
+        'SELECT COUNT(*) FROM messages WHERE automation_id = ? AND contact_id = ? AND created_at >= ? AND opened_at IS NOT NULL',
+        automationId,
+        contactId,
+        since,
+      ) > 0
+    );
+  }
+  return scalar(db, "SELECT COUNT(*) FROM events WHERE contact_id = ? AND type = 'order' AND created_at >= ?", contactId, since) > 0;
 }

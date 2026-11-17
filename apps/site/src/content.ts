@@ -56,6 +56,8 @@ export const PLANS: Plan[] = [
       "Chiffre d'affaires Shopify par campagne",
       "API et clés API",
       "Notifications push (écran verrouillé) et centre de notifications dans votre app",
+      "Écran de pré-permission, relance des non-ouvreurs et envoi intelligent",
+      "Push transactionnel par API et Shopify « Commande expédiée »",
       "Jusqu'à 3 utilisateurs",
     ],
     cta: "Essayer Pro",
@@ -92,6 +94,11 @@ export const PLAN_TABLE: Array<[string, string | boolean, string | boolean, stri
   ["App Missive iOS et Android (pour gérer votre compte)", true, true, true],
   ["Automatisations", false, true, true],
   ["Notifications push et centre de notifications in-app (votre app iOS / Android)", false, true, true],
+  ["Écran de pré-permission et taux d'opt-in", false, true, true],
+  ["Relance automatique des non-ouvreurs (push)", false, true, true],
+  ["Envoi intelligent à l'heure de chaque client", false, true, true],
+  ["Déclencheurs app et étape « Arrêter si… »", false, true, true],
+  ["Push transactionnel (API et Shopify « Commande expédiée »)", false, true, true],
   ["Chiffre d'affaires par campagne", false, true, true],
   ["API et clés API", false, true, true],
   ["Utilisateurs", "1", "3", "Illimités"],
@@ -155,6 +162,14 @@ export const FAQ: Array<{ q: string; a: string }> = [
   {
     q: "Puis-je envoyer des notifications push à ma propre app ?",
     a: "Oui, en Pro et Business. Votre app iOS ou Android (native, React Native, Flutter ou Expo) enregistre ses appareils auprès de Missive avec une clé publique d'app, et l'email relie chaque appareil à un contact. Missive envoie ensuite via Firebase Cloud Messaging, APNs ou Expo. Chaque message s'affiche sur l'écran verrouillé et reste dans le centre de notifications de votre app (avec badge des non-lues), grâce au SDK React Native / Expo ou à quatre appels d'API. Vous créez des campagnes avec titre, texte, image et un lien profond qui ouvre la bonne page de l'app, et vous ajoutez une étape « Notification push » dans vos automatisations, à côté de vos emails. À ne pas confondre avec l'app Missive, qui sert à suivre votre compte depuis votre téléphone.",
+  },
+  {
+    q: "Pourquoi un écran avant la demande de notifications ?",
+    a: "Parce que la fenêtre système d'iOS et d'Android ne s'affiche qu'une fois : un client qui refuse ne la reverra plus, et devra passer par les réglages de son téléphone. Missive affiche d'abord votre propre écran, dans votre app, qui explique ce que vos notifications apportent (suivi de colis, ventes privées…). La fenêtre système ne s'ouvre que pour les clients qui touchent « Activer ». Vous modifiez le texte depuis Missive sans republier l'app, vous choisissez à partir de quel lancement l'afficher et après combien de jours le reproposer à ceux qui ont choisi « Plus tard », et vous suivez les affichages, les acceptations et votre taux d'opt-in.",
+  },
+  {
+    q: "Quelle différence entre un push transactionnel et un push marketing ?",
+    a: "Un push marketing (campagne, automatisation) part vers une audience et respecte les désinscriptions marketing. Un push transactionnel concerne une seule commande ou un seul compte : il est envoyé immédiatement à un client, retrouvé par son email, via l'appel POST /api/v1/push/send ou sans code avec le déclencheur Shopify « Commande expédiée » (avec le suivi du colis). Comme c'est une information attendue, il atteint aussi les clients désinscrits du marketing. Gardez-le pour les vraies informations de service : expédition, livraison, compte.",
   },
   {
     q: "Je viens d'un autre outil, comment récupérer mes contacts ?",

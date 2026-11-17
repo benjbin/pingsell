@@ -34,6 +34,20 @@ import {
   unregisterDevice,
   type FcmCredentials,
 } from '../services/push.js';
+import {
+  activeDeviceCount,
+  contactIdFor,
+  promptEventSchema,
+  promptSchema,
+  promptSettings,
+  promptStats,
+  recordPromptEvent,
+  savePromptSettings,
+  sendTransactionalPush,
+  trackAppUser,
+  transactionalSchema,
+} from '../services/pushGrowth.js';
+import { fireTrigger } from '../services/automations.js';
 
 type Params = { Params: { id: string } };
 
@@ -48,7 +62,22 @@ const campaignSchema = pushContentSchema.extend({
   name: z.string().trim().min(1, 'Le nom est requis').max(200),
   audience: audienceSchema.default({ type: 'all' }),
   channels: channelsSchema.default(['push', 'in_app']),
+  /** `smart` delivers to each customer at the hour they usually open (within 24 h). */
+  send_mode: z.enum(['now', 'smart']).default('now'),
+  /** Reminder sent to customers who did not open the notification after this delay. */
+  resend_after_hours: z.number().int().min(1).max(168).nullable().default(null),
+  resend_title: z.string().trim().max(120).nullable().optional(),
+  resend_body: z.string().trim().max(500).nullable().optional(),
 });
+
+const identifySchema = z
+  .object({
+    email: z.string().trim().max(254).optional(),
+    contact_id: z.string().trim().max(64).optional(),
+    user_hash: z.string().trim().max(128).optional(),
+    token: z.string().trim().min(8).max(4096).optional(),
+  })
+  .refine((v) => v.email || v.contact_id, { message: 'Indiquez email ou contact_id' });
 
 const tokenSchema = z.object({ token: z.string().trim().min(8).max(4096) });
 const openedSchema = z.object({ message_id: z.string().trim().min(1).max(64) });
@@ -98,8 +127,45 @@ export async function pushAppRoutes(app: FastifyInstance, { db, kickWorker }: De
     if (!identityAllowed(ensurePushConfig(db, accountId), input)) {
       throw new HttpError(401, 'Signature d’identité (user_hash) manquante ou invalide');
     }
+    const contactId = contactIdFor(db, accountId, input);
+    // First reachable device of this customer → `push_subscribed` automations.
+    const hadDevice = contactId ? activeDeviceCount(db, accountId, contactId) > 0 : true;
     const result = registerDevice(db, accountId, input);
+    if (contactId && result.device.contact_id === contactId) {
+      trackAppUser(db, accountId, contactId);
+      if (!hadDevice) fireTrigger(db, accountId, contactId, 'push_subscribed', { platform: input.platform });
+      kickWorker();
+    }
     return reply.code(result.created ? 201 : 200).send({ id: result.device.id, provider: result.device.provider, linked: result.linked });
+  });
+
+  /* Pre-permission screen (shown by the SDK before the system dialog) */
+
+  app.get('/push/app/config', async (request) => {
+    const accountId = appAccount(request);
+    return { prompt: promptSettings(db, accountId) };
+  });
+
+  app.post('/push/app/prompt', async (request) => {
+    const accountId = appAccount(request);
+    recordPromptEvent(db, accountId, parse(promptEventSchema, request.body));
+    return { ok: true };
+  });
+
+  /** The customer signed in to the app (even with notifications off): `app_signed_in` automations. */
+  app.post('/push/app/identify', async (request) => {
+    const accountId = appAccount(request);
+    const input = parse(identifySchema, request.body ?? {});
+    if (!identityAllowed(ensurePushConfig(db, accountId), input)) {
+      throw new HttpError(401, 'Signature d’identité (user_hash) manquante ou invalide');
+    }
+    const contactId = contactIdFor(db, accountId, input);
+    if (!contactId) return { ok: true, known: false, first: false };
+    const { first } = trackAppUser(db, accountId, contactId);
+    const token = String(request.headers['x-missive-device'] ?? input.token ?? '').trim();
+    if (token) run(db, 'UPDATE push_devices SET contact_id = ?, last_seen_at = ? WHERE account_id = ? AND token = ?', contactId, now(), accountId, token);
+    kickWorker();
+    return { ok: true, known: true, first };
   });
 
   app.post('/push/app/devices/unregister', async (request) => {
@@ -159,7 +225,29 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
 
   /* ---- Settings ---- */
 
-  app.get('/push/config', async (request) => publicPushConfig(db, request.accountId, config));
+  const fullConfig = (accountId: string) => ({
+    ...publicPushConfig(db, accountId, config),
+    prompt: promptSettings(db, accountId),
+    prompt_stats: promptStats(db, accountId),
+    app_users: scalar(db, 'SELECT COUNT(*) FROM app_users WHERE account_id = ?', accountId),
+  });
+
+  app.get('/push/config', async (request) => fullConfig(request.accountId));
+
+  app.put('/push/config/prompt', async (request) => {
+    assertManager(request);
+    savePromptSettings(db, request.accountId, parse(promptSchema, request.body));
+    return fullConfig(request.accountId);
+  });
+
+  /* ---- Transactional: one customer, right away (secret API key from the merchant's backend) ---- */
+
+  app.post('/push/send', async (request, reply) => {
+    const result = sendTransactionalPush(db, request.accountId, parse(transactionalSchema, request.body));
+    if (!result) throw notFound('Contact introuvable');
+    kickWorker();
+    return reply.code(202).send({ ok: true, ...result });
+  });
 
   app.put('/push/config', async (request) => {
     assertManager(request);
@@ -169,25 +257,25 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
       apns: body.apns,
       expo: body.expo,
     });
-    return publicPushConfig(db, request.accountId, config);
+    return fullConfig(request.accountId);
   });
 
   app.put('/push/config/identity', async (request) => {
     assertManager(request);
     setRequireIdentity(db, request.accountId, parse(z.object({ required: z.boolean() }), request.body).required);
-    return publicPushConfig(db, request.accountId, config);
+    return fullConfig(request.accountId);
   });
 
   app.post('/push/config/rotate-identity-secret', async (request) => {
     assertManager(request);
     rotateIdentitySecret(db, request.accountId);
-    return publicPushConfig(db, request.accountId, config);
+    return fullConfig(request.accountId);
   });
 
   app.post('/push/config/rotate-app-key', async (request) => {
     assertManager(request);
     rotateAppKey(db, request.accountId);
-    return publicPushConfig(db, request.accountId, config);
+    return fullConfig(request.accountId);
   });
 
   /* ---- Devices ---- */
@@ -261,8 +349,9 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
     const timestamp = now();
     run(
       db,
-      `INSERT INTO push_campaigns (id, account_id, name, title, body, image_url, url, audience, channels, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
+      `INSERT INTO push_campaigns (id, account_id, name, title, body, image_url, url, audience, channels, send_mode,
+              resend_after_hours, resend_title, resend_body, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
       id,
       request.accountId,
       body.name,
@@ -272,6 +361,10 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
       body.url ?? null,
       JSON.stringify(body.audience),
       JSON.stringify(body.channels),
+      body.send_mode,
+      body.resend_after_hours,
+      body.resend_title || null,
+      body.resend_body || null,
       timestamp,
       timestamp,
     );
@@ -282,10 +375,17 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
     const current = findCampaign(request.accountId, request.params.id);
     if (current.status !== 'draft') throw badRequest('Seul un brouillon peut être modifié');
     const body = parse(campaignSchema.partial(), request.body);
-    const merged = { ...current, ...body };
+    const merged = {
+      ...current,
+      ...body,
+      resend_after_hours: body.resend_after_hours !== undefined ? body.resend_after_hours : current.resend.after_hours,
+      resend_title: body.resend_title !== undefined ? body.resend_title : current.resend.title,
+      resend_body: body.resend_body !== undefined ? body.resend_body : current.resend.body,
+    };
     run(
       db,
-      'UPDATE push_campaigns SET name = ?, title = ?, body = ?, image_url = ?, url = ?, audience = ?, channels = ?, updated_at = ? WHERE id = ?',
+      `UPDATE push_campaigns SET name = ?, title = ?, body = ?, image_url = ?, url = ?, audience = ?, channels = ?, send_mode = ?,
+              resend_after_hours = ?, resend_title = ?, resend_body = ?, updated_at = ? WHERE id = ?`,
       merged.name,
       merged.title,
       merged.body,
@@ -293,6 +393,10 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
       merged.url ?? null,
       JSON.stringify(merged.audience),
       JSON.stringify(merged.channels),
+      merged.send_mode,
+      merged.resend_after_hours ?? null,
+      merged.resend_title || null,
+      merged.resend_body || null,
       now(),
       current.id,
     );

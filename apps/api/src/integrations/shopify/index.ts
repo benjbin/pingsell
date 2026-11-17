@@ -292,13 +292,30 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
       const accountId = accountIdOf(request);
       const body = request.body ?? {};
       const type = body.type;
-      if (type !== 'order' && type !== 'cart_abandoned') throw new HttpError(400, "type doit valoir 'order' ou 'cart_abandoned'");
+      if (type !== 'order' && type !== 'cart_abandoned' && type !== 'order_fulfilled') {
+        throw new HttpError(400, "type doit valoir 'order', 'order_fulfilled' ou 'cart_abandoned'");
+      }
       const email = cleanEmail(body.email);
       if (!email) throw new HttpError(400, 'Adresse email invalide');
       const total = body.total !== undefined ? toNumber(body.total) : Math.round((20 + Math.random() * 130) * 100) / 100;
       const currency = 'EUR';
       const existing = findContactByEmail(ctx.db, accountId, email);
       const marketing_state = existing ? null : 'subscribed'; // dev helper: new contacts are opted in
+
+      if (type === 'order_fulfilled') {
+        const { contactId, created } = upsertShopifyContact(ctx, accountId, { email, marketing_state });
+        const data = {
+          order_id: `sim_${randomUUID()}`,
+          order_name: `#SIM${Math.floor(1000 + Math.random() * 9000)}`,
+          tracking_number: `6A${Math.floor(1e9 + Math.random() * 9e9)}`,
+          tracking_url: 'https://www.laposte.fr/outils/suivre-vos-envois',
+          carrier: 'Colissimo',
+          source: 'simulation',
+        };
+        ctx.recordEvent(accountId, contactId, 'order_fulfilled', data);
+        ctx.fireTrigger(accountId, contactId, 'order_fulfilled', data);
+        return { ok: true, type, contact_id: contactId, created, data };
+      }
 
       if (type === 'order') {
         const { contactId, created } = upsertShopifyContact(ctx, accountId, {

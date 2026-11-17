@@ -6,6 +6,7 @@ import type {
   EventType,
   SegmentField,
   SegmentOp,
+  ExitCondition,
 } from "./types";
 
 export type Tone = "brand" | "green" | "amber" | "red" | "slate" | "blue";
@@ -37,6 +38,18 @@ export const TRIGGERS: Record<AutomationTrigger, { label: string; description: s
   tag_added: { label: "Tag ajouté", description: "Quand un tag précis est ajouté à un contact." },
   order_created: { label: "Commande passée", description: "Quand un client passe commande sur Shopify." },
   cart_abandoned: { label: "Panier abandonné", description: "Quand un panier Shopify reste sans commande pendant 1 h." },
+  order_fulfilled: {
+    label: "Commande expédiée",
+    description: "Quand Shopify marque la commande comme expédiée. Transactionnel : atteint aussi les désabonnés marketing.",
+  },
+  app_signed_in: { label: "Première connexion à l'app", description: "La première fois que le client se connecte dans votre app mobile." },
+  push_subscribed: { label: "Notifications activées", description: "Quand le client active les notifications sur son premier appareil." },
+};
+
+export const EXIT_CONDITIONS: Record<ExitCondition, string> = {
+  push_opened: "a ouvert une notification de ce parcours",
+  email_opened: "a ouvert un email de ce parcours",
+  ordered: "a passé commande depuis le début du parcours",
 };
 
 export const EVENT_LABELS: Record<EventType, string> = {

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
-import { ArrowRight, Code2, KeyRound, Link2, RefreshCw, ShoppingBag, ShoppingCart, Unplug } from "lucide-react";
+import { ArrowRight, Code2, KeyRound, Link2, Package, RefreshCw, ShoppingBag, ShoppingCart, Unplug } from "lucide-react";
 import { API_URL, api } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { formatDateTime } from "../lib/format";
@@ -29,7 +29,7 @@ export function IntegrationsPage() {
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [simEmail, setSimEmail] = useState("");
-  const [simulating, setSimulating] = useState<"order" | "cart_abandoned" | null>(null);
+  const [simulating, setSimulating] = useState<"order" | "order_fulfilled" | "cart_abandoned" | null>(null);
 
   async function connect(e: FormEvent) {
     e.preventDefault();
@@ -74,7 +74,7 @@ export function IntegrationsPage() {
     }
   }
 
-  async function simulate(type: "order" | "cart_abandoned") {
+  async function simulate(type: "order" | "order_fulfilled" | "cart_abandoned") {
     if (!simEmail.trim()) {
       toast.error("Indiquez l'email d'un contact");
       return;
@@ -83,7 +83,7 @@ export function IntegrationsPage() {
     try {
       await api.integrations.shopify.simulate({ type, email: simEmail.trim() });
       toast.success(
-        type === "order" ? "Commande simulée" : "Panier abandonné simulé",
+        type === "order" ? "Commande simulée" : type === "order_fulfilled" ? "Expédition simulée" : "Panier abandonné simulé",
         "Les automatisations correspondantes ont été déclenchées.",
       );
     } catch (err) {
@@ -185,10 +185,13 @@ export function IntegrationsPage() {
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               Simulez un événement Shopify pour un contact (créé s'il n'existe pas) afin de tester vos automatisations.
             </p>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <div className="mt-3 flex flex-col flex-wrap gap-2 sm:flex-row">
               <Input type="email" value={simEmail} onChange={(e) => setSimEmail(e.target.value)} placeholder="contact@exemple.fr" className="sm:max-w-xs" aria-label="Email du contact" />
               <Button variant="secondary" icon={ShoppingBag} onClick={() => void simulate("order")} loading={simulating === "order"}>
                 Simuler une commande
+              </Button>
+              <Button variant="secondary" icon={Package} onClick={() => void simulate("order_fulfilled")} loading={simulating === "order_fulfilled"}>
+                Simuler une expédition
               </Button>
               <Button variant="secondary" icon={ShoppingCart} onClick={() => void simulate("cart_abandoned")} loading={simulating === "cart_abandoned"}>
                 Simuler un panier abandonné

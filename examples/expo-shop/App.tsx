@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { Missive, MissiveBadge, MissiveInAppBanner, MissiveInbox, useMissiveInbox, type InboxItem } from "@missive/expo-push";
+import { Missive, MissiveBadge, MissiveInAppBanner, MissiveInbox, MissivePermissionPrompt, useMissiveInbox, type InboxItem } from "@missive/expo-push";
 
 const APP_KEY = process.env.EXPO_PUBLIC_MISSIVE_APP_KEY ?? "";
 const API_URL = process.env.EXPO_PUBLIC_MISSIVE_API_URL ?? "http://localhost:4000";
@@ -76,6 +76,7 @@ export default function App() {
 
         <TabBar tab={tab} onChange={setTab} />
         <MissiveInAppBanner />
+        <MissivePermissionPrompt />
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -112,11 +113,17 @@ function Account() {
 
   async function enable() {
     setBusy(true);
-    // 2. Register at every launch and after sign-in (permission, token, link to the customer).
-    const res = await Missive.register({ email: email.trim() || undefined });
+    // 2. Sign-in: link the phone to the customer (fires "Première connexion à l'app" automations).
+    if (email.trim()) await Missive.identify({ email: email.trim() }).catch(() => undefined);
+    // 3. Pre-permission screen, then the system dialog only if the customer tapped "Activer".
+    const res = await Missive.requestPermission({ force: true });
     setBusy(false);
     if (res.ok) {
       setStatus(res.linked ? `Activées · liées à ${email}` : "Activées (client inconnu de Missive)");
+      return;
+    }
+    if (res.reason === "declined") {
+      setStatus("Plus tard : l'écran sera reproposé après le délai réglé dans Missive");
       return;
     }
     if (res.reason === "unsupported") {

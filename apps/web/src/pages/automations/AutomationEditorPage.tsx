@@ -6,6 +6,9 @@ import {
   ArrowUp,
   BellRing,
   Clock,
+  CircleStop,
+  Package,
+  Smartphone,
   Eye,
   EyeOff,
   Flag,
@@ -26,9 +29,9 @@ import {
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useAsync } from "../../lib/useAsync";
-import { TRIGGERS } from "../../lib/constants";
+import { EXIT_CONDITIONS, TRIGGERS } from "../../lib/constants";
 import { cx } from "../../lib/format";
-import type { AutomationStep, AutomationTrigger } from "../../lib/types";
+import type { AutomationStep, AutomationTrigger, ExitCondition } from "../../lib/types";
 import { Badge, Button, Card, ErrorState, Field, Input, PageHeader, Select, Skeleton, Textarea } from "../../components/ui/primitives";
 import { useToast } from "../../components/ui/Toast";
 import { AiGeneratePanel } from "../../components/AiGeneratePanel";
@@ -40,6 +43,9 @@ const TRIGGER_ICONS: Record<AutomationTrigger, LucideIcon> = {
   tag_added: Tag,
   order_created: ShoppingBag,
   cart_abandoned: ShoppingCart,
+  order_fulfilled: Package,
+  app_signed_in: Smartphone,
+  push_subscribed: BellRing,
 };
 
 interface KeyedStep {
@@ -53,6 +59,32 @@ const keyed = (step: AutomationStep): KeyedStep => ({ key: `s${++keySeq}`, step 
 const newEmailStep = (): AutomationStep => ({ type: "email", subject: "", html: DEFAULT_EMAIL_HTML });
 const newWaitStep = (): AutomationStep => ({ type: "wait", hours: 24 });
 const newPushStep = (): AutomationStep => ({ type: "push", title: "", body: "", url: "", in_app: true });
+const newExitStep = (): AutomationStep => ({ type: "exit_if", condition: "push_opened" });
+
+function ExitStepEditor({ step, onChange }: { step: Extract<AutomationStep, { type: "exit_if" }>; onChange: (s: AutomationStep) => void }) {
+  return (
+    <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+      <div className="flex flex-wrap items-center gap-2">
+        <span>Arrêter le parcours si le client</span>
+        <Select
+          className="h-9 w-auto"
+          value={step.condition}
+          onChange={(e) => onChange({ type: "exit_if", condition: e.target.value as ExitCondition })}
+          aria-label="Condition d'arrêt"
+        >
+          {(Object.keys(EXIT_CONDITIONS) as ExitCondition[]).map((c) => (
+            <option key={c} value={c}>
+              {EXIT_CONDITIONS[c]}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Placez-la après une attente : les clients qui ont déjà réagi ne reçoivent pas les relances suivantes.
+      </p>
+    </div>
+  );
+}
 
 type PushStep = Extract<AutomationStep, { type: "push" }>;
 
@@ -175,6 +207,9 @@ function InsertStep({ onInsert }: { onInsert: (s: AutomationStep) => void }) {
       </Button>
       <Button variant="secondary" size="sm" icon={BellRing} onClick={() => onInsert(newPushStep())}>
         Push
+      </Button>
+      <Button variant="secondary" size="sm" icon={CircleStop} onClick={() => onInsert(newExitStep())}>
+        Arrêter si…
       </Button>
     </div>
   );
@@ -394,13 +429,29 @@ export function AutomationEditorPage() {
                       ? "bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300"
                       : step.type === "push"
                         ? "bg-violet-50 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300"
-                        : "bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300",
+                        : step.type === "exit_if"
+                          ? "bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-300"
+                          : "bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300",
                   )}
                 >
-                  {step.type === "email" ? <Mail className="size-4" /> : step.type === "push" ? <BellRing className="size-4" /> : <Clock className="size-4" />}
+                  {step.type === "email" ? (
+                    <Mail className="size-4" />
+                  ) : step.type === "push" ? (
+                    <BellRing className="size-4" />
+                  ) : step.type === "exit_if" ? (
+                    <CircleStop className="size-4" />
+                  ) : (
+                    <Clock className="size-4" />
+                  )}
                 </span>
                 <h3 className="flex-1 text-sm font-semibold text-slate-900 dark:text-white">
-                  Étape {index + 1} · {step.type === "email" ? "Envoyer un email" : step.type === "push" ? "Notification push" : "Attendre"}
+                  Étape {index + 1} · {step.type === "email"
+                    ? "Envoyer un email"
+                    : step.type === "push"
+                      ? "Notification push"
+                      : step.type === "exit_if"
+                        ? "Condition d'arrêt"
+                        : "Attendre"}
                 </h3>
                 <div className="flex gap-0.5">
                   <Button variant="ghost" size="sm" icon={ArrowUp} onClick={() => move(index, -1)} disabled={index === 0} aria-label="Monter" />
@@ -412,6 +463,8 @@ export function AutomationEditorPage() {
                 <WaitStepEditor step={step} onChange={(s) => updateStep(key, s)} />
               ) : step.type === "push" ? (
                 <PushStepEditor step={step} onChange={(s) => updateStep(key, s)} />
+              ) : step.type === "exit_if" ? (
+                <ExitStepEditor step={step} onChange={(s) => updateStep(key, s)} />
               ) : (
                 <EmailStepEditor step={step} onChange={(s) => updateStep(key, s)} brand={account?.name} />
               )}

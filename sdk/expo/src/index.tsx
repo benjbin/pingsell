@@ -4,6 +4,7 @@ import {
   Animated,
   FlatList,
   Image,
+  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -12,10 +13,10 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { Missive, type InboxItem, type InboxState, type MissiveNotification } from "./client";
+import { Missive, type InboxItem, type InboxState, type MissiveNotification, type PromptSettings } from "./client";
 
 export { Missive, ANDROID_CHANNEL_ID } from "./client";
-export type { InboxItem, InboxState, MissiveConfig, MissiveNotification, RegisterOptions, RegisterResult } from "./client";
+export type { Identity, InboxItem, InboxState, MissiveConfig, MissiveNotification, PromptSettings, RegisterOptions, RegisterResult } from "./client";
 
 /** Live in-app notification centre: items, unread count and actions. */
 export function useMissiveInbox(): InboxState & {
@@ -200,7 +201,52 @@ export function MissiveInAppBanner({ duration = 5000, theme, top = 54 }: { durat
   );
 }
 
+/**
+ * Pre-permission screen shown by Missive.requestPermission() before the system dialog.
+ * Its text comes from Missive (no app update needed to change it). Render it once, at the root.
+ */
+export function MissivePermissionPrompt({ theme }: { theme?: Theme }) {
+  const t = { ...DEFAULT_THEME, ...theme };
+  const [prompt, setPrompt] = useState<PromptSettings | null>(null);
+  useEffect(() => Missive.onPrompt(setPrompt), []);
+
+  return (
+    <Modal visible={!!prompt} transparent animationType="slide" onRequestClose={() => Missive.answerPrompt(false)}>
+      <View style={styles.promptBackdrop}>
+        {prompt && (
+          <View style={[styles.promptCard, { backgroundColor: t.background }]} accessibilityViewIsModal>
+            {prompt.image_url ? (
+              <Image source={{ uri: prompt.image_url }} style={styles.promptImage} resizeMode="cover" />
+            ) : (
+              <View style={[styles.promptIcon, { backgroundColor: t.unreadBackground }]}>
+                <Text style={{ fontSize: 30 }}>🔔</Text>
+              </View>
+            )}
+            <Text style={[styles.promptTitle, { color: t.text }]}>{prompt.title}</Text>
+            <Text style={[styles.promptBody, { color: t.muted }]}>{prompt.body}</Text>
+            <Pressable accessibilityRole="button" onPress={() => Missive.answerPrompt(true)} style={[styles.promptPrimary, { backgroundColor: t.accent }]}>
+              <Text style={styles.promptPrimaryText}>{prompt.accept_label}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => Missive.answerPrompt(false)} style={styles.promptSecondary} hitSlop={8}>
+              <Text style={{ color: t.muted, fontWeight: "600", fontSize: 15 }}>{prompt.decline_label}</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
+  promptBackdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(11,33,74,0.45)" },
+  promptCard: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40, alignItems: "center" },
+  promptIcon: { width: 64, height: 64, borderRadius: 20, alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  promptImage: { width: "100%", height: 150, borderRadius: 18, marginBottom: 16 },
+  promptTitle: { fontSize: 22, fontWeight: "800", textAlign: "center" },
+  promptBody: { fontSize: 15, lineHeight: 21, textAlign: "center", marginTop: 8, marginBottom: 22 },
+  promptPrimary: { alignSelf: "stretch", borderRadius: 999, paddingVertical: 15, alignItems: "center" },
+  promptPrimaryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  promptSecondary: { paddingVertical: 14 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   title: { fontSize: 24, fontWeight: "800" },
   empty: { textAlign: "center", marginTop: 48, paddingHorizontal: 32, fontSize: 15 },

@@ -11,6 +11,7 @@ export const WEBHOOK_TOPICS = [
   'customers/create',
   'customers/update',
   'orders/create',
+  'orders/fulfilled',
   'checkouts/create',
   'checkouts/update',
   'app/uninstalled',

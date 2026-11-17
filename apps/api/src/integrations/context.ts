@@ -28,7 +28,7 @@ export interface IntegrationContext {
   fireTrigger(
     accountId: string,
     contactId: string,
-    trigger: 'contact_created' | 'tag_added' | 'order_created' | 'cart_abandoned',
+    trigger: 'contact_created' | 'tag_added' | 'order_created' | 'cart_abandoned' | 'order_fulfilled',
     data?: object,
   ): void;
   config: { publicUrl: string; shopifyApiKey?: string; shopifyApiSecret?: string };

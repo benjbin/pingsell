@@ -161,6 +161,31 @@ export function handleOrderWebhook(ctx: IntegrationContext, accountId: string, p
   });
 }
 
+/**
+ * Order shipped: transactional trigger (lock-screen / in-app "your order is on its way" with the
+ * tracking link), reaching customers even when they opted out of marketing.
+ */
+export function handleOrderFulfilledWebhook(ctx: IntegrationContext, accountId: string, payload: Payload): void {
+  const orderId = payload.id != null ? String(payload.id) : null;
+  const customerRaw = (payload.customer as Payload | null | undefined) ?? null;
+  const email = cleanEmail(payload.email) ?? cleanEmail(payload.contact_email) ?? cleanEmail(customerRaw?.email);
+  if (!orderId || !email) return;
+  const contact = findContactByEmail(ctx.db, accountId, email);
+  if (!contact) return;
+  const fulfillments = Array.isArray(payload.fulfillments) ? (payload.fulfillments as Payload[]) : [];
+  const last = fulfillments[fulfillments.length - 1] ?? {};
+  const data = {
+    order_id: orderId,
+    order_name: typeof payload.name === 'string' ? payload.name : null,
+    tracking_number: typeof last.tracking_number === 'string' ? last.tracking_number : null,
+    tracking_url: typeof last.tracking_url === 'string' ? last.tracking_url : null,
+    carrier: typeof last.tracking_company === 'string' ? last.tracking_company : null,
+    source: 'shopify',
+  };
+  ctx.recordEvent(accountId, contact.id, 'order_fulfilled', data);
+  ctx.fireTrigger(accountId, contact.id, 'order_fulfilled', data);
+}
+
 export function handleAppUninstalled(ctx: IntegrationContext, accountId: string): void {
   // SPEC status enum is 'connected' | 'error': an uninstalled app is reported as a disconnected error state.
   updateIntegration(
@@ -180,6 +205,9 @@ export function dispatchWebhook(ctx: IntegrationContext, accountId: string, shop
       return true;
     case 'orders/create':
       handleOrderWebhook(ctx, accountId, payload);
+      return true;
+    case 'orders/fulfilled':
+      handleOrderFulfilledWebhook(ctx, accountId, payload);
       return true;
     case 'checkouts/create':
     case 'checkouts/update':
