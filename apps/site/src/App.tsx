@@ -37,9 +37,8 @@ import { MagneticLink, useFinePointer } from "./sections/motion-kit";
 const NAV = [
   ["Fonctionnalités", "#fonctionnalites"],
   ["Éditeur", "#editeur"],
-  ["Shopify", "#shopify"],
-  ["Intégration", "#adapte"],
   ["Push", "#push"],
+  ["Intégrations", "#adapte"],
   ["Tarifs", "#tarifs"],
   ["FAQ", "#faq"],
 ] as const;
@@ -99,50 +98,143 @@ function ScrollProgress() {
   return <motion.div aria-hidden className="fixed inset-x-0 top-0 z-[60] h-[3px] origin-left bg-brand-500" style={{ scaleX }} />;
 }
 
+/** Section currently under the header, so the nav can show where you are. */
+function useActiveSection(ids: readonly string[]) {
+  const [active, setActive] = useState<string | null>(null);
+  useEffect(() => {
+    const on = () => {
+      const line = 120;
+      let current: string | null = null;
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= line && el.getBoundingClientRect().bottom > line) current = id;
+      }
+      setActive(current);
+    };
+    on();
+    window.addEventListener("scroll", on, { passive: true });
+    window.addEventListener("resize", on);
+    return () => {
+      window.removeEventListener("scroll", on);
+      window.removeEventListener("resize", on);
+    };
+  }, [ids]);
+  return active;
+}
+
+const NAV_IDS = NAV.map(([, h]) => h.slice(1));
+
 function Header() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const active = useActiveSection(NAV_IDS);
+  const reduce = useReducedMotion() ?? false;
   useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 8);
+    const on = () => setScrolled(window.scrollY > 24);
     on();
     window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
   }, []);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const pill = hovered ?? active;
+  const island = scrolled || open;
+
   return (
-    <header className={`fixed inset-x-0 top-0 z-50 transition ${scrolled || open ? "border-b border-slate-900/[0.07] bg-white/85 backdrop-blur-xl" : ""}`}>
-      <div className="mx-auto flex h-[72px] max-w-6xl items-center gap-8 px-4 sm:px-6">
+    <header className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-4">
+      <div
+        className={`mx-auto flex h-14 items-center gap-6 rounded-full pr-2 pl-5 transition-all duration-500 ease-out ${
+          island
+            ? "max-w-5xl bg-white/80 shadow-[0_12px_40px_-16px_rgba(11,33,74,0.35)] ring-1 ring-slate-900/[0.07] backdrop-blur-xl"
+            : "max-w-6xl bg-transparent ring-1 ring-transparent"
+        }`}
+      >
         <Logo />
-        <nav className="hidden items-center gap-7 lg:flex">
-          {NAV.map(([l, h]) => (
-            <a key={h} href={h} className="text-sm font-medium text-slate-600 transition hover:text-slate-900">
-              {l}
-            </a>
-          ))}
+
+        <nav className="mx-auto hidden items-center lg:flex" onMouseLeave={() => setHovered(null)} aria-label="Navigation principale">
+          {NAV.map(([label, href]) => {
+            const id = href.slice(1);
+            const isActive = active === id;
+            return (
+              <a
+                key={href}
+                href={href}
+                onMouseEnter={() => setHovered(id)}
+                aria-current={isActive ? "location" : undefined}
+                className={`relative isolate rounded-full px-3.5 py-2 text-[14px] font-medium transition-colors duration-200 ${
+                  isActive || hovered === id ? "text-slate-900" : "text-slate-500"
+                }`}
+              >
+                {pill === id && (
+                  <motion.span
+                    layoutId="nav-pill"
+                    transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
+                    className={`absolute inset-0 -z-10 rounded-full ${isActive && !hovered ? "bg-brand-50" : "bg-slate-900/[0.05]"}`}
+                  />
+                )}
+                {label}
+                {isActive && <span aria-hidden className="absolute -bottom-0.5 left-1/2 size-1 -translate-x-1/2 rounded-full bg-brand-500" />}
+              </a>
+            );
+          })}
         </nav>
-        <div className="ml-auto hidden items-center gap-5 sm:flex">
-          <a href={LOGIN_URL} className="text-sm font-semibold text-slate-900 hover:text-brand-500">
+
+        <div className="ml-auto hidden items-center gap-2 sm:flex lg:ml-0">
+          <a
+            href={LOGIN_URL}
+            className="rounded-full px-4 py-2 text-[14px] font-semibold text-slate-900 transition-colors hover:bg-slate-900/[0.05]"
+          >
             Se connecter
           </a>
           <CTA className="h-10 px-5" />
         </div>
-        <button className="ml-auto flex size-10 items-center justify-center rounded-full lg:hidden sm:ml-0" onClick={() => setOpen((o) => !o)} aria-label="Menu" aria-expanded={open}>
+
+        <button
+          className="ml-auto flex size-10 items-center justify-center rounded-full text-slate-900 transition hover:bg-slate-900/[0.05] sm:ml-0 lg:hidden"
+          onClick={() => setOpen((o) => !o)}
+          aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
+          aria-expanded={open}
+        >
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
       </div>
+
       {open && (
-        <div className="border-t border-slate-900/[0.07] bg-white px-4 pt-2 pb-6 lg:hidden">
-          {NAV.map(([l, h]) => (
-            <a key={h} href={h} onClick={() => setOpen(false)} className="block border-b border-slate-900/[0.06] py-3.5 font-display text-lg font-bold text-slate-900">
-              {l}
-            </a>
-          ))}
-          <div className="mt-5 flex flex-col gap-3">
-            <CTA />
+        <motion.div
+          initial={reduce ? false : { opacity: 0, y: -8, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+          className="mx-auto mt-2 max-w-5xl origin-top rounded-[28px] bg-white/95 p-3 shadow-[0_24px_60px_-20px_rgba(11,33,74,0.45)] ring-1 ring-slate-900/[0.07] backdrop-blur-xl lg:hidden"
+        >
+          <nav aria-label="Navigation principale">
+            {NAV.map(([label, href], i) => (
+              <a
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className={`flex items-center gap-4 rounded-2xl px-4 py-3.5 font-display text-lg font-bold transition-colors hover:bg-slate-50 ${
+                  active === href.slice(1) ? "text-brand-500" : "text-slate-900"
+                }`}
+              >
+                <span className="w-6 font-display text-[11px] font-semibold tracking-[0.15em] text-slate-400">{String(i + 1).padStart(2, "0")}</span>
+                {label}
+                <ArrowRight className="ml-auto size-4 text-slate-300" />
+              </a>
+            ))}
+          </nav>
+          <div className="mt-2 grid gap-2 border-t border-slate-900/[0.06] p-2 pt-4 sm:hidden">
+            <CTA className="w-full" />
             <a href={LOGIN_URL} className="flex h-12 items-center justify-center rounded-full font-display text-sm font-semibold text-slate-900 ring-1 ring-slate-900/15">
               Se connecter
             </a>
           </div>
-        </div>
+        </motion.div>
       )}
     </header>
   );
