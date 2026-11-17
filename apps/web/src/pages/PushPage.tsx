@@ -1114,13 +1114,17 @@ const userHash = createHmac("sha256", process.env.MISSIVE_IDENTITY_SECRET)
           </p>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <code className="min-w-0 flex-1 truncate rounded-xl bg-slate-100 px-4 py-2.5 font-mono text-xs text-slate-900 dark:bg-white/5 dark:text-white">
-              {show ? config.identity.secret : "msvid_" + "•".repeat(24)}
+              {config.identity.secret === null ? "Réservée au propriétaire et aux administrateurs" : show ? config.identity.secret : "msvid_" + "•".repeat(24)}
             </code>
             <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setShow((v) => !v)}>
-                {show ? "Masquer" : "Afficher"}
-              </Button>
-              <CopyButton text={config.identity.secret} />
+              {config.identity.secret !== null && (
+                <>
+                  <Button size="sm" variant="ghost" onClick={() => setShow((v) => !v)}>
+                    {show ? "Masquer" : "Afficher"}
+                  </Button>
+                  <CopyButton text={config.identity.secret} />
+                </>
+              )}
               <Button size="sm" variant="ghost" icon={RefreshCw} onClick={() => setRotateOpen(true)} aria-label="Régénérer la clé d'identité" />
             </div>
           </div>

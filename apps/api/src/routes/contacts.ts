@@ -59,7 +59,7 @@ const orderSchema = z.object({
   status: z.enum(['created', 'fulfilled']).default('created'),
   /** Accepts 59.9, "59.90" or "59,90" (POS and PHP back-ends often send strings). */
   total: z
-    .preprocess((v) => (typeof v === 'string' && v.trim() !== '' ? Number(v.trim().replace(',', '.')) : v), z.number().nonnegative().finite())
+    .preprocess((v) => (typeof v === 'string' && v.trim() !== '' ? Number(v.trim().replace(',', '.')) : v), z.number().nonnegative().max(1_000_000_000, 'Le total est trop élevé'))
     .optional(),
   currency: z.string().trim().max(8).optional(),
   tracking_number: z.string().trim().max(100).optional(),
@@ -92,9 +92,9 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
     if (search) {
       const like = `%${search.toLowerCase().replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
       where.push(
-        `(LOWER(email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(first_name, '')) LIKE ? ESCAPE '\\'
-          OR LOWER(COALESCE(last_name, '')) LIKE ? ESCAPE '\\'
-          OR LOWER(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) LIKE ? ESCAPE '\\')`,
+        `(ULOWER(email) LIKE ? ESCAPE '\\' OR ULOWER(COALESCE(first_name, '')) LIKE ? ESCAPE '\\'
+          OR ULOWER(COALESCE(last_name, '')) LIKE ? ESCAPE '\\'
+          OR ULOWER(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) LIKE ? ESCAPE '\\')`,
       );
       params.push(like, like, like, like);
     }
@@ -155,11 +155,13 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
           scalar(
             db,
             `SELECT COUNT(*) FROM events WHERE account_id = ? AND contact_id = ? AND type = 'order_fulfilled'
-               AND json_extract(data, '$.order_id') = ? AND IFNULL(json_extract(data, '$.tracking_number'), '') = ?`,
+               AND json_extract(data, '$.order_id') = ?
+               AND (? IS NULL OR IFNULL(json_extract(data, '$.tracking_number'), '') IN ('', ?))`,
             accountId,
             existing.id,
             body.order_id,
-            tracking ?? '',
+            tracking,
+            tracking,
           ) > 0;
         if (already) return { contact: existing, duplicate: true, skipped: false };
         const r = { contact: existing };

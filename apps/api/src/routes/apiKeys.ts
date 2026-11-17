@@ -25,7 +25,8 @@ function maskKey(key: string): string {
 export async function apiKeyRoutes(app: FastifyInstance, { db }: Deps) {
   // An API key acts as the whole account: editors cannot create or see them.
   app.addHook('preHandler', async (request) => {
-    if (!request.url.includes('/api-keys') || !request.userId) return;
+    // Route pattern, not the raw URL: `/api/v1/%61pi-keys` must not slip through.
+    if (!request.routeOptions.url?.includes('/api-keys') || !request.userId) return;
     const role = get<{ role: string }>(db, 'SELECT role FROM users WHERE id = ?', request.userId)?.role;
     if (role === 'editor') throw forbidden('Les clés API sont réservées au propriétaire et aux administrateurs');
   });

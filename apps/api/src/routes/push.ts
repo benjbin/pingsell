@@ -217,10 +217,11 @@ export async function pushAppRoutes(app: FastifyInstance, { db, kickWorker }: De
 
 /** Authenticated push routes (session or secret API key). */
 export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker }: Deps) {
+  const isEditor = (request: FastifyRequest) =>
+    !!request.userId && get<{ role: string }>(db, 'SELECT role FROM users WHERE id = ?', request.userId)?.role === 'editor';
   const assertManager = (request: FastifyRequest) => {
-    if (!request.userId) return; // secret API key = account level
-    const role = get<{ role: string }>(db, 'SELECT role FROM users WHERE id = ?', request.userId)?.role;
-    if (role === 'editor') throw forbidden('Les réglages push sont réservés au propriétaire et aux administrateurs');
+    // A secret API key acts at account level.
+    if (isEditor(request)) throw forbidden('Les réglages push sont réservés au propriétaire et aux administrateurs');
   };
 
   /* ---- Settings ---- */
@@ -232,7 +233,11 @@ export async function pushRoutes(app: FastifyInstance, { db, config, kickWorker 
     app_users: scalar(db, 'SELECT COUNT(*) FROM app_users WHERE account_id = ?', accountId),
   });
 
-  app.get('/push/config', async (request) => fullConfig(request.accountId));
+  app.get('/push/config', async (request) => {
+    const cfg = fullConfig(request.accountId);
+    // The identity secret signs any customer's identity: editors never see it.
+    return isEditor(request) ? { ...cfg, identity: { ...cfg.identity, secret: null } } : cfg;
+  });
 
   app.put('/push/config/prompt', async (request) => {
     assertManager(request);

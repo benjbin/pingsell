@@ -371,7 +371,7 @@ export function audienceDevices(db: DatabaseSync, accountId: string, audience: P
     db,
     `SELECT d.id AS device_id, d.contact_id, c.email, c.first_name, c.last_name
        FROM push_devices d LEFT JOIN contacts c ON c.id = d.contact_id
-      WHERE d.account_id = ? AND d.active = 1${filter}
+      WHERE d.account_id = ? AND d.active = 1 AND (c.id IS NULL OR c.status != 'complained')${filter}
       ORDER BY d.created_at`,
     ...params,
   );

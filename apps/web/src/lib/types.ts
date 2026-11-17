@@ -396,7 +396,8 @@ export interface PushConfig {
   fcm: { configured: boolean; project_id?: string; client_email?: string };
   apns: { configured: boolean; key_id?: string; team_id?: string; bundle_id?: string; production?: boolean };
   expo: { configured: boolean; has_access_token?: boolean };
-  identity: { secret: string; required: boolean };
+  /** null for editors: only owners and admins see the secret. */
+  identity: { secret: string | null; required: boolean };
   prompt: PushPrompt;
   prompt_stats: PushPromptStats;
   app_users: number;

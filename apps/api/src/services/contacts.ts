@@ -173,7 +173,8 @@ export function upsertContact(
   if (input.phone !== undefined) updates.phone = clean(input.phone);
   if (addedTags.length) updates.tags = JSON.stringify([...existing.tags, ...addedTags]);
   if (input.attributes) updates.attributes = JSON.stringify({ ...existing.attributes, ...input.attributes });
-  if (status) updates.status = status;
+  // A spam complaint is final: an import or API upsert never re-subscribes it.
+  if (status && !(existing.status === 'complained' && status === 'subscribed')) updates.status = status;
   if (input.external_id !== undefined && input.external_id !== null) updates.external_id = clean(input.external_id);
   if (finite(input.total_spent) !== undefined) updates.total_spent = finite(input.total_spent)!;
   if (finite(input.orders_count) !== undefined) updates.orders_count = Math.trunc(finite(input.orders_count)!);

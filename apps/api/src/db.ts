@@ -377,6 +377,8 @@ export function openDatabase(path: string): DatabaseSync {
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec('PRAGMA busy_timeout = 5000;');
+  // SQLite's LOWER() only folds ASCII: « Émile » must match « émile ».
+  db.function('ulower', { deterministic: true }, (s) => (s == null ? null : String(s).toLowerCase()));
   migrate(db);
   return db;
 }

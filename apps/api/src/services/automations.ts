@@ -15,10 +15,10 @@ export const TRIGGERS = [
 ] as const;
 export type Trigger = (typeof TRIGGERS)[number];
 
-/** Transactional triggers reach every customer, even unsubscribed from marketing (not complaints). */
+/** Transactional triggers reach customers unsubscribed from marketing (never complaints or hard bounces). */
 export const TRANSACTIONAL_TRIGGERS: readonly Trigger[] = ['order_fulfilled'];
 const reachable = (trigger: Trigger, status: string) =>
-  status === 'subscribed' || (TRANSACTIONAL_TRIGGERS.includes(trigger) && status !== 'complained');
+  status === 'subscribed' || (TRANSACTIONAL_TRIGGERS.includes(trigger) && status !== 'complained' && status !== 'bounced');
 
 /** Conditions an `exit_if` step checks since the run started. */
 export const EXIT_CONDITIONS = ['push_opened', 'email_opened', 'ordered'] as const;
