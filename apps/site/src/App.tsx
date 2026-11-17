@@ -7,7 +7,6 @@ import {
   Code2,
   Menu,
   Palette,
-  ShoppingBag,
   Smartphone,
   Target,
   Type,
@@ -29,6 +28,7 @@ import { Hero } from "./sections/Hero";
 import { EditorDemo } from "./sections/EditorDemo";
 import { BrandShowcase } from "./sections/BrandShowcase";
 import { ApiSection } from "./sections/ApiSection";
+import { AdaptSection } from "./sections/AdaptSection";
 import { PushSection } from "./sections/PushSection";
 import { PricingSection } from "./sections/PricingSection";
 import { MagneticLink, useFinePointer } from "./sections/motion-kit";
@@ -37,7 +37,7 @@ const NAV = [
   ["Fonctionnalités", "#fonctionnalites"],
   ["Éditeur", "#editeur"],
   ["Shopify", "#shopify"],
-  ["API", "#integration"],
+  ["Intégration", "#adapte"],
   ["Push", "#push"],
   ["Tarifs", "#tarifs"],
   ["FAQ", "#faq"],
@@ -150,31 +150,6 @@ function Header() {
         </div>
       )}
     </header>
-  );
-}
-
-function Integrations() {
-  const items = [
-    [ShoppingBag, "Shopify", "Clients et commandes synchronisés"],
-    [Code2, "API & back-office", "Branchez votre site ou votre CRM"],
-    [Smartphone, "App Missive iOS & Android", "Vos chiffres dans la poche"],
-  ] as const;
-  return (
-    <section className="border-y border-slate-900/[0.07] bg-slate-50">
-      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 sm:grid-cols-3 sm:px-6">
-        {items.map(([Icon, t, d]) => (
-          <div key={t} className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-brand-500 ring-1 ring-slate-900/[0.07]">
-              <Icon className="size-5" strokeWidth={1.75} />
-            </span>
-            <div>
-              <p className="font-display text-sm font-bold">{t}</p>
-              <p className="text-sm text-slate-500">{d}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -494,7 +469,7 @@ export function App() {
       <Header />
       <main>
         <Hero />
-        <Integrations />
+        <AdaptSection />
         <Pillars />
         <EditorDemo />
         <BrandShowcase />

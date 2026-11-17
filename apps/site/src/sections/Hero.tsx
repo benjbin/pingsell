@@ -82,8 +82,8 @@ export function Hero() {
           </h1>
 
           <motion.p {...enter(0.45)} className="mt-6 max-w-md text-[17px] leading-relaxed text-slate-600">
-            Glissez vos blocs, habillez l'email à vos couleurs et envoyez-le à vos clients Shopify. Missive vous montre ensuite les ouvertures, les clics et les
-            commandes qui suivent.
+            Emails, notifications push et automatisations, branchés sur les outils que vous utilisez déjà : Shopify en un clic, votre site, votre CRM ou votre app en
+            quelques lignes. Missive s'adapte à votre façon de travailler.
           </motion.p>
 
           <motion.div {...enter(0.55)} className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -95,15 +95,15 @@ export function Hero() {
               <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
             </a>
             <a
-              href="#editeur"
+              href="#adapte"
               className="inline-flex h-12 items-center justify-center rounded-full px-6 font-display text-sm font-semibold text-slate-900 ring-1 ring-slate-900/15 transition hover:ring-slate-900/40"
             >
-              Voir l'éditeur
+              Voir comment ça se branche
             </a>
           </motion.div>
 
           <motion.ul {...enter(0.65)} className="mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
-            {[`${PRICING.freeEmails.toLocaleString("fr-FR")} emails offerts / mois`, "Sans carte bancaire"].map((t) => (
+            {[`${PRICING.freeEmails.toLocaleString("fr-FR")} emails offerts / mois`, "Sans carte bancaire", "Branché en quelques minutes"].map((t) => (
               <li key={t} className="flex items-center gap-1.5">
                 <Check className="size-4 text-brand-500" /> {t}
               </li>
