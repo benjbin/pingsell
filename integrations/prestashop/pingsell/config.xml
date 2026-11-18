@@ -2,7 +2,7 @@
 <module>
     <name>pingsell</name>
     <displayName><![CDATA[Pingsell]]></displayName>
-    <version><![CDATA[1.1.0]]></version>
+    <version><![CDATA[1.2.0]]></version>
     <description><![CDATA[Inscriptions, paniers abandonnés, commandes et expéditions envoyés à Pingsell, sans code.]]></description>
     <author><![CDATA[Pingsell]]></author>
     <tab><![CDATA[emailing]]></tab>

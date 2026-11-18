@@ -126,6 +126,8 @@ export interface Contact {
   total_spent: number;
   orders_count: number;
   last_order_at: string | null;
+  /** Last page seen on the site (site tracking). */
+  last_seen_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -178,9 +180,20 @@ export interface Message {
   created_at: string;
 }
 
+export interface SiteProduct {
+  name: string;
+  url: string;
+  image?: string;
+  price?: number;
+  currency?: string;
+  sku?: string;
+}
+
 export interface ContactDetail extends Contact {
   events: ContactEvent[];
   messages: Message[];
+  /** Pages and products seen on the merchant's site. */
+  site?: { total: number; visits: Array<{ url: string; path: string; title: string | null; product: SiteProduct | null; created_at: string }> };
 }
 
 export interface ImportErrorDetail {
@@ -214,7 +227,9 @@ export type SegmentField =
   | "total_spent"
   | "orders_count"
   | "last_order_at"
-  | "created_at";
+  | "created_at"
+  | "last_seen_at"
+  | "visited_page";
 
 export type SegmentOp =
   | "eq"
@@ -320,7 +335,9 @@ export type AutomationTrigger =
   | "email_clicked"
   | "date_anniversary"
   | "inactive"
-  | "segment_entered";
+  | "segment_entered"
+  | "page_visited"
+  | "product_viewed";
 
 export type ExitCondition = "push_opened" | "email_opened" | "email_clicked" | "ordered";
 
@@ -622,7 +639,18 @@ export interface InboundLastCall {
   last_source: string | null;
   last_result: { received: number; ignored?: boolean; reason?: string; results?: Array<{ event: string; ok: boolean; error?: string; skipped?: boolean; duplicate?: boolean }> } | null;
 }
+export interface TrackingSettings {
+  enabled: boolean;
+  require_consent: boolean;
+  pageviews: number;
+  last_seen_at: string | null;
+  last_url: string | null;
+  sites: string[];
+  visitors: number;
+  identified: number;
+}
 export interface InboundSettings {
   webhook: InboundLastCall & { url: string };
+  tracking: TrackingSettings;
   form: InboundLastCall & { key: string; script_url: string; action_url: string; allowed_origins: string[] };
 }

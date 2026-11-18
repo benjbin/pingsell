@@ -80,6 +80,8 @@ function ConditionRow({
             placeholder={t("ex : vip", "e.g. vip")}
             aria-label={t("Tag", "Tag")}
           />
+      ) : fieldDef.kind === "page" ? (
+        <Input value={String(condition.value)} onChange={(e) => onChange({ ...condition, value: e.target.value })} placeholder={t("ex : /tarifs ou Veste", "e.g. /pricing or Jacket")} aria-label={t("Adresse ou titre de page", "Page address or title")} />
       ) : (
         <Input value={String(condition.value)} onChange={(e) => onChange({ ...condition, value: e.target.value })} placeholder={t("Valeur", "Value")} aria-label={t("Valeur", "Value")} />
       )}

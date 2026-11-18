@@ -14,6 +14,8 @@ export const SEGMENT_FIELDS = [
   'orders_count',
   'last_order_at',
   'created_at',
+  'last_seen_at',
+  'visited_page',
 ] as const;
 export const SEGMENT_OPS = [
   'eq',
@@ -32,13 +34,14 @@ type Op = (typeof SEGMENT_OPS)[number];
 
 const TEXT_FIELDS = new Set<Field>(['email', 'first_name', 'last_name', 'status', 'source']);
 const NUMBER_FIELDS = new Set<Field>(['total_spent', 'orders_count']);
-const DATE_FIELDS = new Set<Field>(['last_order_at', 'created_at']);
+const DATE_FIELDS = new Set<Field>(['last_order_at', 'created_at', 'last_seen_at']);
 
-const ALLOWED_OPS: Record<'text' | 'number' | 'date' | 'tags', ReadonlySet<Op>> = {
+const ALLOWED_OPS: Record<'text' | 'number' | 'date' | 'tags' | 'page', ReadonlySet<Op>> = {
   text: new Set<Op>(['eq', 'neq', 'contains', 'gt', 'lt']),
   number: new Set<Op>(['eq', 'neq', 'gt', 'lt']),
   date: new Set<Op>(['within_days', 'older_than_days', 'gt', 'lt', 'eq']),
   tags: new Set<Op>(['has_tag', 'not_has_tag', 'eq', 'neq', 'contains']),
+  page: new Set<Op>(['contains', 'neq']),
 };
 
 export const conditionSchema = z.object({
@@ -63,6 +66,7 @@ export interface CompiledRules {
 
 function kindOf(field: Field): keyof typeof ALLOWED_OPS {
   if (field === 'tags') return 'tags';
+  if (field === 'visited_page') return 'page';
   if (NUMBER_FIELDS.has(field)) return 'number';
   if (DATE_FIELDS.has(field)) return 'date';
   return 'text';
@@ -125,6 +129,14 @@ function compileCondition(c: SegmentCondition): CompiledRules {
     const value = requireText(c);
     if (c.op === 'eq') return { sql: `substr(${col}, 1, ?) = ?`, params: [value.length, value] };
     return { sql: `(${col} IS NOT NULL AND ${col} ${c.op === 'gt' ? '>' : '<'} ?)`, params: [value] };
+  }
+
+  // Pages seen on the site (site tracking): « a visité une page contenant /tarifs ».
+  if (c.field === 'visited_page') {
+    const value = requireText(c).toLowerCase();
+    const exists = `EXISTS (SELECT 1 FROM web_pageviews wp WHERE wp.contact_id = contacts.id AND (LOWER(wp.url) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(wp.title, '')) LIKE ? ESCAPE '\\'))`;
+    const like = `%${escapeLike(value)}%`;
+    return { sql: c.op === 'neq' ? `NOT ${exists}` : exists, params: [like, like] };
   }
 
   // text

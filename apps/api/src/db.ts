@@ -515,6 +515,53 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
     UNIQUE (account_id, kind)
   );
   `,
+  // v16 — site tracking (same one-line script as the form): visitors, pages and products seen,
+  // linked to the contact once known. Deleting a contact deletes their browsing history.
+  `
+  CREATE TABLE web_tracking (
+    account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    secret TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    require_consent INTEGER NOT NULL DEFAULT 0,
+    site_hosts TEXT NOT NULL DEFAULT '[]',
+    pageviews INTEGER NOT NULL DEFAULT 0,
+    last_seen_at TEXT,
+    last_url TEXT,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE web_visitors (
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    vid TEXT NOT NULL,
+    contact_id TEXT REFERENCES contacts(id) ON DELETE CASCADE,
+    identified_by TEXT,
+    pageviews INTEGER NOT NULL DEFAULT 0,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    PRIMARY KEY (account_id, vid)
+  );
+  CREATE INDEX idx_web_visitors_contact ON web_visitors(contact_id);
+  CREATE INDEX idx_web_visitors_seen ON web_visitors(last_seen);
+
+  CREATE TABLE web_pageviews (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    vid TEXT NOT NULL,
+    contact_id TEXT REFERENCES contacts(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    path TEXT NOT NULL,
+    title TEXT,
+    referrer TEXT,
+    product TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (account_id, vid) REFERENCES web_visitors(account_id, vid) ON DELETE CASCADE
+  );
+  CREATE INDEX idx_web_pageviews_visitor ON web_pageviews(account_id, vid, created_at);
+  CREATE INDEX idx_web_pageviews_contact ON web_pageviews(contact_id, created_at);
+  CREATE INDEX idx_web_pageviews_product ON web_pageviews(account_id, created_at) WHERE product IS NOT NULL AND contact_id IS NOT NULL;
+
+  ALTER TABLE contacts ADD COLUMN last_seen_at TEXT;
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

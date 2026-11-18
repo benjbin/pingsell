@@ -219,6 +219,7 @@ export const api = {
     get: () => get<InboundSettings>("/inbound"),
     rotate: (kind: "webhook" | "form") => post<InboundSettings>(`/inbound/${kind}/rotate`),
     setOrigins: (allowed_origins: string[]) => patch<InboundSettings>("/inbound/form", { allowed_origins }),
+    setTracking: (input: { enabled?: boolean; require_consent?: boolean }) => patch<InboundSettings>("/inbound/tracking", input),
   },
 
   apiKeys: {

@@ -8,6 +8,8 @@ import { normalizeEventName } from '../services/automations.js';
 import { BUILTIN_EVENTS, createIngest } from '../services/ingest.js';
 import { detectPayload, ensureHook, findHook, hookOrigins, markHookUsed, originAllowed, rotateHook, siteHost, type InboundHook } from '../services/inbound.js';
 import { FORM_SCRIPT } from '../services/formScript.js';
+import { VID_RE, cleanPageUrl, cleanProduct, ensureTracking, linkVisitor, linkVisitorByEmail, recordPageview, verifyContactToken } from '../services/webTracking.js';
+import { findContactByEmail } from '../services/contacts.js';
 
 const PREFIX = '/api/v1';
 
@@ -78,6 +80,9 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
   const perIp = limiter(Number(process.env.FORM_RATE_PER_IP ?? 8), 10 * 60_000);
   const perKey = limiter(Number(process.env.FORM_RATE_PER_KEY ?? 600), 60 * 60_000);
   const perHook = limiter(Number(process.env.WEBHOOK_RATE ?? 20_000), 60 * 60_000);
+  const hitsPerIp = limiter(Number(process.env.TRACK_RATE_PER_IP ?? 300), 10 * 60_000);
+  const hitsPerKey = limiter(Number(process.env.TRACK_RATE_PER_KEY ?? 200_000), 60 * 60_000);
+  const BOT_UA = /bot|crawl|spider|slurp|headless|lighthouse|preview|facebookexternalhit|monitor|curl|wget|python-requests/i;
 
   /** Runs each detected event; never throws, so the platform does not retry or disable the webhook. */
   const runEvents = (hook: InboundHook, events: Record<string, unknown>[]) =>
@@ -133,7 +138,11 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
       .header('Content-Type', 'application/javascript; charset=utf-8')
       .header('Cache-Control', 'public, max-age=300')
       .header('Cross-Origin-Resource-Policy', 'cross-origin');
-    return FORM_SCRIPT.replace('__PINGSELL_ENDPOINT__', JSON.stringify(`${base}/forms/${hook.token}`));
+    const tracking = ensureTracking(db, hook.account_id);
+    return FORM_SCRIPT.replace('__PINGSELL_ENDPOINT__', JSON.stringify(`${base}/forms/${hook.token}`)).replace(
+      '__PINGSELL_TRACK__',
+      JSON.stringify({ on: !!tracking.enabled, consent: !!tracking.require_consent }),
+    );
   });
 
   const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -223,6 +232,11 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
 
     try {
       const result = ingestEvent(hook.account_id, event, { untrusted: true });
+      // The visitor who just signed up: the pages they saw before now belong to their contact.
+      if (typeof raw._v === 'string' && VID_RE.test(raw._v) && typeof event.email === 'string') {
+        const contact = findContactByEmail(db, hook.account_id, event.email);
+        if (contact) linkVisitor(db, hook.account_id, raw._v, contact.id, 'form');
+      }
       markHookUsed(db, hook, siteHost(String(origin ?? '')) || 'formulaire', { received: 1, results: [{ event: result.body.event, ok: true }] });
     } catch (err) {
       if (err instanceof HttpError) return fail(err.statusCode, err.message);
@@ -231,10 +245,57 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
     kickWorker();
     return ok();
   });
+
+  // ─── Site tracking: pages, products and identification, sent by the same script (sendBeacon) ───
+  app.post<{ Params: { key: string } }>(`${PREFIX}/public/forms/:key/t`, { bodyLimit: 8 * 1024 }, async (request, reply) => {
+    const hook = formHook(request);
+    const raw = (request.body && typeof request.body === 'object' && !Array.isArray(request.body) ? request.body : {}) as Record<string, unknown>;
+    const done = (body: Record<string, unknown> = {}) => reply.code(200).header('Cache-Control', 'no-store').send({ ok: true, ...body });
+    const tracking = ensureTracking(db, hook.account_id);
+    if (!tracking.enabled) return done({ off: true });
+    if (BOT_UA.test(String(request.headers['user-agent'] ?? ''))) return done({ bot: true });
+    const origin = (request.headers.origin as string | undefined) ?? (request.headers.referer as string | undefined);
+    if (!originAllowed(hook, origin)) throw new HttpError(403, t('Ce site n’est pas autorisé (Pingsell › Intégrations › Domaines autorisés)', 'This site is not allowed (Pingsell › Integrations › Allowed domains)'));
+    if (!hitsPerKey(hook.token) || !hitsPerIp(`${hook.token}:${request.ip}`)) throw new HttpError(429, t('Trop de requêtes', 'Too many requests'));
+    const vid = typeof raw.v === 'string' && VID_RE.test(raw.v) ? raw.v : null;
+    if (!vid) throw badRequest(t('Visiteur invalide', 'Invalid visitor'));
+
+    // Identification: signed link from a Pingsell email (trusted), or an email typed on the site.
+    let identified = false;
+    if (raw.tk) {
+      const contactId = verifyContactToken(tracking.secret, raw.tk);
+      if (contactId) identified = linkVisitor(db, hook.account_id, vid, contactId, 'email_link');
+    }
+    if (raw.e) identified = linkVisitorByEmail(db, hook.account_id, vid, raw.e, raw.k === 'id' ? 'identify' : 'form') || identified;
+
+    if (raw.k === 'page') {
+      let url: URL;
+      try {
+        url = new URL(String(raw.u ?? ''));
+      } catch {
+        throw badRequest(t('Adresse de page invalide', 'Invalid page URL'));
+      }
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') throw badRequest(t('Adresse de page invalide', 'Invalid page URL'));
+      // The page must belong to the site sending it (no pages of other sites injected through a stolen key).
+      if (origin && siteHost(origin) && siteHost(origin) !== siteHost(url.href)) throw badRequest(t('Page d’un autre site', 'Page from another site'));
+      const page = cleanPageUrl(url.href);
+      const r = recordPageview(db, hook.account_id, {
+        vid,
+        url: page,
+        title: typeof raw.ti === 'string' ? raw.ti : undefined,
+        referrer: typeof raw.r === 'string' && /^https?:\/\//.test(raw.r) ? (() => { try { return cleanPageUrl(raw.r as string); } catch { return undefined; } })() : undefined,
+        product: cleanProduct(raw.p, page),
+      });
+      if (r.contactId) kickWorker();
+      return done({ known: !!r.contactId });
+    }
+    return done({ known: identified });
+  });
 }
 
 /** Authenticated part: Intégrations shows the URL, the key, the last call, and lets the merchant rotate them. */
 export async function inboundSettingsRoutes(app: FastifyInstance, { db, config }: Deps) {
+  const scalarCount = (sql: string, ...p: string[]) => Number((db.prepare(sql).get(...p) as { n: number }).n);
   const base = `${config.publicUrl}${PREFIX}/public`;
   const view = (accountId: string) => {
     const webhook = ensureHook(db, accountId, 'webhook');
@@ -247,6 +308,19 @@ export async function inboundSettingsRoutes(app: FastifyInstance, { db, config }
     });
     return {
       webhook: { url: `${base}/hooks/${webhook.token}`, ...last(webhook) },
+      tracking: (() => {
+        const tr = ensureTracking(db, accountId);
+        return {
+          enabled: !!tr.enabled,
+          require_consent: !!tr.require_consent,
+          pageviews: tr.pageviews,
+          last_seen_at: tr.last_seen_at,
+          last_url: tr.last_url,
+          sites: JSON.parse(tr.site_hosts) as string[],
+          visitors: scalarCount('SELECT COUNT(*) AS n FROM web_visitors WHERE account_id = ?', accountId),
+          identified: scalarCount('SELECT COUNT(*) AS n FROM web_visitors WHERE account_id = ? AND contact_id IS NOT NULL', accountId),
+        };
+      })(),
       form: {
         key: form.token,
         script_url: `${base}/forms/${form.token}/embed.js`,
@@ -261,6 +335,14 @@ export async function inboundSettingsRoutes(app: FastifyInstance, { db, config }
 
   app.post<{ Params: { kind: string } }>('/inbound/:kind/rotate', async (request) => {
     rotateHook(db, request.accountId, parse(kindParam, request.params.kind));
+    return view(request.accountId);
+  });
+
+  app.patch('/inbound/tracking', async (request) => {
+    const body = parse(z.object({ enabled: z.boolean().optional(), require_consent: z.boolean().optional() }), request.body);
+    ensureTracking(db, request.accountId);
+    if (body.enabled !== undefined) run(db, 'UPDATE web_tracking SET enabled = ? WHERE account_id = ?', body.enabled ? 1 : 0, request.accountId);
+    if (body.require_consent !== undefined) run(db, 'UPDATE web_tracking SET require_consent = ? WHERE account_id = ?', body.require_consent ? 1 : 0, request.accountId);
     return view(request.accountId);
   });
 

@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       Pingsell
  * Plugin URI:        https://pingsell.neokrome.tech
- * Description:       Connecte WordPress et WooCommerce à Pingsell : inscriptions, paniers abandonnés, commandes, expéditions et formulaires, sans code.
- * Version:           1.1.0
+ * Description:       Connecte WordPress et WooCommerce à Pingsell : inscriptions, paniers abandonnés, commandes, expéditions, formulaires et suivi des visites, sans code.
+ * Version:           1.2.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Pingsell
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PINGSELL_VERSION', '1.1.0');
+define('PINGSELL_VERSION', '1.2.0');
 
 final class Pingsell_Plugin
 {
@@ -53,6 +53,8 @@ final class Pingsell_Plugin
         add_action('woocommerce_store_api_checkout_order_processed', array($this, 'on_checkout_processed'), 20, 1);
         add_action('woocommerce_cart_updated', array($this, 'on_cart_updated'), 20);
         add_action('wp_enqueue_scripts', array($this, 'checkout_capture_script'));
+        // Site tracking: the Pingsell script on every page (pages and products seen, customers recognised).
+        add_action('wp_enqueue_scripts', array($this, 'tracking_script'));
         add_action('wp_ajax_pingsell_capture', array($this, 'ajax_capture'));
         add_action('wp_ajax_nopriv_pingsell_capture', array($this, 'ajax_capture'));
         add_action('before_woocommerce_init', array($this, 'declare_hpos'));
@@ -80,6 +82,7 @@ final class Pingsell_Plugin
             'orders'     => '1',
             'shipments'  => '1',
             'forms'      => '0',
+            'tracking'   => '1',
             'form_tags'  => 'formulaire',
         );
     }
@@ -120,7 +123,7 @@ final class Pingsell_Plugin
         // Accept the address with or without /api/v1.
         $out['api_url'] = preg_replace('#/api/v1/?$#', '', $out['api_url']);
         $out['api_key'] = sanitize_text_field(isset($input['api_key']) ? trim($input['api_key']) : '');
-        foreach (array('signups', 'carts', 'orders', 'shipments', 'forms') as $k) {
+        foreach (array('signups', 'carts', 'orders', 'shipments', 'forms', 'tracking') as $k) {
             $out[$k] = !empty($input[$k]) ? '1' : '0';
         }
         $out['form_tags'] = sanitize_text_field(isset($input['form_tags']) ? $input['form_tags'] : '');
@@ -166,6 +169,7 @@ final class Pingsell_Plugin
                                 'orders'    => __('Commandes WooCommerce', 'pingsell'),
                                 'shipments' => __('Commandes expédiées (statut « Terminée »)', 'pingsell'),
                                 'forms'     => __('Formulaires du site (Contact Form 7, WPForms, Gravity Forms, Elementor, Fluent Forms)', 'pingsell'),
+                                'tracking'  => __('Suivi des visites : pages et produits vus, clients reconnus (pour « Produit consulté sans achat »)', 'pingsell'),
                             );
                             foreach ($boxes as $key => $label) {
                                 $disabled = !$woo && in_array($key, array('carts', 'orders', 'shipments'), true);
@@ -465,6 +469,33 @@ final class Pingsell_Plugin
         add_action('shutdown', function () use ($user) {
             $this->send_cart($user->user_email, $user->first_name, $user->last_name);
         });
+    }
+
+    /** The Pingsell script on every page; logged-in customers and the buyer on « Commande reçue » are recognised. */
+    public function tracking_script()
+    {
+        if (!$this->enabled('tracking') || is_admin()) {
+            return;
+        }
+        $inbound = $this->webhook_url();
+        if (!$inbound || empty($inbound['form']['script_url'])) {
+            return;
+        }
+        wp_enqueue_script('pingsell-form', $inbound['form']['script_url'], array(), null, array('strategy' => 'async', 'in_footer' => false));
+        $email = '';
+        if (is_user_logged_in()) {
+            $email = wp_get_current_user()->user_email;
+        } elseif (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-received') && function_exists('wc_get_order')) {
+            global $wp;
+            $order = wc_get_order(absint(isset($wp->query_vars['order-received']) ? $wp->query_vars['order-received'] : 0));
+            $key = isset($_GET['key']) ? sanitize_text_field(wp_unslash($_GET['key'])) : '';
+            if ($order && $key !== '' && hash_equals((string) $order->get_order_key(), $key)) {
+                $email = $order->get_billing_email();
+            }
+        }
+        if ($email && is_email($email)) {
+            wp_add_inline_script('pingsell-form', 'window.Pingsell=window.Pingsell||{q:[]};(Pingsell.q=Pingsell.q||[]).push(["identify",' . wp_json_encode($email) . ']);', 'before');
+        }
     }
 
     /** Guests: the email typed at checkout is captured as soon as it is filled in (classic and block checkout). */

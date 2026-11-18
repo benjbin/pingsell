@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
+  Activity,
   ArrowRight,
   Blocks,
   CheckCircle2,
@@ -27,15 +28,16 @@ import { cx } from "../lib/format";
 import { Button, Card, Input, PageHeader } from "../components/ui/primitives";
 import { useToast } from "../components/ui/Toast";
 import { ApiGuide, AppGuide, FileGuide, ShopifyGuide, type ApiKind } from "../components/connect/ConnectGuides";
-import { FormGuide, NoCodeGuide, PluginGuide, type NoCodeTab } from "../components/connect/NoCodeGuides";
+import { FormGuide, NoCodeGuide, PluginGuide, TrackingGuide, type NoCodeTab } from "../components/connect/NoCodeGuides";
 
-type ToolId = "shopify" | "wordpress" | "prestashop" | "nocode" | "form" | "site" | "crm" | "pos" | "backoffice" | "app" | "file" | "other";
+type ToolId = "shopify" | "wordpress" | "prestashop" | "nocode" | "form" | "suivi" | "site" | "crm" | "pos" | "backoffice" | "app" | "file" | "other";
 
 const TOOLS: Array<{ id: ToolId; icon: LucideIcon; title: string; text: string; how: string; api?: ApiKind }> = [
   { id: "shopify", icon: ShoppingBag, title: "Shopify", text: t("Clients, commandes, expéditions et paniers abandonnés.", "Customers, orders, shipments and abandoned carts."), how: t("1 clic", "1 click") },
   { id: "wordpress", icon: Blocks, title: "WordPress & WooCommerce", text: t("Comptes, paniers abandonnés, commandes, suivi et formulaires.", "Accounts, abandoned carts, orders, tracking and forms."), how: t("Extension · 2 min", "Plugin · 2 min") },
   { id: "prestashop", icon: ShoppingBasket, title: "PrestaShop", text: t("Comptes, newsletter, paniers, commandes et suivi.", "Accounts, newsletter, carts, orders and tracking."), how: t("Module · 2 min", "Module · 2 min") },
   { id: "nocode", icon: Webhook, title: "Framer, Webflow, Wix…", text: t("Formulaires et commandes, sans code ni Zapier.", "Forms and orders, no code, no Zapier."), how: t("Webhook · 2 min", "Webhook · 2 min") },
+  { id: "suivi", icon: Activity, title: t("Suivi du site", "Site tracking"), text: t("Pages et produits vus, visiteurs reconnus. Une ligne à coller.", "Pages and products viewed, visitors recognised. One line to paste."), how: t("1 ligne", "1 line") },
   { id: "form", icon: FormInput, title: t("Formulaire à coller", "Paste-in form"), text: t("Un formulaire d'inscription pour n'importe quel site.", "A sign-up form for any site."), how: t("Copier-coller", "Copy & paste") },
   { id: "site", icon: Globe, title: t("Site sur mesure", "Custom website"), text: t("Inscriptions, commandes, réservations : un seul appel API.", "Sign-ups, orders, bookings: a single API call."), how: "API · 5 min", api: "site" },
   { id: "crm", icon: Contact, title: t("Votre CRM", "Your CRM"), text: t("Fiches clients et étapes, envoyées comme tags.", "Customer records and stages, sent as tags."), how: "API · 5 min", api: "crm" },
@@ -74,17 +76,19 @@ export function IntegrationsPage() {
   const [done, setDone] = useState<Partial<Record<ToolId, string>>>({});
   const [nocodeTab, setNocodeTab] = useState<NoCodeTab>("framer");
   const status = useAsync(async () => {
-    const [shopify, keys, push, contacts] = await Promise.all([
+    const [shopify, keys, push, contacts, inbound] = await Promise.all([
       api.integrations.shopify.status().catch(() => null),
       api.apiKeys.list().catch(() => []),
       api.push.config().catch(() => null),
       api.contacts.list({ limit: 1 }).catch(() => null),
+      api.inbound.get().catch(() => null),
     ]);
     return {
       shopify: !!shopify?.integration && shopify.integration.connected !== false,
       keysUsed: keys.filter((k) => k.last_used_at).length,
       devices: push?.devices.total ?? 0,
       contacts: contacts?.total ?? 0,
+      pageviews: inbound?.tracking?.pageviews ?? 0,
     };
   }, [done]);
 
@@ -101,6 +105,9 @@ export function IntegrationsPage() {
         : null;
     if (it.id === "file") return s.contacts
         ? t(`${s.contacts.toLocaleString(LOCALE)} contacts`, `${s.contacts.toLocaleString(LOCALE)} contact${s.contacts === 1 ? "" : "s"}`)
+        : null;
+    if (it.id === "suivi") return s.pageviews
+        ? t(`${s.pageviews.toLocaleString(LOCALE)} pages vues`, `${s.pageviews.toLocaleString(LOCALE)} page views`)
         : null;
     if (it.id === "other") return s.keysUsed
         ? t(
@@ -196,6 +203,7 @@ export function IntegrationsPage() {
               )}
               {tool.id === "nocode" && <NoCodeGuide key={nocodeTab} initialTab={nocodeTab} done={done.nocode} onDone={mark("nocode")} onUseForm={() => open("form")} />}
               {tool.id === "form" && <FormGuide done={done.form} onDone={mark("form")} />}
+              {tool.id === "suivi" && <TrackingGuide done={done.suivi} onDone={mark("suivi")} />}
               {tool.api && <ApiGuide key={tool.id} kind={tool.api} done={done[tool.id]} onDone={mark(tool.id)} onUseFile={() => open("file")} onKeyCreated={() => void status.reload()} />}
               {tool.id === "app" && <AppGuide done={done.app} onDone={mark("app")} />}
               {tool.id === "file" && <FileGuide done={done.file} onDone={mark("file")} />}

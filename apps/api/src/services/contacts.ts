@@ -22,6 +22,8 @@ export interface Contact {
   total_spent: number;
   orders_count: number;
   last_order_at: string | null;
+  /** Last page seen on the merchant's site (site tracking). */
+  last_seen_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -93,6 +95,7 @@ export function serializeContact(row: Row): Contact {
     total_spent: Number(row.total_spent ?? 0),
     orders_count: Number(row.orders_count ?? 0),
     last_order_at: (row.last_order_at as string | null) ?? null,
+    last_seen_at: (row.last_seen_at as string | null) ?? null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -141,6 +144,7 @@ export function upsertContact(
       total_spent: finite(input.total_spent) ?? 0,
       orders_count: Math.trunc(finite(input.orders_count) ?? 0),
       last_order_at: clean(input.last_order_at),
+      last_seen_at: null,
       created_at: timestamp,
       updated_at: timestamp,
     };

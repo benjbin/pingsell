@@ -20,13 +20,14 @@ class Pingsell extends Module
         'PINGSELL_ORDERS',
         'PINGSELL_SHIPMENTS',
         'PINGSELL_FOOTER_FORM',
+        'PINGSELL_TRACKING',
     );
 
     public function __construct()
     {
         $this->name = 'pingsell';
         $this->tab = 'emailing';
-        $this->version = '1.1.0';
+        $this->version = '1.2.0';
         $this->author = 'Pingsell';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -47,6 +48,8 @@ class Pingsell extends Module
             && $this->registerHook('actionOrderStatusPostUpdate')
             && $this->registerHook('actionAdminOrdersTrackingNumberUpdate')
             && $this->registerHook('displayFooterBefore')
+            && $this->registerHook('displayHeader')
+            && Configuration::updateValue('PINGSELL_TRACKING', 1)
             && Configuration::updateValue('PINGSELL_SIGNUPS', 1)
             && Configuration::updateValue('PINGSELL_CARTS', 1)
             && Configuration::updateValue('PINGSELL_ORDERS', 1)
@@ -76,7 +79,7 @@ class Pingsell extends Module
             } else {
                 Configuration::updateValue('PINGSELL_API_URL', $url);
                 Configuration::updateValue('PINGSELL_API_KEY', trim((string) Tools::getValue('PINGSELL_API_KEY')));
-                foreach (array('PINGSELL_SIGNUPS', 'PINGSELL_CARTS', 'PINGSELL_ORDERS', 'PINGSELL_SHIPMENTS', 'PINGSELL_FOOTER_FORM') as $key) {
+                foreach (array('PINGSELL_SIGNUPS', 'PINGSELL_CARTS', 'PINGSELL_ORDERS', 'PINGSELL_SHIPMENTS', 'PINGSELL_FOOTER_FORM', 'PINGSELL_TRACKING') as $key) {
                     Configuration::updateValue($key, (int) (bool) Tools::getValue($key));
                 }
                 Configuration::deleteByName('PINGSELL_INBOUND');
@@ -103,6 +106,10 @@ class Pingsell extends Module
         foreach (self::$keys as $key) {
             $helper->fields_value[$key] = Configuration::get($key);
         }
+        // Installed before 1.2: tracking is on until switched off.
+        if (Configuration::get('PINGSELL_TRACKING') === false) {
+            $helper->fields_value['PINGSELL_TRACKING'] = 1;
+        }
         $switch = function ($name, $label) {
             return array(
                 'type'    => 'switch',
@@ -126,6 +133,7 @@ class Pingsell extends Module
                 $switch('PINGSELL_ORDERS', $this->l('Commandes')),
                 $switch('PINGSELL_SHIPMENTS', $this->l('Commandes expédiées')),
                 $switch('PINGSELL_FOOTER_FORM', $this->l('Formulaire d’inscription Pingsell au-dessus du pied de page')),
+                $switch('PINGSELL_TRACKING', $this->l('Suivi des visites : pages et produits vus, clients reconnus (pour « Produit consulté sans achat »)')),
             ),
             'submit' => array('title' => $this->l('Enregistrer et tester')),
         ))));
@@ -388,5 +396,39 @@ class Pingsell extends Module
         }
         return '<div class="container" style="margin:32px auto"><div data-pingsell-form data-tags="newsletter"></div></div>'
             . '<script src="' . htmlspecialchars($inbound['form']['script_url'], ENT_QUOTES, 'UTF-8') . '" async></script>';
+    }
+
+    // ─── Site tracking ────────────────────────────────────────────────────────
+
+    /**
+     * The Pingsell script on every page: pages and products seen. Logged-in customers, and the buyer on the
+     * order confirmation page, are recognised straight away.
+     */
+    public function hookDisplayHeader($params)
+    {
+        if (!Configuration::get('PINGSELL_API_URL') || !Configuration::get('PINGSELL_API_KEY') || Configuration::get('PINGSELL_TRACKING') === '0') {
+            return '';
+        }
+        $inbound = $this->inbound();
+        if (!$inbound || empty($inbound['form']['script_url'])) {
+            return '';
+        }
+        $email = '';
+        $customer = $this->context->customer;
+        if ($customer && $customer->isLogged() && Validate::isEmail($customer->email)) {
+            $email = $customer->email;
+        } elseif (isset($this->context->controller->php_self) && $this->context->controller->php_self === 'order-confirmation') {
+            $order = new Order((int) Tools::getValue('id_order'));
+            $buyer = Validate::isLoadedObject($order) ? new Customer((int) $order->id_customer) : null;
+            if ($buyer && Validate::isLoadedObject($buyer) && $buyer->secure_key === (string) Tools::getValue('key')) {
+                $email = $buyer->email;
+            }
+        }
+        $out = '';
+        if ($email !== '') {
+            $out .= '<script>window.Pingsell=window.Pingsell||{q:[]};(Pingsell.q=Pingsell.q||[]).push(["identify",'
+                . json_encode($email, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ']);</script>';
+        }
+        return $out . '<script src="' . htmlspecialchars($inbound['form']['script_url'], ENT_QUOTES, 'UTF-8') . '" async></script>';
     }
 }

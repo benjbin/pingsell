@@ -5,6 +5,7 @@ import type { Deps } from '../deps.js';
 import { csvToContacts } from '../lib/csv.js';
 import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString } from '../lib/http.js';
 import { cancelRunsForContact } from '../services/automations.js';
+import { contactVisits } from '../services/webTracking.js';
 import {
   CONTACT_STATUSES,
   findContact,
@@ -141,7 +142,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       contact.id,
       request.accountId,
     ).map((m) => serializeMessage(m, false));
-    return { ...contact, events, messages };
+    return { ...contact, events, messages, site: contactVisits(db, request.accountId, contact.id, 30) };
   });
 
   app.patch<Params>('/contacts/:id', async (request) => {

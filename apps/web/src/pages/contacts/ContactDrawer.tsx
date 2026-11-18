@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
+  Activity,
   Ban,
+  Eye,
   CalendarClock,
   MailOpen,
   MousePointerClick,
@@ -209,6 +211,35 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
               </ol>
             )}
           </section>
+
+          {(c.site?.total ?? 0) > 0 && c.site && (
+            <section>
+              <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                <Activity className="size-3.5" />
+                {t(`Sur le site · ${c.site.total} page${c.site.total > 1 ? "s" : ""}`, `On the site · ${c.site.total} page${c.site.total > 1 ? "s" : ""}`)}
+              </h4>
+              <ul className="divide-y divide-slate-100 rounded-xl ring-1 ring-slate-200 dark:divide-slate-800 dark:ring-slate-800">
+                {c.site.visits.slice(0, 12).map((v, i) => (
+                  <li key={`${v.created_at}-${i}`} className="flex items-center gap-3 px-3 py-2">
+                    {v.product?.image ? (
+                      <img src={v.product.image} alt="" className="size-9 shrink-0 rounded-lg object-cover" loading="lazy" />
+                    ) : v.product ? (
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-500 dark:bg-brand-900/30"><Eye className="size-4" /></span>
+                    ) : null}
+                    <div className="min-w-0 flex-1">
+                      <a href={v.url} target="_blank" rel="noreferrer noopener" className="block truncate text-sm text-slate-900 hover:text-brand-600 dark:text-white">
+                        {v.product?.name ?? v.title ?? v.path}
+                      </a>
+                      <p className="truncate text-xs text-slate-400">
+                        {v.product?.price !== undefined ? `${v.product.price}${v.product.currency ? ` ${v.product.currency}` : ""} · ` : ""}
+                        <span title={formatDateTime(v.created_at)}>{formatRelative(v.created_at)}</span>
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {c.messages.length > 0 && (
             <section>

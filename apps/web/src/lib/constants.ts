@@ -49,6 +49,8 @@ export const TRIGGERS: Record<AutomationTrigger, { label: string; description: s
   date_anniversary: { label: t("Date anniversaire", "Date anniversary"), description: t("Anniversaire, date d'inscription ou toute date de la fiche client, le jour J ou quelques jours avant.", "Birthday, sign-up date or any date on the customer record, on the day or a few days before.") },
   inactive: { label: t("Client inactif", "Inactive customer"), description: t("Quand un client n'a rien commandé depuis X jours : réactivation.", "When a customer hasn't ordered for X days: win-back.") },
   segment_entered: { label: t("Entre dans un segment", "Enters a segment"), description: t("Quand un client rejoint un segment (gros clients, fidèles, à risque…).", "When a customer joins a segment (big spenders, loyal, at risk…).") },
+  page_visited: { label: t("Page visitée", "Page visited"), description: t("Quand un client connu ouvre une page de votre site (toutes, ou celles qui contiennent un mot : /tarifs, /reservation…). Une fois par jour au plus.", "When a known customer opens a page of your site (any, or those containing a word: /pricing, /booking…). At most once a day.") },
+  product_viewed: { label: t("Produit consulté sans achat", "Product viewed, not bought"), description: t("Quand un client a regardé un produit sans l'acheter ni le mettre au panier. Le produit, sa photo et son prix sont repris dans le message.", "When a customer looked at a product without buying it or adding it to the cart. The product, its photo and price go into the message.") },
   event: {
     label: t("Événement de votre site", "Event from your site"),
     description: t("N'importe quel moment envoyé par votre site : réservation, rendez-vous, avis, abonnement, anniversaire…", "Any moment your site sends: booking, appointment, review, subscription, birthday…"),
@@ -74,7 +76,7 @@ export const EVENT_LABELS: Record<EventType, string> = {
   event: t("Événement", "Event"),
 };
 
-export type FieldKind = "text" | "number" | "date" | "tags" | "enum";
+export type FieldKind = "text" | "number" | "date" | "tags" | "enum" | "page";
 
 export const SEGMENT_FIELDS: Record<SegmentField, { label: string; kind: FieldKind; options?: Array<{ value: string; label: string }> }> = {
   email: { label: "Email", kind: "text" },
@@ -95,6 +97,8 @@ export const SEGMENT_FIELDS: Record<SegmentField, { label: string; kind: FieldKi
   orders_count: { label: t("Nombre de commandes", "Number of orders"), kind: "number" },
   last_order_at: { label: t("Dernière commande", "Last order"), kind: "date" },
   created_at: { label: t("Date d'inscription", "Sign-up date"), kind: "date" },
+  last_seen_at: { label: t("Dernière visite du site", "Last site visit"), kind: "date" },
+  visited_page: { label: t("Page du site", "Site page"), kind: "page" },
 };
 
 export const OPS_BY_KIND: Record<FieldKind, Array<{ op: SegmentOp; label: string }>> = {
@@ -120,5 +124,9 @@ export const OPS_BY_KIND: Record<FieldKind, Array<{ op: SegmentOp; label: string
   tags: [
     { op: "has_tag", label: t("possède le tag", "has tag") },
     { op: "not_has_tag", label: t("ne possède pas le tag", "doesn't have tag") },
+  ],
+  page: [
+    { op: "contains", label: t("visitée, contenant", "visited, containing") },
+    { op: "neq", label: t("jamais visitée, contenant", "never visited, containing") },
   ],
 };

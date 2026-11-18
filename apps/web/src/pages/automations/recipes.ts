@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { CalendarClock, CalendarHeart, Crown, Hourglass, MousePointerClick, PackageCheck, Repeat, ShoppingCart, Sparkles } from "lucide-react";
+import { CalendarClock, CalendarHeart, Crown, Eye, Globe, Hourglass, MousePointerClick, PackageCheck, Repeat, ShoppingCart, Sparkles } from "lucide-react";
 import type { AutomationStep, AutomationTrigger } from "../../lib/types";
 import { DEFAULT_EMAIL_HTML } from "../campaigns/defaultTemplate";
 import { t } from "../../lib/i18n";
@@ -65,6 +65,46 @@ export const RECIPES: Recipe[] = [
       days(1),
       { type: "exit_if", condition: "ordered" },
       email(t("-10 % pour finaliser votre commande", "10% off to complete your order"), t("Un dernier coup de pouce", "One last nudge"), [t("Code <strong>PANIER10</strong>, valable 48 h.", "Code <strong>CART10</strong>, valid for 48 h.")], t("Finaliser ma commande", "Complete my order"), "{{event.checkout_url|https://exemple.fr}}"),
+    ],
+  },
+  {
+    id: "produit-vu",
+    icon: Eye,
+    name: t("Produit consulté sans achat", "Viewed, not bought"),
+    pitch: t("Il a regardé un produit sans l'acheter : 2 h après, un email avec la photo, le prix et un lien direct. S'arrête dès qu'il commande.", "They looked at a product without buying: 2 h later, an email with the photo, price and a direct link. Stops as soon as they order."),
+    tags: [t("Suivi du site", "Site tracking"), t("Arrêt si achat", "Stop on purchase")],
+    trigger: "product_viewed",
+    trigger_config: { hours: 2 },
+    steps: [
+      { type: "send_window", days: [1, 2, 3, 4, 5, 6, 7], start_hour: 9, end_hour: 21 },
+      email(
+        t("Toujours tenté(e) par {{event.product}} ?", "Still thinking about {{event.product}}?"),
+        "{{event.product}}",
+        [
+          `<img src="{{event.image|https://exemple.fr/produit.jpg}}" alt="{{event.product}}" width="480" style="display:block;max-width:100%;height:auto;border-radius:16px;margin:0 0 16px;">`,
+          t("Vous l'avez regardé de près : il vous attend toujours, à {{event.price}} €.", "You took a close look: it's still waiting for you, at {{event.price}}."),
+        ],
+        t("Revoir le produit", "See the product"),
+        "{{event.url|https://exemple.fr}}",
+      ),
+      days(2),
+      { type: "exit_if", condition: "ordered" },
+      email(t("Il part vite…", "It's going fast…"), t("Dernière chance de le revoir", "Last chance to see it again"), [t("Les stocks bougent : réservez le vôtre avant qu'il ne parte.", "Stock moves fast: grab yours before it's gone.")], t("Je le veux", "I want it"), "{{event.url|https://exemple.fr}}"),
+    ],
+  },
+  {
+    id: "page-tarifs",
+    icon: Globe,
+    name: t("Visite de la page Tarifs", "Pricing page visit"),
+    pitch: t("Un client ouvre votre page Tarifs ou Réservation sans aller au bout : email le lendemain, et votre équipe est prévenue.", "A customer opens your Pricing or Booking page without going through: email the next day, and your team is alerted."),
+    tags: [t("Suivi du site", "Site tracking"), t("Alerte équipe", "Team alert")],
+    trigger: "page_visited",
+    trigger_config: { url_contains: "/tarifs" },
+    steps: [
+      { type: "notify", to: "", subject: t("{{first_name|Un client}} regarde vos tarifs", "{{first_name|A customer}} is looking at your pricing"), message: t("{{email}} vient d'ouvrir {{event.url}}.", "{{email}} just opened {{event.url}}.") },
+      days(1),
+      { type: "exit_if", condition: "ordered" },
+      email(t("Une question sur nos tarifs ?", "Any question about pricing?"), t("On vous aide à choisir ?", "Can we help you choose?"), [t("Vous avez regardé nos offres : répondez simplement à cet email, on vous conseille en deux minutes.", "You looked at our plans: just reply to this email, we'll advise you in two minutes.")], t("Voir les tarifs", "See pricing"), "{{event.url|https://exemple.fr}}"),
     ],
   },
   {

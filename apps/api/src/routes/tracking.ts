@@ -3,6 +3,7 @@ import { get, now, run, transaction } from '../db.js';
 import type { Deps } from '../deps.js';
 import { cancelRunsForContact, fireTrigger } from '../services/automations.js';
 import { recordEvent } from '../services/contacts.js';
+import { decorateLink } from '../services/webTracking.js';
 import { escapeHtml } from '../services/render.js';
 import { currentLang, t } from '../i18n.js';
 
@@ -105,7 +106,8 @@ export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
       recordEvent(db, message.account_id, message.contact_id, 'click', eventData(message, { url: target }));
       if (message.contact_id) fireTrigger(db, message.account_id, message.contact_id, 'email_clicked', { url: target, campaign_id: message.campaign_id ?? null, automation_id: message.automation_id ?? null });
     });
-    return reply.header('cache-control', 'no-store').redirect(target, 302);
+    // Towards the merchant's own site: a signed token lets the site script recognise the customer.
+    return reply.header('cache-control', 'no-store').redirect(decorateLink(db, message.account_id, message.contact_id, target), 302);
   });
 
   const unsubscribe = (message: MessageRow, method: string): boolean => {

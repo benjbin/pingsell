@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Blocks, Download, FormInput, Globe, KeyRound, RefreshCw, Webhook } from "lucide-react";
+import { Activity, Blocks, Download, Eye, FormInput, Globe, KeyRound, MousePointerClick, RefreshCw, ShieldCheck, Webhook } from "lucide-react";
 import { API_URL, api } from "../../lib/api";
 import type { InboundLastCall, InboundSettings } from "../../lib/types";
 import { useAsync } from "../../lib/useAsync";
@@ -498,6 +498,7 @@ export function FormGuide({ done, onDone }: GuideProps) {
   // Live preview with the real script (it renders every [data-pingsell-form] added to the page).
   useEffect(() => {
     if (!settings || document.querySelector(`script[src="${settings.form.script_url}"]`)) return;
+    (window as unknown as { __pingsellNoTrack?: boolean }).__pingsellNoTrack = true;
     const s = document.createElement("script");
     s.src = settings.form.script_url;
     s.async = true;
@@ -638,6 +639,152 @@ export function FormGuide({ done, onDone }: GuideProps) {
             <Waiting>{t("Inscrivez-vous une fois sur votre site (ou dans l'aperçu) : on vous confirme ici dès que Pingsell reçoit l'inscription.", "Sign up once on your site (or in the preview) and we'll confirm here as soon as Pingsell receives it.")}</Waiting>
           )}
           {current && <LastCall call={current.form} />}
+        </Step>
+      </Steps>
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Suivi du site : une ligne, tout le reste est automatique                   */
+/* -------------------------------------------------------------------------- */
+
+export function TrackingGuide({ done, onDone }: GuideProps) {
+  const toast = useToast();
+  const data = useAsync(() => api.inbound.get(), []);
+  const settings = data.data ?? null;
+  const [place, setPlace] = useState("wix");
+  const [busy, setBusy] = useState<"enabled" | "require_consent" | null>(null);
+  const [live, setLive] = useState<InboundSettings | null>(null);
+  const current = live ?? settings;
+  const tracking = current?.tracking;
+
+  // Live: the first page received confirms the script is in place.
+  const received = usePoll(!!settings && !done, async () => {
+    const next = await api.inbound.get();
+    setLive(next);
+    return next.tracking.pageviews > (settings?.tracking.pageviews ?? 0);
+  });
+  useEffect(() => {
+    if (received) onDone(t("Première visite reçue : le suivi est en place !", "First visit received: tracking is live!"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [received]);
+
+  async function toggle(key: "enabled" | "require_consent", value: boolean) {
+    setBusy(key);
+    try {
+      setLive(await api.inbound.setTracking({ [key]: value }));
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const script = settings ? `<script src="${settings.form.script_url}" async></script>` : "";
+  const head: Record<string, string> = {
+    wix: t("Paramètres du site › Code personnalisé › Ajouter du code : collez la ligne, « Toutes les pages », emplacement « Head ».", "Site settings › Custom code › Add code: paste the line, “All pages”, place in “Head”."),
+    squarespace: t("Paramètres › Avancé › Injection de code › En-tête : collez la ligne (offre Core ou supérieure).", "Settings › Advanced › Code injection › Header: paste the line (Core plan or above)."),
+    framer: t("Paramètres du site › Général › Code personnalisé › « Start of <head> tag » : collez la ligne, puis publiez.", "Site settings › General › Custom code › “Start of <head> tag”: paste the line, then publish."),
+    webflow: t("Paramètres du site › Code personnalisé › Head code : collez la ligne, puis publiez.", "Site settings › Custom code › Head code: paste the line, then publish."),
+    wordpress: t("Avec l'extension Pingsell (1.2 ou plus), rien à faire : le suivi est déjà actif. Sinon, collez la ligne dans l'en-tête du thème.", "With the Pingsell plugin (1.2 or later), nothing to do: tracking is already on. Otherwise, paste the line in the theme header."),
+    shopify: t("Boutique en ligne › Thèmes › … › Modifier le code › theme.liquid : collez la ligne juste avant </head>.", "Online Store › Themes › … › Edit code › theme.liquid: paste the line just before </head>."),
+    other: t("Dans l'en-tête commun à toutes les pages (balise <head>), ou via Google Tag Manager (balise HTML personnalisée, toutes les pages).", "In the header shared by every page (<head> tag), or through Google Tag Manager (custom HTML tag, all pages)."),
+  };
+
+  const FEATURES: Array<{ icon: typeof Eye; title: string; text: string }> = [
+    { icon: Activity, title: t("Chaque page vue", "Every page viewed"), text: t("Y compris sur les sites sans rechargement (Framer, Wix, Webflow).", "Including sites that don't reload (Framer, Wix, Webflow).") },
+    { icon: Eye, title: t("Les produits regardés", "Products looked at"), text: t("Nom, photo et prix lus tout seuls sur la page : aucun code produit à écrire.", "Name, photo and price read straight from the page: no product code to write.") },
+    { icon: MousePointerClick, title: t("Qui est le visiteur", "Who the visitor is"), text: t("Reconnu dès qu'il clique dans un de vos emails, ou qu'il tape son email dans n'importe quel formulaire du site.", "Recognised as soon as they click in one of your emails, or type their email in any form on the site.") },
+  ];
+
+  return (
+    <>
+      <GuideHead
+        icon={Activity}
+        title={t("Suivi du site", "Site tracking")}
+        text={t(
+          "Une seule ligne à coller, une seule fois. Pingsell voit ensuite les pages et les produits consultés par vos clients, et relance au bon moment : produit regardé sans achat, visite de la page Tarifs, retour sur le site…",
+          "One line to paste, once. Pingsell then sees the pages and products your customers look at, and follows up at the right time: product viewed but not bought, pricing page visit, return to the site…",
+        )}
+        done={done || undefined}
+      />
+      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+        {FEATURES.map((f) => (
+          <div key={f.title} className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-800/60">
+            <f.icon className="size-5 text-brand-500" />
+            <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{f.title}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{f.text}</p>
+          </div>
+        ))}
+      </div>
+      <Steps>
+        <Step n={1} title={t("Copiez cette ligne", "Copy this line")}>
+          {settings ? <Code code={script} /> : <Waiting>{t("Chargement…", "Loading…")}</Waiting>}
+          <p className="text-xs text-slate-500">
+            {t("C'est la même ligne que le formulaire à coller : si elle est déjà sur toutes vos pages, le suivi tourne déjà.", "It's the same line as the paste-in form: if it's already on every page, tracking is already running.")}
+          </p>
+        </Step>
+        <Step n={2} title={t("Collez-la dans l'en-tête de votre site", "Paste it in your site's header")}>
+          <Tabs label={t("Site", "Site")} value={place} onChange={setPlace} options={PLACES} />
+          <p>{head[place]}</p>
+        </Step>
+        <Step n={3} title={t("Réglez la confidentialité", "Set privacy")}>
+          <label className="flex items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4 rounded" checked={!!tracking?.enabled} disabled={!tracking || busy !== null} onChange={(e) => void toggle("enabled", e.target.checked)} />
+            <span>
+              <span className="font-semibold text-slate-900 dark:text-white">{t("Suivre les visites", "Track visits")}</span>
+              <span className="block text-xs text-slate-500">{t("Décoché : le script ne garde que les formulaires.", "Unchecked: the script only handles forms.")}</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-0.5 size-4 rounded" checked={!!tracking?.require_consent} disabled={!tracking || busy !== null} onChange={(e) => void toggle("require_consent", e.target.checked)} />
+            <span>
+              <span className="font-semibold text-slate-900 dark:text-white">{t("Attendre l'accord cookies du visiteur (conseillé en Europe)", "Wait for the visitor's cookie consent (recommended in Europe)")}</span>
+              <span className="block text-xs text-slate-500">
+                {t(
+                  <>Reconnu tout seul avec Cookiebot, et avec Axeptio si vous y ajoutez un service nommé <code>pingsell</code>. Avec une autre bannière, appelez <code>Pingsell.consent(true)</code> quand le visiteur accepte.</>,
+                  <>Detected automatically with Cookiebot, and with Axeptio if you add a service named <code>pingsell</code>. With another banner, call <code>Pingsell.consent(true)</code> when the visitor accepts.</>,
+                )}
+              </span>
+            </span>
+          </label>
+          <Hint>
+            <ShieldCheck className="mr-1 inline size-3.5" />
+            {t("Les visiteurs anonymes sont oubliés après 90 jours, l'historique après 13 mois, et tout est effacé avec le contact.", "Anonymous visitors are forgotten after 90 days, history after 13 months, and everything is erased with the contact.")}
+          </Hint>
+        </Step>
+        <Step n={4} title={t("Vérifiez", "Check")} done={!!done} last>
+          {tracking && tracking.pageviews > 0 ? (
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {[
+                [tracking.pageviews, t("pages vues", "page views")],
+                [tracking.visitors, t("visiteurs", "visitors")],
+                [tracking.identified, t("reconnus", "recognised")],
+              ].map(([n, l]) => (
+                <div key={String(l)} className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-800/60">
+                  <p className="font-display text-xl font-bold text-slate-900 dark:text-white">{Number(n).toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{l}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Waiting>{t("Ouvrez une page de votre site : on vous confirme ici dès que Pingsell la reçoit.", "Open a page of your site and we'll confirm here as soon as Pingsell receives it.")}</Waiting>
+          )}
+          {tracking?.last_url && (
+            <p className="truncate text-xs text-slate-500">
+              {t("Dernière page reçue : ", "Last page received: ")}
+              <span className="font-mono">{tracking.last_url}</span>
+              {tracking.last_seen_at ? ` · ${formatDateTime(tracking.last_seen_at)}` : ""}
+            </p>
+          )}
+          <p>
+            {t("Ensuite, dans ", "Then, in ")}
+            <Link to="/automatisations" className="font-semibold text-brand-500 hover:text-brand-600">{t("Automatisations", "Automations")}</Link>
+            {t(" : « Produit consulté sans achat » et « Visite de la page Tarifs » sont prêts à l'emploi. Dans ", ": “Viewed, not bought” and “Pricing page visit” are ready to use. In ")}
+            <Link to="/segments" className="font-semibold text-brand-500 hover:text-brand-600">{t("Segments", "Segments")}</Link>
+            {t(" : « Page du site » et « Dernière visite du site ».", ": “Site page” and “Last site visit”.")}
+          </p>
         </Step>
       </Steps>
     </>

@@ -12,6 +12,7 @@ import {
   Package,
   Smartphone,
   Eye,
+  Globe,
   EyeOff,
   Flag,
   GitBranch,
@@ -63,6 +64,8 @@ const TRIGGER_ICONS: Record<AutomationTrigger, LucideIcon> = {
   date_anniversary: CalendarHeart,
   inactive: Hourglass,
   segment_entered: Users,
+  page_visited: Globe,
+  product_viewed: Eye,
 };
 
 /* ------------------------------------------------------------------ step tree in the editor */
@@ -747,8 +750,10 @@ export function AutomationEditorPage() {
           ? { tag: tag.trim().toLowerCase() }
           : trigger === "event"
             ? { event: eventSlug(eventName) }
-            : trigger === "email_clicked"
+            : trigger === "email_clicked" || trigger === "page_visited"
               ? (typeof cfg.url_contains === "string" && cfg.url_contains.trim() ? { url_contains: cfg.url_contains.trim() } : {})
+              : trigger === "product_viewed"
+                ? { hours: Number(cfg.hours ?? 2) }
               : trigger === "date_anniversary"
                 ? { field: typeof cfg.field === "string" && cfg.field.trim() ? cfg.field.trim() : "birthday", days_before: Number(cfg.days_before ?? 0) }
                 : trigger === "inactive"
@@ -920,6 +925,30 @@ export function AutomationEditorPage() {
               <Input id="auto-url" value={String(cfg.url_contains ?? "")} onChange={(e) => setCfg({ ...cfg, url_contains: e.target.value })} placeholder="promo-noel" />
             </Field>
           )}
+          {trigger === "page_visited" && (
+            <div className="mt-4 space-y-3">
+              <Field label={t("Adresse de la page contenant (optionnel)", "Page address containing (optional)")} htmlFor="auto-page" hint={t("Vide = n'importe quelle page. Ex : « /tarifs », « /reservation », « /contact ».", "Empty = any page. E.g. “/pricing”, “/booking”, “/contact”.")}>
+                <Input id="auto-page" value={String(cfg.url_contains ?? "")} onChange={(e) => setCfg({ ...cfg, url_contains: e.target.value })} placeholder="/tarifs" />
+              </Field>
+              <TrackingHint />
+            </div>
+          )}
+          {trigger === "product_viewed" && (
+            <div className="mt-4 space-y-3">
+              <Field label={t("Sans achat depuis", "Not bought after")} htmlFor="auto-hours" hint={t("Rien ne part s'il a commandé ou rempli un panier entre-temps (la relance panier prend le relais). Une relance tous les 3 jours au plus.", "Nothing goes out if they ordered or filled a cart in the meantime (the cart reminder takes over). At most one reminder every 3 days.")}>
+                <Select id="auto-hours" value={String(cfg.hours ?? 2)} onChange={(e) => setCfg({ ...cfg, hours: Number(e.target.value) })}>
+                  {[1, 2, 4, 12, 24, 48].map((h) => <option key={h} value={h}>{t(`${h} heure${h > 1 ? "s" : ""}`, `${h} hour${h > 1 ? "s" : ""}`)}</option>)}
+                </Select>
+              </Field>
+              <p className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+                {t(
+                  "Dans vos messages : {{event.product}} (nom), {{event.url}} (lien), {{event.image}} (photo), {{event.price}} et {{event.currency}}, {{event.views}} (nombre de fois vu).",
+                  "In your messages: {{event.product}} (name), {{event.url}} (link), {{event.image}} (photo), {{event.price}} and {{event.currency}}, {{event.views}} (times viewed).",
+                )}
+              </p>
+              <TrackingHint />
+            </div>
+          )}
           {trigger === "date_anniversary" && (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <Field label={t("Quelle date ?", "Which date?")} hint={t("Anniversaire : champ birthday de la fiche (format 1990-05-14 ou 14/05/1990), envoyé par votre site ou un import.", "Birthday: the record's birthday field (1990-05-14 or 14/05/1990), sent by your site or an import.")}>
@@ -991,5 +1020,15 @@ export function AutomationEditorPage() {
         )}
       </div>
     </>
+  );
+}
+
+/** Both site triggers need the one-line script on the site. */
+function TrackingHint() {
+  return (
+    <p className="text-xs text-slate-500 dark:text-slate-400">
+      {t("Il faut le script Pingsell sur votre site (une ligne à coller). ", "Requires the Pingsell script on your site (one line to paste). ")}
+      <Link to="/integrations?outil=suivi" className="font-semibold text-brand-600">{t("Voir comment", "See how")}</Link>
+    </p>
   );
 }

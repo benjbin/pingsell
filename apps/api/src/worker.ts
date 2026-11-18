@@ -4,6 +4,7 @@ import { finalizeCampaigns, queueCampaign } from './services/campaigns.js';
 import { processDueRuns, processScheduledTriggers, takeWebhooks } from './services/automations.js';
 import { sendTeamNotifications, sendWebhooks } from './services/automationOutbox.js';
 import { processAbandonedCarts } from './services/carts.js';
+import { processTracking } from './services/webTracking.js';
 import { finalizePushCampaigns, queuePushCampaigns, sendPushBatch } from './services/push.js';
 import { processPushResends } from './services/pushGrowth.js';
 import { accountSender, markFailed, markSent } from './services/messages.js';
@@ -70,6 +71,7 @@ export class SendingWorker {
         this.queueSendingCampaigns();
         processAbandonedCarts(this.db);
         processScheduledTriggers(this.db);
+        processTracking(this.db);
         processDueRuns(this.db, this.config);
         await sendWebhooks(takeWebhooks(), this.log);
         await sendTeamNotifications(this.db, this.config, this.provider);

@@ -21,6 +21,8 @@ export const TRIGGERS = [
   'date_anniversary',
   'inactive',
   'segment_entered',
+  'page_visited',
+  'product_viewed',
 ] as const;
 export type Trigger = (typeof TRIGGERS)[number];
 
@@ -231,6 +233,8 @@ export const triggerConfigSchema = z
     days: z.number().int().min(1).max(3650).optional(),
     /** segment_entered */
     segment_id: z.string().trim().min(1).max(64).optional(),
+    /** product_viewed: hours without purchase before the journey starts. */
+    hours: z.number().min(0.25).max(168).optional(),
   })
   .loose();
 export type TriggerConfig = z.output<typeof triggerConfigSchema>;
@@ -264,7 +268,7 @@ function matchesConfig(trigger: Trigger, config: TriggerConfig, data: Record<str
   if (trigger === 'tag_added' && config.tag) {
     return typeof data.tag === 'string' && data.tag.trim().toLowerCase() === config.tag.trim().toLowerCase();
   }
-  if (trigger === 'email_clicked' && config.url_contains) {
+  if ((trigger === 'email_clicked' || trigger === 'page_visited') && config.url_contains) {
     return typeof data.url === 'string' && data.url.toLowerCase().includes(config.url_contains.toLowerCase());
   }
   if (trigger === 'order_created' && config.min_total !== undefined) {
@@ -814,7 +818,7 @@ export function exitConditionMet(
 /* ---------------------------------------------------------------- time-based triggers */
 
 /** Starts one automation for one contact, once per `key` (birthday year, inactivity period, segment entry). */
-function startOnce(db: DatabaseSync, automationId: string, contactId: string, key: string, data: Record<string, unknown>): boolean {
+export function startOnce(db: DatabaseSync, automationId: string, contactId: string, key: string, data: Record<string, unknown>): boolean {
   const fresh = run(
     db,
     'INSERT OR IGNORE INTO automation_seen (automation_id, contact_id, key, created_at) VALUES (?, ?, ?, ?)',
@@ -837,6 +841,23 @@ function startOnce(db: DatabaseSync, automationId: string, contactId: string, ke
     key,
   );
   return true;
+}
+
+/**
+ * A known, subscribed contact opened a page of the site: matching « Page visitée » journeys start,
+ * at most once a day each (a customer browsing ten pages gets one email, not ten).
+ */
+export function firePageVisited(db: DatabaseSync, accountId: string, contactId: string, data: Record<string, unknown>): number {
+  const contact = get<{ status: string }>(db, 'SELECT status FROM contacts WHERE id = ? AND account_id = ?', contactId, accountId);
+  if (contact?.status !== 'subscribed') return 0;
+  const day = parisParts(Date.now());
+  let started = 0;
+  for (const a of all(db, "SELECT * FROM automations WHERE account_id = ? AND trigger = 'page_visited' AND status = 'active'", accountId).map(serializeAutomation)) {
+    if (!matchesConfig('page_visited', a.trigger_config, data)) continue;
+    if (scalar(db, "SELECT COUNT(*) FROM automation_runs WHERE automation_id = ? AND contact_id = ? AND status = 'pending'", a.id, contactId) > 0) continue;
+    if (startOnce(db, a.id, contactId, `page:${day.y}-${day.m}-${day.d}`, data)) started++;
+  }
+  return started;
 }
 
 /** « 1990-05-14 », « 14/05/1990 », « 1990-05-14T… » → [month, day, year?]. */
