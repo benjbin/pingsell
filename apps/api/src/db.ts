@@ -423,6 +423,98 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   );
   CREATE INDEX idx_api_carts_pending ON api_carts(status, updated_at);
   `,
+  // v13 — any event sent by a website (POST /events) can start an automation: new `event` trigger,
+  // runs keep the event's data (for {{event.*}} and « wait until N hours before the date »).
+  {
+    foreignKeysOff: true,
+    sql: `
+  CREATE TABLE automations_v13 (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    trigger TEXT NOT NULL
+      CHECK (trigger IN ('contact_created','tag_added','order_created','cart_abandoned','order_fulfilled','app_signed_in','push_subscribed','event')),
+    trigger_config TEXT NOT NULL DEFAULT '{}',
+    steps TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  INSERT INTO automations_v13 (id, account_id, name, trigger, trigger_config, steps, status, created_at, updated_at)
+    SELECT id, account_id, name, trigger, trigger_config, steps, status, created_at, updated_at FROM automations;
+  DROP TABLE automations;
+  ALTER TABLE automations_v13 RENAME TO automations;
+  CREATE INDEX idx_automations_account_trigger ON automations(account_id, trigger, status);
+
+  ALTER TABLE automation_runs ADD COLUMN data TEXT;
+  ALTER TABLE automation_runs ADD COLUMN event_key TEXT;
+  CREATE INDEX idx_runs_event_key ON automation_runs(event_key);
+  `,
+  },
+  // v14 — Brevo / OneSignal-style journeys: new triggers (validated by the API, so no CHECK to rebuild
+  // next time), once-per-occurrence memory for time-based triggers, team alerts.
+  {
+    foreignKeysOff: true,
+    sql: `
+  CREATE TABLE automations_v14 (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    trigger_config TEXT NOT NULL DEFAULT '{}',
+    steps TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  INSERT INTO automations_v14 (id, account_id, name, trigger, trigger_config, steps, status, created_at, updated_at)
+    SELECT id, account_id, name, trigger, trigger_config, steps, status, created_at, updated_at FROM automations;
+  DROP TABLE automations;
+  ALTER TABLE automations_v14 RENAME TO automations;
+  CREATE INDEX idx_automations_account_trigger ON automations(account_id, trigger, status);
+
+  CREATE TABLE automation_seen (
+    automation_id TEXT NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (automation_id, contact_id, key)
+  );
+
+  CREATE TABLE team_notifications (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    automation_id TEXT,
+    contact_id TEXT,
+    to_email TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    message TEXT NOT NULL DEFAULT '',
+    data TEXT,
+    status TEXT NOT NULL DEFAULT 'queued',
+    error TEXT,
+    created_at TEXT NOT NULL,
+    sent_at TEXT
+  );
+  CREATE INDEX idx_team_notifications_status ON team_notifications(status, created_at);
+  `,
+  },
+  // v15 — no-code sites: one secret webhook URL (WooCommerce, Webflow, Framer, Wix, Tally…) and one public
+  // form key (paste-in signup form, order-confirmation snippet) per account.
+  `
+  CREATE TABLE inbound_hooks (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('webhook','form')),
+    token TEXT NOT NULL UNIQUE,
+    allowed_origins TEXT NOT NULL DEFAULT '[]',
+    uses INTEGER NOT NULL DEFAULT 0,
+    last_used_at TEXT,
+    last_source TEXT,
+    last_result TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (account_id, kind)
+  );
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

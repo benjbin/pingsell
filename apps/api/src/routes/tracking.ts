@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { get, now, run, transaction } from '../db.js';
 import type { Deps } from '../deps.js';
-import { cancelRunsForContact } from '../services/automations.js';
+import { cancelRunsForContact, fireTrigger } from '../services/automations.js';
 import { recordEvent } from '../services/contacts.js';
 import { escapeHtml } from '../services/render.js';
 import { currentLang, t } from '../i18n.js';
@@ -103,6 +103,7 @@ export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
       run(db, 'UPDATE messages SET opened_at = COALESCE(opened_at, ?), clicked_at = COALESCE(clicked_at, ?) WHERE id = ?', timestamp, timestamp, message.id);
       if (!message.opened_at) recordEvent(db, message.account_id, message.contact_id, 'open', eventData(message, { via: 'click' }));
       recordEvent(db, message.account_id, message.contact_id, 'click', eventData(message, { url: target }));
+      if (message.contact_id) fireTrigger(db, message.account_id, message.contact_id, 'email_clicked', { url: target, campaign_id: message.campaign_id ?? null, automation_id: message.automation_id ?? null });
     });
     return reply.header('cache-control', 'no-store').redirect(target, 302);
   });

@@ -45,11 +45,20 @@ export const TRIGGERS: Record<AutomationTrigger, { label: string; description: s
   },
   app_signed_in: { label: t("Première connexion à l'app", "First app sign-in"), description: t("La première fois que le client se connecte dans votre app mobile.", "The first time the customer signs in to your mobile app.") },
   push_subscribed: { label: t("Notifications activées", "Notifications enabled"), description: t("Quand le client active les notifications sur son premier appareil.", "When the customer enables notifications on their first device.") },
+  email_clicked: { label: t("A cliqué dans un email", "Clicked in an email"), description: t("Quand le client clique un lien (tous, ou ceux qui contiennent un mot).", "When the customer clicks a link (any, or those containing a word).") },
+  date_anniversary: { label: t("Date anniversaire", "Date anniversary"), description: t("Anniversaire, date d'inscription ou toute date de la fiche client, le jour J ou quelques jours avant.", "Birthday, sign-up date or any date on the customer record, on the day or a few days before.") },
+  inactive: { label: t("Client inactif", "Inactive customer"), description: t("Quand un client n'a rien commandé depuis X jours : réactivation.", "When a customer hasn't ordered for X days: win-back.") },
+  segment_entered: { label: t("Entre dans un segment", "Enters a segment"), description: t("Quand un client rejoint un segment (gros clients, fidèles, à risque…).", "When a customer joins a segment (big spenders, loyal, at risk…).") },
+  event: {
+    label: t("Événement de votre site", "Event from your site"),
+    description: t("N'importe quel moment envoyé par votre site : réservation, rendez-vous, avis, abonnement, anniversaire…", "Any moment your site sends: booking, appointment, review, subscription, birthday…"),
+  },
 };
 
 export const EXIT_CONDITIONS: Record<ExitCondition, string> = {
   push_opened: t("a ouvert une notification de ce parcours", "opened a notification from this journey"),
   email_opened: t("a ouvert un email de ce parcours", "opened an email from this journey"),
+  email_clicked: t("a cliqué dans un email de ce parcours", "clicked in an email from this journey"),
   ordered: t("a passé commande depuis le début du parcours", "placed an order since the journey started"),
 };
 
@@ -62,6 +71,7 @@ export const EVENT_LABELS: Record<EventType, string> = {
   cart_abandoned: t("A abandonné son panier", "Abandoned their cart"),
   tag_added: t("Tag ajouté", "Tag added"),
   contact_created: t("Contact créé", "Contact created"),
+  event: t("Événement", "Event"),
 };
 
 export type FieldKind = "text" | "number" | "date" | "tags" | "enum";

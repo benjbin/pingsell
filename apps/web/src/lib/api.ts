@@ -1,6 +1,7 @@
 // Typed client for the Pingsell REST API (see SPEC.md, base /api/v1).
 import { LANG, t } from "./i18n";
 import type {
+  InboundSettings,
   Analytics,
   ApiKey,
   SendingDomainResponse,
@@ -214,6 +215,12 @@ export const api = {
     remove: () => del("/sending-domain"),
   },
 
+  inbound: {
+    get: () => get<InboundSettings>("/inbound"),
+    rotate: (kind: "webhook" | "form") => post<InboundSettings>(`/inbound/${kind}/rotate`),
+    setOrigins: (allowed_origins: string[]) => patch<InboundSettings>("/inbound/form", { allowed_origins }),
+  },
+
   apiKeys: {
     list: () => get<{ data: ApiKey[] } | ApiKey[]>("/api-keys").then((r) => (Array.isArray(r) ? r : r.data)),
     create: (label: string) => post<unknown>("/api-keys", { label }).then((r) => one<ApiKey>(r)),
@@ -264,6 +271,7 @@ export const api = {
     remove: (id: string) => del(`/automations/${id}`),
     activate: (id: string) => post<unknown>(`/automations/${id}/activate`),
     pause: (id: string) => post<unknown>(`/automations/${id}/pause`),
+    eventNames: () => get<{ data: Array<{ name: string; count: number; last_at: string }> }>("/automations/event-names").then((r) => r.data),
   },
 
   push: {

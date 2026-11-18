@@ -1,7 +1,8 @@
 import type { AppConfig } from './config.js';
 import { all, get, now, run, type DatabaseSync } from './db.js';
 import { finalizeCampaigns, queueCampaign } from './services/campaigns.js';
-import { processDueRuns } from './services/automations.js';
+import { processDueRuns, processScheduledTriggers, takeWebhooks } from './services/automations.js';
+import { sendTeamNotifications, sendWebhooks } from './services/automationOutbox.js';
 import { processAbandonedCarts } from './services/carts.js';
 import { finalizePushCampaigns, queuePushCampaigns, sendPushBatch } from './services/push.js';
 import { processPushResends } from './services/pushGrowth.js';
@@ -68,7 +69,10 @@ export class SendingWorker {
         this.promoteScheduled();
         this.queueSendingCampaigns();
         processAbandonedCarts(this.db);
+        processScheduledTriggers(this.db);
         processDueRuns(this.db, this.config);
+        await sendWebhooks(takeWebhooks(), this.log);
+        await sendTeamNotifications(this.db, this.config, this.provider);
         const sent = await this.sendBatch();
         finalizeCampaigns(this.db);
         queuePushCampaigns(this.db);

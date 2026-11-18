@@ -25,6 +25,7 @@ import { templateRoutes, integrationRoutes, outboxRoutes, statsRoutes } from './
 import { trackingRoutes } from './routes/tracking.js';
 import { libraryRoutes, publicUploadRoutes } from './routes/library.js';
 import { pushAppRoutes, pushRoutes } from './routes/push.js';
+import { inboundRoutes, inboundSettingsRoutes } from './routes/inbound.js';
 
 export const API_PREFIX = '/api/v1';
 
@@ -69,7 +70,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const app = Fastify({
     logger: options.logger ? { level: process.env.LOG_LEVEL ?? 'info' } : false,
     bodyLimit: 25 * 1024 * 1024,
-    trustProxy: true,
+    // Hop count, not `true`: otherwise any client spoofs its IP through X-Forwarded-For.
+    trustProxy: (_address: string, hop: number) => hop < Number(process.env.TRUST_PROXY ?? 1),
     rewriteUrl: (req) => shopifyUrls.rewrite(req.url ?? '/'),
   });
   app.addHook('onRoute', (route) => shopifyUrls.track(route.url));
@@ -107,20 +109,27 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     done(null, Object.fromEntries(new URLSearchParams(raw)));
   });
 
-  await app.register(cors, {
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true);
-      const normalized = origin.replace(/\/+$/, '');
-      const allowed =
-        config.webUrls.includes(normalized) ||
-        (!config.isProduction && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(normalized));
-      cb(null, allowed);
-    },
+  const corsBase = {
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
     maxAge: 86400,
+  };
+  await app.register(cors, {
+    // Webhooks and the paste-in form are called from the merchant's own site: any origin, no cookies.
+    delegator: (req, cb) => {
+      if ((req.url ?? '').startsWith(`${API_PREFIX}/public/`)) return cb(null, { ...corsBase, origin: '*', credentials: false });
+      cb(null, { ...corsBase, origin: appOrigin, credentials: true });
+    },
   });
+  /** The app itself: only the configured web URLs (and localhost in development). */
+  function appOrigin(origin: string | undefined, cb: (err: Error | null, allow: boolean) => void) {
+    if (!origin) return cb(null, true);
+    const normalized = origin.replace(/\/+$/, '');
+    const allowed =
+      config.webUrls.includes(normalized) ||
+      (!config.isProduction && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(normalized));
+    cb(null, allowed);
+  }
 
   app.setErrorHandler((error: FastifyError | HttpError | ZodError | Error, request, reply) =>
     // Errors can surface outside the request's async context (body parsing): re-enter it.
@@ -152,6 +161,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // Public routes: tracking, health.
   await app.register(async (scope) => trackingRoutes(scope, deps));
   await app.register(async (scope) => publicUploadRoutes(scope));
+  // No-code sites: universal webhook + paste-in form (full /api/v1/public/... paths, any origin).
+  await app.register(async (scope) => inboundRoutes(scope, deps));
   // Bounces and complaints forwarded by our own MTA (self-hosted sending).
   await app.register(async (scope) => mtaRoutes(scope, deps));
 
@@ -178,6 +189,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         await sendingDomainRoutes(priv, deps);
         await accountDeletionRoutes(priv, deps);
         await pushRoutes(priv, deps);
+        await inboundSettingsRoutes(priv, deps);
       });
     },
     { prefix: API_PREFIX },

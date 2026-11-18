@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
   ArrowRight,
+  Blocks,
   CheckCircle2,
+  FormInput,
+  ShoppingBasket,
+  Webhook,
   Contact,
   FileSpreadsheet,
   Globe,
@@ -23,12 +27,17 @@ import { cx } from "../lib/format";
 import { Button, Card, Input, PageHeader } from "../components/ui/primitives";
 import { useToast } from "../components/ui/Toast";
 import { ApiGuide, AppGuide, FileGuide, ShopifyGuide, type ApiKind } from "../components/connect/ConnectGuides";
+import { FormGuide, NoCodeGuide, PluginGuide, type NoCodeTab } from "../components/connect/NoCodeGuides";
 
-type ToolId = "shopify" | "site" | "crm" | "pos" | "backoffice" | "app" | "file" | "other";
+type ToolId = "shopify" | "wordpress" | "prestashop" | "nocode" | "form" | "site" | "crm" | "pos" | "backoffice" | "app" | "file" | "other";
 
 const TOOLS: Array<{ id: ToolId; icon: LucideIcon; title: string; text: string; how: string; api?: ApiKind }> = [
   { id: "shopify", icon: ShoppingBag, title: "Shopify", text: t("Clients, commandes, expéditions et paniers abandonnés.", "Customers, orders, shipments and abandoned carts."), how: t("1 clic", "1 click") },
-  { id: "site", icon: Globe, title: t("Votre site web", "Your website"), text: t("Inscriptions, commandes et expéditions de votre site.", "Sign-ups, orders and shipments from your site."), how: "API · 5 min", api: "site" },
+  { id: "wordpress", icon: Blocks, title: "WordPress & WooCommerce", text: t("Comptes, paniers abandonnés, commandes, suivi et formulaires.", "Accounts, abandoned carts, orders, tracking and forms."), how: t("Extension · 2 min", "Plugin · 2 min") },
+  { id: "prestashop", icon: ShoppingBasket, title: "PrestaShop", text: t("Comptes, newsletter, paniers, commandes et suivi.", "Accounts, newsletter, carts, orders and tracking."), how: t("Module · 2 min", "Module · 2 min") },
+  { id: "nocode", icon: Webhook, title: "Framer, Webflow, Wix…", text: t("Formulaires et commandes, sans code ni Zapier.", "Forms and orders, no code, no Zapier."), how: t("Webhook · 2 min", "Webhook · 2 min") },
+  { id: "form", icon: FormInput, title: t("Formulaire à coller", "Paste-in form"), text: t("Un formulaire d'inscription pour n'importe quel site.", "A sign-up form for any site."), how: t("Copier-coller", "Copy & paste") },
+  { id: "site", icon: Globe, title: t("Site sur mesure", "Custom website"), text: t("Inscriptions, commandes, réservations : un seul appel API.", "Sign-ups, orders, bookings: a single API call."), how: "API · 5 min", api: "site" },
   { id: "crm", icon: Contact, title: t("Votre CRM", "Your CRM"), text: t("Fiches clients et étapes, envoyées comme tags.", "Customer records and stages, sent as tags."), how: "API · 5 min", api: "crm" },
   { id: "pos", icon: Store, title: t("Votre caisse", "Your POS"), text: t("Ventes en boutique quand le client laisse son email.", "In-store sales when the customer leaves their email."), how: "API · 5 min", api: "pos" },
   { id: "backoffice", icon: LayoutDashboard, title: t("Back-office / ERP", "Back office / ERP"), text: t("Commandes de tous vos canaux et leur suivi.", "Orders from all your channels, with tracking."), how: "API · 5 min", api: "backoffice" },
@@ -63,6 +72,7 @@ export function IntegrationsPage() {
   const tool = TOOLS.find((it) => it.id === selected);
 
   const [done, setDone] = useState<Partial<Record<ToolId, string>>>({});
+  const [nocodeTab, setNocodeTab] = useState<NoCodeTab>("framer");
   const status = useAsync(async () => {
     const [shopify, keys, push, contacts] = await Promise.all([
       api.integrations.shopify.status().catch(() => null),
@@ -172,6 +182,20 @@ export function IntegrationsPage() {
             </button>
             <div className="max-w-3xl">
               {tool.id === "shopify" && <ShopifyGuide done={done.shopify} onDone={mark("shopify")} />}
+              {(tool.id === "wordpress" || tool.id === "prestashop") && (
+                <PluginGuide
+                  key={tool.id}
+                  platform={tool.id}
+                  done={done[tool.id]}
+                  onDone={mark(tool.id)}
+                  onNoPlugin={() => {
+                    setNocodeTab("woocommerce");
+                    open("nocode");
+                  }}
+                />
+              )}
+              {tool.id === "nocode" && <NoCodeGuide key={nocodeTab} initialTab={nocodeTab} done={done.nocode} onDone={mark("nocode")} onUseForm={() => open("form")} />}
+              {tool.id === "form" && <FormGuide done={done.form} onDone={mark("form")} />}
               {tool.api && <ApiGuide key={tool.id} kind={tool.api} done={done[tool.id]} onDone={mark(tool.id)} onUseFile={() => open("file")} onKeyCreated={() => void status.reload()} />}
               {tool.id === "app" && <AppGuide done={done.app} onDone={mark("app")} />}
               {tool.id === "file" && <FileGuide done={done.file} onDone={mark("file")} />}

@@ -24,6 +24,18 @@ const patchSchema = createSchema.partial();
 type Params = { Params: { id: string } };
 
 export async function automationRoutes(app: FastifyInstance, { db }: Deps) {
+  /** Event names the site already sent (suggestions for the « Événement » trigger). */
+  app.get('/automations/event-names', async (request) => {
+    const rows = all<{ name: string; n: number; last_at: string }>(
+      db,
+      `SELECT json_extract(data, '$.event') AS name, COUNT(*) AS n, MAX(created_at) AS last_at
+         FROM events WHERE account_id = ? AND type = 'event' AND json_extract(data, '$.event') IS NOT NULL
+        GROUP BY name ORDER BY last_at DESC LIMIT 50`,
+      request.accountId,
+    );
+    return { data: rows.map((r) => ({ name: r.name, count: Number(r.n), last_at: r.last_at })) };
+  });
+
   const load = (accountId: string, id: string) => {
     const row = get(db, 'SELECT * FROM automations WHERE id = ? AND account_id = ?', id, accountId);
     if (!row) throw notFound(t('Automatisation introuvable', 'Automation not found'));

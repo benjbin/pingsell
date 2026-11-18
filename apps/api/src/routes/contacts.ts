@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { all, parseJson, run, scalar, transaction, type SQLInputValue } from '../db.js';
 import type { Deps } from '../deps.js';
 import { csvToContacts } from '../lib/csv.js';
-import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString, zmsg } from '../lib/http.js';
-import { cancelRunsForContact, fireTrigger } from '../services/automations.js';
+import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString } from '../lib/http.js';
+import { cancelRunsForContact } from '../services/automations.js';
 import {
   CONTACT_STATUSES,
   findContact,
@@ -21,19 +21,8 @@ import {
 import { compileRules, loadSegmentRules } from '../services/segments.js';
 import { serializeMessage } from '../services/messages.js';
 import { t } from '../i18n.js';
-import { closeCartsForEmail, upsertCart } from '../services/carts.js';
-
-const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
-
-const contactInputSchema = z.object({
-  email: z.string().trim().min(1, zmsg("L'email est requis", 'Email is required')).max(254),
-  first_name: optionalText(100),
-  last_name: optionalText(100),
-  phone: optionalText(40),
-  tags: z.array(z.string().max(64)).max(100).optional(),
-  attributes: z.record(z.string(), z.unknown()).optional(),
-  status: z.enum(CONTACT_STATUSES).optional(),
-});
+import { upsertCart } from '../services/carts.js';
+import { cartSchema, contactInputSchema, createIngest, orderSchema } from '../services/ingest.js';
 
 const patchSchema = contactInputSchema.partial();
 
@@ -50,57 +39,10 @@ const importSchema = z.union([
   z.object({ csv: z.string().min(1).max(20_000_000), trigger_automations: z.boolean().optional() }),
 ]);
 
-/** Orders from any shop, POS or back-office (Shopify sends its own through webhooks). */
-const money = z.preprocess(
-  (v) => (typeof v === 'string' && v.trim() !== '' ? Number(v.trim().replace(',', '.')) : v),
-  z.number().nonnegative().max(1_000_000_000, zmsg('Le total est trop élevé', 'Total is too high')),
-);
-
-/** « Panier » : sent when the customer leaves their email at checkout; Pingsell relaunches it if no order follows. */
-const cartSchema = z.object({
-  email: z.string().trim().min(1, zmsg("L'email est requis", 'Email is required')).max(254),
-  first_name: optionalText(100),
-  last_name: optionalText(100),
-  cart_id: z.string().trim().min(1, zmsg('cart_id est requis', 'cart_id is required')).max(100),
-  total: money.optional(),
-  currency: z.string().trim().max(8).optional(),
-  checkout_url: z.string().trim().url(zmsg('checkout_url doit être une adresse web complète', 'checkout_url must be a full web address')).max(2000).optional(),
-  items: z.array(z.object({ title: z.string().trim().min(1).max(200), quantity: z.number().int().positive().max(10_000).optional(), price: money.optional() })).max(50).optional(),
-});
-
-const orderSchema = z.object({
-  email: z.string().trim().min(1, zmsg("L'email est requis", 'Email is required')).max(254),
-  first_name: optionalText(100),
-  last_name: optionalText(100),
-  phone: optionalText(40),
-  order_id: z.string().trim().min(1, zmsg('order_id est requis', 'order_id is required')).max(100),
-  /** `created` = order placed (« Commande passée »), `fulfilled` = shipped (« Commande expédiée »). */
-  status: z.enum(['created', 'fulfilled']).default('created'),
-  /** Accepts 59.9, "59.90" or "59,90" (POS and PHP back-ends often send strings). */
-  total: z
-    .preprocess((v) => (typeof v === 'string' && v.trim() !== '' ? Number(v.trim().replace(',', '.')) : v), z.number().nonnegative().max(1_000_000_000, zmsg('Le total est trop élevé', 'Total is too high')))
-    .optional(),
-  currency: z.string().trim().max(8).optional(),
-  tracking_number: z.string().trim().max(100).optional(),
-  tracking_url: z.string().trim().max(2000).optional(),
-  carrier: z.string().trim().max(100).optional(),
-});
-
 type Params = { Params: { id: string } };
 
 export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
-  /** Records `tag_added` events + fires automations for each newly added tag. */
-  const onTagsAdded = (accountId: string, contactId: string, tags: string[]) => {
-    for (const tag of tags) {
-      recordEvent(db, accountId, contactId, 'tag_added', { tag });
-      fireTrigger(db, accountId, contactId, 'tag_added', { tag });
-    }
-  };
-
-  const onCreated = (accountId: string, contact: Contact, triggers = true) => {
-    recordEvent(db, accountId, contact.id, 'contact_created', { source: contact.source });
-    if (triggers) fireTrigger(db, accountId, contact.id, 'contact_created', { source: contact.source });
-  };
+  const { saveContact, placeOrder, ingestEvent, onCreated, onTagsAdded } = createIngest(db);
 
   app.get('/contacts', async (request) => {
     const p = pagination(request.query);
@@ -151,12 +93,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
 
   app.post('/contacts', async (request, reply) => {
     const body = parse(contactInputSchema, request.body);
-    const result = transaction(db, () => {
-      const r = upsertContact(db, request.accountId, { ...body, source: 'api' });
-      if (r.created) onCreated(request.accountId, r.contact);
-      onTagsAdded(request.accountId, r.contact.id, r.created ? r.contact.tags : r.addedTags);
-      return r;
-    });
+    const result = saveContact(request.accountId, body);
     return reply.code(result.created ? 201 : 200).send({ ...result.contact, created: result.created });
   });
 
@@ -169,61 +106,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
 
   app.post('/orders', async (request, reply) => {
     const body = parse(orderSchema, request.body);
-    const accountId = request.accountId;
-    const result = transaction(db, () => {
-      const existing = findContactByEmail(db, accountId, normalizeEmail(body.email));
-      const identity = { email: body.email, first_name: body.first_name, last_name: body.last_name, phone: body.phone, source: 'api' as const };
-      if (body.status === 'fulfilled') {
-        // Like Shopify: a shipment never creates (and opts in) a marketing contact.
-        if (!existing) return { contact: null, duplicate: false, skipped: true };
-        const tracking = body.tracking_number ?? null;
-        const already =
-          scalar(
-            db,
-            `SELECT COUNT(*) FROM events WHERE account_id = ? AND contact_id = ? AND type = 'order_fulfilled'
-               AND json_extract(data, '$.order_id') = ?
-               AND (? IS NULL OR IFNULL(json_extract(data, '$.tracking_number'), '') IN ('', ?))`,
-            accountId,
-            existing.id,
-            body.order_id,
-            tracking,
-            tracking,
-          ) > 0;
-        if (already) return { contact: existing, duplicate: true, skipped: false };
-        const r = { contact: existing };
-        const data = {
-          order_id: body.order_id,
-          tracking_number: body.tracking_number ?? null,
-          tracking_url: body.tracking_url ?? null,
-          carrier: body.carrier ?? null,
-          source: 'api',
-        };
-        recordEvent(db, accountId, r.contact.id, 'order_fulfilled', data);
-        fireTrigger(db, accountId, r.contact.id, 'order_fulfilled', data);
-        return { contact: r.contact, duplicate: false, skipped: false };
-      }
-      const duplicate =
-        scalar(db, "SELECT COUNT(*) FROM events WHERE account_id = ? AND type = 'order' AND json_extract(data, '$.order_id') = ?", accountId, body.order_id) > 0;
-      const total = body.total ?? 0;
-      const r = upsertContact(db, accountId, {
-        ...identity,
-        ...(duplicate
-          ? {}
-          : {
-              total_spent: Math.round(((existing?.total_spent ?? 0) + total) * 100) / 100,
-              orders_count: (existing?.orders_count ?? 0) + 1,
-              last_order_at: new Date().toISOString(),
-            }),
-      });
-      if (r.created) onCreated(accountId, r.contact);
-      if (!duplicate) {
-        const data = { order_id: body.order_id, total, currency: body.currency ?? null, source: 'api' };
-        recordEvent(db, accountId, r.contact.id, 'order', data);
-        closeCartsForEmail(db, accountId, r.contact.email);
-        fireTrigger(db, accountId, r.contact.id, 'order_created', data);
-      }
-      return { contact: r.contact, duplicate, skipped: false };
-    });
+    const result = placeOrder(request.accountId, body);
     if (result.skipped) {
       return reply.code(200).send({
         ok: true,
@@ -235,6 +118,12 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       });
     }
     return reply.code(result.duplicate ? 200 : 201).send({ ok: true, contact_id: result.contact!.id, duplicate: result.duplicate });
+  });
+
+  /** The single call a website needs: see services/ingest.ts. */
+  app.post('/events', async (request, reply) => {
+    const r = ingestEvent(request.accountId, (request.body ?? {}) as Record<string, unknown>);
+    return reply.code(r.code).send(r.body);
   });
 
   app.get<Params>('/contacts/:id', async (request) => {

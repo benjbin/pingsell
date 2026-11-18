@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Ban,
+  CalendarClock,
   MailOpen,
   MousePointerClick,
   ShoppingBag,
@@ -20,7 +21,7 @@ import { Avatar, Badge, Button, ErrorState, Select, Skeleton } from "../../compo
 import { ConfirmModal, Drawer } from "../../components/ui/Overlay";
 import { TagInput } from "../../components/ui/TagInput";
 import { useToast } from "../../components/ui/Toast";
-import { t } from "../../lib/i18n";
+import { t, LOCALE } from "../../lib/i18n";
 
 const EVENT_ICONS: Record<EventType, { icon: LucideIcon; color: string }> = {
   open: { icon: MailOpen, color: "bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300" },
@@ -31,11 +32,16 @@ const EVENT_ICONS: Record<EventType, { icon: LucideIcon; color: string }> = {
   cart_abandoned: { icon: ShoppingCart, color: "bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-300" },
   tag_added: { icon: Tag, color: "bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-900/40 dark:text-fuchsia-300" },
   contact_created: { icon: UserPlus, color: "bg-brand-100 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300" },
+  event: { icon: CalendarClock, color: "bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300" },
 };
 
 function eventDetail(e: ContactEvent): string | null {
   const d = e.data ?? {};
   if (e.type === "tag_added" && typeof d.tag === "string") return `#${d.tag}`;
+  if (e.type === "event" && typeof d.event === "string") {
+    const when = typeof d.date === "string" && !Number.isNaN(Date.parse(d.date)) ? ` · ${new Date(d.date).toLocaleString(LOCALE, { dateStyle: "medium", timeStyle: "short" })}` : "";
+    return `${d.event}${d.status === "cancelled" ? t(" (annulé)", " (cancelled)") : ""}${when}`;
+  }
   if (e.type === "click" && typeof d.url === "string") return d.url;
   if (e.type === "order") {
     const total = typeof d.total === "number" ? d.total : typeof d.total_price === "string" ? Number(d.total_price) : null;

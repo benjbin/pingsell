@@ -39,6 +39,8 @@ export interface UpsertContactInput {
   orders_count?: number;
   last_order_at?: string | null;
   status?: string;
+  /** Untrusted source (public form/webhook): only fill identity fields that are still empty. */
+  fill_only?: boolean;
 }
 
 const EMAIL_RE = /^[^\s@<>()[\],;:"]+@[^\s@<>()[\],;:"]+\.[^\s@<>()[\],;:"]{2,}$/;
@@ -169,9 +171,15 @@ export function upsertContact(
 
   const addedTags = tags.filter((t) => !existing.tags.includes(t));
   const updates: Record<string, SQLInputValue> = {};
-  if (input.first_name !== undefined) updates.first_name = clean(input.first_name);
-  if (input.last_name !== undefined) updates.last_name = clean(input.last_name);
-  if (input.phone !== undefined) updates.phone = clean(input.phone);
+  const fill = (key: 'first_name' | 'last_name' | 'phone') => {
+    if (input[key] === undefined) return;
+    const v = clean(input[key]);
+    if (input.fill_only && (existing[key] || v === null)) return;
+    updates[key] = v;
+  };
+  fill('first_name');
+  fill('last_name');
+  fill('phone');
   if (addedTags.length) updates.tags = JSON.stringify([...existing.tags, ...addedTags]);
   if (input.attributes) updates.attributes = JSON.stringify({ ...existing.attributes, ...input.attributes });
   // A spam complaint is final: an import or API upsert never re-subscribes it.

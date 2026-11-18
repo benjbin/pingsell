@@ -8,12 +8,19 @@ import { formatNumber } from "../../lib/format";
 import type { Automation } from "../../lib/types";
 import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton } from "../../components/ui/primitives";
 import { ConfirmModal } from "../../components/ui/Overlay";
+import { RECIPES } from "./recipes";
 import { useToast } from "../../components/ui/Toast";
 import { t } from "../../lib/i18n";
+
+function flatSteps(steps: Automation["steps"]): Automation["steps"] {
+  return steps.flatMap((st) => [st, ...(st.type === "branch" ? [...flatSteps(st.yes), ...flatSteps(st.no)] : st.type === "split" ? [...flatSteps(st.a), ...flatSteps(st.b)] : [])]);
+}
 
 export function triggerLabel(a: Pick<Automation, "trigger" | "trigger_config">): string {
   const base = TRIGGERS[a.trigger]?.label ?? a.trigger;
   const tag = a.trigger_config && typeof a.trigger_config.tag === "string" ? a.trigger_config.tag : null;
+  const event = a.trigger_config && typeof a.trigger_config.event === "string" ? a.trigger_config.event : null;
+  if (a.trigger === "event" && event) return t(`Événement : ${event}`, `Event: ${event}`);
   return a.trigger === "tag_added" && tag ? t(`${base} : #${tag}`, `${base}: #${tag}`) : base;
 }
 
@@ -91,9 +98,10 @@ export function AutomationsPage() {
       ) : (
         <div className="space-y-3">
           {automations.data!.map((a) => {
-            const emails = a.steps.filter((s) => s.type === "email").length;
-            const waits = a.steps.filter((s) => s.type === "wait").length;
-            const pushes = a.steps.filter((s) => s.type === "push").length;
+            const flat = flatSteps(a.steps);
+            const emails = flat.filter((s) => s.type === "email").length;
+            const waits = flat.filter((s) => s.type === "wait" || s.type === "wait_until" || s.type === "send_window").length;
+            const pushes = flat.filter((s) => s.type === "push").length;
             return (
               <Card key={a.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                 <button onClick={() => navigate(`/automatisations/${a.id}`)} className="flex min-w-0 flex-1 items-start gap-4 text-left">
@@ -168,6 +176,38 @@ export function AutomationsPage() {
           })}
         </div>
       )}
+
+      <section className="mt-10">
+        <div className="mb-4">
+          <h2 className="font-display text-xl font-extrabold text-slate-900 dark:text-white">{t("Partir d'un modèle", "Start from a template")}</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t("Des parcours prêts à l'emploi : vous ajustez les textes, vous activez.", "Ready-made journeys: adjust the copy, turn them on.")}</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {RECIPES.map((rc) => {
+            const Icon = rc.icon;
+            return (
+              <button
+                key={rc.id}
+                type="button"
+                onClick={() => navigate(`/automatisations/nouvelle?modele=${rc.id}`)}
+                className="group flex flex-col gap-2 rounded-2xl bg-white p-4 text-left ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:ring-brand-400 dark:bg-slate-900 dark:ring-slate-800"
+              >
+                <span className="flex items-center gap-2.5">
+                  <span className="flex size-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
+                    <Icon className="size-4.5" />
+                  </span>
+                  <span className="font-display text-[15px] font-bold text-slate-900 dark:text-white">{rc.name}</span>
+                </span>
+                <span className="text-sm text-slate-600 dark:text-slate-400">{rc.pitch}</span>
+                <span className="mt-auto flex flex-wrap gap-1.5 pt-1">
+                  <Badge tone="slate">{TRIGGERS[rc.trigger].label}</Badge>
+                  {rc.tags.map((tg) => <Badge key={tg} tone="blue">{tg}</Badge>)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <ConfirmModal
         open={!!toDelete}

@@ -148,7 +148,8 @@ export type EventType =
   | "order"
   | "cart_abandoned"
   | "tag_added"
-  | "contact_created";
+  | "contact_created"
+  | "event";
 
 export interface ContactEvent {
   id: string;
@@ -314,15 +315,39 @@ export type AutomationTrigger =
   | "cart_abandoned"
   | "order_fulfilled"
   | "app_signed_in"
-  | "push_subscribed";
+  | "push_subscribed"
+  | "event"
+  | "email_clicked"
+  | "date_anniversary"
+  | "inactive"
+  | "segment_entered";
 
-export type ExitCondition = "push_opened" | "email_opened" | "ordered";
+export type ExitCondition = "push_opened" | "email_opened" | "email_clicked" | "ordered";
+
+export type BranchCondition =
+  | { type: "email_opened" }
+  | { type: "email_clicked" }
+  | { type: "push_opened" }
+  | { type: "ordered" }
+  | { type: "has_tag"; tag: string }
+  | { type: "in_segment"; segment_id: string }
+  | { type: "has_app" }
+  | { type: "total_spent"; min: number }
+  | { type: "orders_count"; min: number }
+  | { type: "event_field"; field: string; value: string };
 
 export type AutomationStep =
   | { type: "wait"; hours: number }
+  | { type: "wait_until"; hours: number; direction: "before" | "after" }
   | { type: "email"; subject: string; html: string }
   | { type: "push"; title: string; body: string; url?: string | null; image_url?: string | null; in_app?: boolean }
-  | { type: "exit_if"; condition: ExitCondition };
+  | { type: "exit_if"; condition: ExitCondition }
+  | { type: "tag"; action: "add" | "remove"; tag: string }
+  | { type: "webhook"; url: string }
+  | { type: "notify"; to?: string; subject: string; message?: string }
+  | { type: "send_window"; days: number[]; start_hour: number; end_hour: number }
+  | { type: "branch"; condition: BranchCondition; yes: AutomationStep[]; no: AutomationStep[] }
+  | { type: "split"; percent: number; a: AutomationStep[]; b: AutomationStep[] };
 
 export interface Automation {
   id: string;
@@ -343,6 +368,7 @@ export interface AutomationInput {
   trigger: AutomationTrigger;
   trigger_config?: Record<string, unknown>;
   steps: AutomationStep[];
+  status?: "active" | "paused";
 }
 
 // --- Stats ----------------------------------------------------------------
@@ -587,4 +613,16 @@ export interface Analytics {
   push_campaigns: Array<{ id: string; name: string; title: string; sent_at: string | null; sent: number; open_rate: number; revenue: number; orders: number }>;
   top_links: Array<{ url: string; clicks: number; contacts: number }>;
   sources: Array<{ source: string; contacts: number }>;
+}
+
+/** No-code sites: universal webhook URL + paste-in form key (Intégrations). */
+export interface InboundLastCall {
+  uses: number;
+  last_used_at: string | null;
+  last_source: string | null;
+  last_result: { received: number; ignored?: boolean; reason?: string; results?: Array<{ event: string; ok: boolean; error?: string; skipped?: boolean; duplicate?: boolean }> } | null;
+}
+export interface InboundSettings {
+  webhook: InboundLastCall & { url: string };
+  form: InboundLastCall & { key: string; script_url: string; action_url: string; allowed_origins: string[] };
 }
