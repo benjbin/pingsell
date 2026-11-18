@@ -15,7 +15,8 @@ API ──(port 2525, interne)──▶ mta (Postfix + DKIM) ──(port 25)─�
   - **adresse inexistante** (rebond définitif) : le message passe en `bounced` et le contact aussi. Il ne recevra plus rien.
   - **plainte pour spam** : le contact passe en `complained`. C'est définitif.
   - **refus temporaire, ou blocage anti-spam (5.7.x)** : le message est marqué en échec, mais le contact n'est pas touché, car ce n'est pas son adresse qui pose problème.
-- **Expéditeur :** un email ne peut être signé que pour notre domaine. Si une boutique a choisi l'expéditeur `hello@sa-boutique.fr`, l'email part de `bonjour@pingsell.neokrome.tech` avec le nom de la boutique, et `hello@sa-boutique.fr` est mis en adresse de réponse (Reply-To). Les réponses arrivent donc bien à la boutique.
+- **Expéditeur :** sans domaine vérifié (voir le point suivant), un email ne peut être signé que pour notre domaine. Si une boutique a choisi l'expéditeur `hello@sa-boutique.fr`, l'email part de `bonjour@pingsell.neokrome.tech` avec le nom de la boutique, et `hello@sa-boutique.fr` est mis en adresse de réponse (Reply-To). Les réponses arrivent donc bien à la boutique.
+- **Domaine de la boutique :** dans **Paramètres → Domaine d'envoi**, une boutique peut ajouter son propre domaine. Pingsell lui génère une clé DKIM (sélecteur `pingsell`) et affiche l'enregistrement TXT à publier chez son hébergeur. Une fois l'enregistrement trouvé (bouton « Vérifier »), ses emails partent vraiment de `bonjour@sa-boutique.fr`, signés par l'API avec sa clé : DMARC passe grâce à l'alignement DKIM. Les rebonds restent sur notre domaine, donc la boutique n'a pas à toucher à son SPF. Un enregistrement DMARC sur son domaine est recommandé, car Gmail et Yahoo l'exigent pour les envois en nombre.
 - **Désabonnement en un clic** (`List-Unsubscribe`) et en-tête `Feedback-ID` : ce sont les deux exigences de Gmail et Yahoo pour les envois en masse.
 
 ## 1. Côté serveur (OVH, IP 162.19.72.27)

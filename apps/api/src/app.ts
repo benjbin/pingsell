@@ -14,6 +14,7 @@ import { recordEvent, upsertContact } from './services/contacts.js';
 import type { EmailProvider } from './services/mailer.js';
 import { accountRoutes, authRoutes } from './routes/auth.js';
 import { accountDeletionRoutes, invitationRoutes, teamRoutes } from './routes/team.js';
+import { sendingDomainRoutes } from './routes/sendingDomain.js';
 import { apiKeyRoutes } from './routes/apiKeys.js';
 import { mtaRoutes } from './routes/mta.js';
 import { contactRoutes } from './routes/contacts.js';
@@ -174,6 +175,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         await integrationRoutes(priv, deps);
         await libraryRoutes(priv, deps);
         await teamRoutes(priv, deps);
+        await sendingDomainRoutes(priv, deps);
         await accountDeletionRoutes(priv, deps);
         await pushRoutes(priv, deps);
       });

@@ -1,5 +1,7 @@
 import { createTransport, type Transporter } from 'nodemailer';
 import type { AppConfig } from '../config.js';
+import type { DatabaseSync } from '../db.js';
+import { dkimKeyFor, domainOf, type DkimKey } from './sendingDomains.js';
 
 export interface OutgoingEmail {
   messageId: string;
@@ -91,20 +93,25 @@ export function bounceAddress(mailDomain: string, messageId: string): string {
   return `bounces+${messageId.replace(/[^\w-]/g, '')}@${mailDomain}`;
 }
 
-const domainOf = (email: string) => email.slice(email.lastIndexOf('@') + 1).toLowerCase();
+/** Finds the merchant's DKIM key for a sender address (null: not on a verified domain of theirs). */
+export type DkimLookup = (accountId: string, fromEmail: string) => DkimKey | null;
 
 /**
  * Self-hosted provider: hands messages over SMTP to our own MTA (apps/mta), which signs them
  * with DKIM and delivers them directly to the recipients' mail servers. No third party.
  *
- * DMARC alignment: we can only sign for our own domain, so a sender address on another domain
- * (e.g. a merchant's `hello@shop.com`) is moved to Reply-To and the From becomes our address.
+ * DMARC alignment: the MTA signs for our own domain. A sender on a merchant's domain they have
+ * verified (Settings → Sending domain) is signed here with their own key, so `From: hello@shop.com`
+ * passes DMARC. Any other address is moved to Reply-To and the From becomes our address.
  */
 export class SmtpProvider implements EmailProvider {
   readonly name = 'smtp';
   private readonly transport: Transporter;
 
-  constructor(private readonly config: AppConfig) {
+  constructor(
+    private readonly config: AppConfig,
+    private readonly dkimFor: DkimLookup = () => null,
+  ) {
     this.transport = createTransport({
       host: config.smtp.host,
       port: config.smtp.port,
@@ -122,7 +129,8 @@ export class SmtpProvider implements EmailProvider {
 
   async send(email: OutgoingEmail): Promise<SendResult> {
     const domain = this.config.smtp.mailDomain;
-    const ownDomain = domainOf(email.fromEmail) === domain;
+    const merchantKey = email.accountId ? this.dkimFor(email.accountId, email.fromEmail) : null;
+    const ownDomain = domainOf(email.fromEmail) === domain || !!merchantKey;
     const fromEmail = ownDomain ? email.fromEmail : this.config.defaultFromEmail;
     const headers: Record<string, string> = { 'X-Pingsell-Message': email.messageId };
     if (email.unsubscribeUrl) {
@@ -143,14 +151,15 @@ export class SmtpProvider implements EmailProvider {
       text: email.text,
       headers,
       envelope: { from: bounceAddress(domain, email.messageId), to: email.to },
+      ...(merchantKey ? { dkim: merchantKey } : {}),
     });
     // The MTA accepted it; final delivery (or a bounce) is reported back through /webhooks/mta.
     return { providerId: info.messageId ?? `smtp_${email.messageId}` };
   }
 }
 
-export function createProvider(config: AppConfig): EmailProvider {
-  if (config.emailProvider === 'smtp') return new SmtpProvider(config);
+export function createProvider(config: AppConfig, db?: DatabaseSync): EmailProvider {
+  if (config.emailProvider === 'smtp') return new SmtpProvider(config, db ? (accountId, from) => dkimKeyFor(db, accountId, from) : undefined);
   if (config.emailProvider === 'ses') return new SesProvider(config.awsRegion);
   return new LogProvider();
 }

@@ -3,6 +3,7 @@ import { LANG, t } from "./i18n";
 import type {
   Analytics,
   ApiKey,
+  SendingDomainResponse,
   Asset,
   AuthResponse,
   Automation,
@@ -200,6 +201,14 @@ export const api = {
   invitations: {
     get: (token: string) => get<InvitationInfo>(`/invitations/${encodeURIComponent(token)}`),
     accept: (token: string, input: { name: string; password: string }) => post<AuthResponse>(`/invitations/${encodeURIComponent(token)}/accept`, input),
+  },
+
+  sendingDomain: {
+    get: () => get<SendingDomainResponse>("/sending-domain"),
+    create: (domain: string) => post<SendingDomainResponse>("/sending-domain", { domain }),
+    verify: () => post<SendingDomainResponse>("/sending-domain/verify"),
+    setFrom: (from_email: string | null) => put<SendingDomainResponse>("/sending-domain/from", { from_email }),
+    remove: () => del("/sending-domain"),
   },
 
   apiKeys: {

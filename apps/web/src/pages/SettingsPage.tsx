@@ -9,6 +9,7 @@ import { Button, Card, CardHeader, EmptyState, ErrorState, Field, Input, Skeleto
 import { ConfirmModal, Modal } from "../components/ui/Overlay";
 import { useToast } from "../components/ui/Toast";
 import { CopyButton } from "../components/CopyButton";
+import { SendingDomainCard } from "../components/SendingDomainCard";
 import { t } from "../lib/i18n";
 
 function maskKey(k: ApiKey): string {
@@ -63,7 +64,7 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title={t("Paramètres", "Settings")} description={t("Votre compte et vos clés API. Votre profil et l'équipe sont dans « Profil & équipe ».", "Your account and API keys. Your profile and team live under “Profile & team”.")} />
+      <PageHeader title={t("Paramètres", "Settings")} description={t("Votre compte, votre domaine d'envoi et vos clés API. Votre profil et l'équipe sont dans « Profil & équipe ».", "Your account, sending domain and API keys. Your profile and team live under “Profile & team”.")} />
 
       <div className="space-y-6">
         <Card>
@@ -82,6 +83,8 @@ export function SettingsPage() {
             ))}
           </dl>
         </Card>
+
+        <SendingDomainCard canManage={canManage} />
 
         {!canManage ? (
           <Card>

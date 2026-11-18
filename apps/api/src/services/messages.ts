@@ -2,16 +2,17 @@ import type { AppConfig } from '../config.js';
 import { get, newId, now, run, type DatabaseSync, type Row } from '../db.js';
 import { renderEmail, type MergeContact, type RenderedEmail } from './render.js';
 import { withAccountLang } from '../i18n.js';
+import { accountFromEmail } from './sendingDomains.js';
 
 export interface Sender {
   name: string;
   email: string;
 }
 
-/** Default sender for an account: its name + the platform default address. */
+/** Default sender for an account: its name + its own verified address, else the platform default. */
 export function accountSender(db: DatabaseSync, config: AppConfig, accountId: string): Sender {
   const row = get<{ name: string }>(db, 'SELECT name FROM accounts WHERE id = ?', accountId);
-  return { name: row?.name ?? 'Pingsell', email: config.defaultFromEmail };
+  return { name: row?.name ?? 'Pingsell', email: accountFromEmail(db, config, accountId) };
 }
 
 export interface CreateMessageInput {

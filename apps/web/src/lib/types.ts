@@ -69,6 +69,32 @@ export interface Paginated<T> {
   limit: number;
 }
 
+export interface DnsRecord {
+  type: "TXT";
+  host: string;
+  value: string;
+  required: boolean;
+  ok: boolean;
+}
+
+export interface SendingDomain {
+  id: string;
+  domain: string;
+  status: "pending" | "verified";
+  from_email: string | null;
+  last_error: "dkim_missing" | "dkim_mismatch" | "dns_error" | null;
+  last_checked_at: string | null;
+  verified_at: string | null;
+  created_at: string;
+  records: DnsRecord[];
+}
+
+export interface SendingDomainResponse {
+  domain: SendingDomain | null;
+  default_from_email?: string;
+  from_email: string;
+}
+
 export interface ApiKey {
   id: string;
   label: string;

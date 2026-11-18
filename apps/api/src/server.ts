@@ -6,7 +6,7 @@ import { SendingWorker } from './worker.js';
 
 async function main() {
   const db = openDatabase(config.databasePath);
-  const provider = createProvider(config);
+  const provider = createProvider(config, db);
   const worker = new SendingWorker(db, config, provider);
   const app = await buildApp({ db, config, provider, kickWorker: () => worker.kick(), logger: true });
 

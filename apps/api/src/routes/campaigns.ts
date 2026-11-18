@@ -185,6 +185,8 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
         html: rendered.html,
         text: rendered.text,
         unsubscribeUrl: rendered.unsubscribeUrl,
+        accountId: request.accountId,
+        campaignId: campaign.id,
       });
       markSent(db, id, result.providerId);
     } catch (err) {
