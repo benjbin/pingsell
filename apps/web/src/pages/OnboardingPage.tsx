@@ -23,6 +23,7 @@ import { useToast } from "../components/ui/Toast";
 import { ApiGuide, AppGuide, FileGuide, ShopifyGuide } from "../components/connect/ConnectGuides";
 import { PingsellLogo } from "../components/brand/PingsellLogo";
 import { DEFAULT_EMAIL_HTML } from "./campaigns/defaultTemplate";
+import { BrandLogoStep, brandEmailHeader } from "../components/BrandLogoStep";
 import { t } from "../lib/i18n";
 
 /* -------------------------------------------------------------------------- */
@@ -42,7 +43,7 @@ const STORE_KEY = "missive_onboarding";
 
 interface Saved {
   selected: SourceId[];
-  step: "choose" | "connect" | "scenario" | "done";
+  step: "brand" | "choose" | "connect" | "scenario" | "done";
   index: number;
 }
 
@@ -67,14 +68,15 @@ function save(s: Saved) {
 /* Page                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** First screen after sign-up: pick what to connect, connect it, start a first scenario. */
+/** First screen after sign-up: logo, pick what to connect, connect it, start a first scenario. */
 export function OnboardingPage() {
   const { account } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const saved = loadSaved();
   const [selected, setSelected] = useState<SourceId[]>(saved?.selected ?? []);
-  const [step, setStep] = useState<Saved["step"]>(saved?.step ?? "choose");
+  const [step, setStep] = useState<Saved["step"]>(saved?.step ?? "brand");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [index, setIndex] = useState(saved?.index ?? 0);
   const [done, setDone] = useState<Partial<Record<SourceId, string>>>({});
 
@@ -97,7 +99,7 @@ export function OnboardingPage() {
     navigate("/", { replace: true });
   }
 
-  const stepNo = step === "choose" ? 1 : step === "connect" ? 2 : 3;
+  const stepNo = step === "brand" ? 1 : step === "choose" ? 2 : step === "connect" ? 3 : 4;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -105,7 +107,7 @@ export function OnboardingPage() {
         <PingsellLogo className="h-8 w-auto" />
         <div className="flex items-center gap-4">
           <ol className="hidden items-center gap-2 text-xs font-semibold sm:flex" aria-label={t("Étapes", "Steps")}>
-            {[t("Vos outils", "Your tools"), t("Branchement", "Connect"), t("Premier scénario", "First workflow")].map((label, i) => (
+            {[t("Votre logo", "Your logo"), t("Vos outils", "Your tools"), t("Branchement", "Connect"), t("Premier scénario", "First workflow")].map((label, i) => (
               <li key={label} className="flex items-center gap-2">
                 <span
                   className={cx(
@@ -116,7 +118,7 @@ export function OnboardingPage() {
                   {i + 1 < stepNo ? <Check className="size-3.5" /> : i + 1}
                 </span>
                 <span className={i + 1 === stepNo ? "text-slate-900 dark:text-white" : "text-slate-400"}>{label}</span>
-                {i < 2 && <span className="h-px w-6 bg-slate-300 dark:bg-slate-700" />}
+                {i < 3 && <span className="h-px w-6 bg-slate-300 dark:bg-slate-700" />}
               </li>
             ))}
           </ol>
@@ -127,9 +129,11 @@ export function OnboardingPage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
+        {step === "brand" && <BrandLogoStep brand={account?.name ?? ""} onLogo={setLogoUrl} onNext={() => setStep("choose")} />}
+
         {step === "choose" && (
           <section className="animate-rise">
-            <p className="eyebrow">{t("Bienvenue", "Welcome")}{account?.name ? `, ${account.name}` : ""}</p>
+            <p className="eyebrow">{t("Étape 2", "Step 2")}</p>
             <h1 className="display mt-4 text-[40px] leading-[0.92] text-slate-900 sm:text-[60px] dark:text-white">
               {t(
                 <>
@@ -244,7 +248,7 @@ export function OnboardingPage() {
           </section>
         )}
 
-        {step === "scenario" && <ScenarioStep selected={selected} brand={account?.name ?? ""} onBack={() => setStep(selected.length ? "connect" : "choose")} onFinish={finish} />}
+        {step === "scenario" && <ScenarioStep selected={selected} brand={account?.name ?? ""} logoUrl={logoUrl} onBack={() => setStep(selected.length ? "connect" : "choose")} onFinish={finish} />}
       </main>
     </div>
   );
@@ -380,7 +384,7 @@ const TEMPLATES: Template[] = [
   },
 ];
 
-function ScenarioStep({ selected, brand, onBack, onFinish }: { selected: SourceId[]; brand: string; onBack: () => void; onFinish: () => void }) {
+function ScenarioStep({ selected, brand, logoUrl, onBack, onFinish }: { selected: SourceId[]; brand: string; logoUrl: string | null; onBack: () => void; onFinish: () => void }) {
   const toast = useToast();
   const available = TEMPLATES.filter((tpl) => !tpl.needs || tpl.needs.every((group) => group.some((n) => selected.includes(n))));
   const [chosen, setChosen] = useState<string[]>(() => available.map((tpl) => tpl.id));
@@ -394,7 +398,9 @@ function ScenarioStep({ selected, brand, onBack, onFinish }: { selected: SourceI
     try {
       for (const tpl of available.filter((x) => chosen.includes(x.id))) {
         if (saved.current.has(tpl.id)) continue;
-        const a = await api.automations.create(tpl.input(brand));
+        const input = tpl.input(brand);
+        const branded = { ...input, steps: input.steps.map((st) => (st.type === "email" ? { ...st, html: brandEmailHeader(st.html, brand, logoUrl) } : st)) };
+        const a = await api.automations.create(branded);
         saved.current.set(tpl.id, a.name);
       }
       setCreated([...saved.current.values()]);
