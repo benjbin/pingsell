@@ -1,12 +1,13 @@
 # Déployer Pingsell sur Coolify
 
-Deux domaines publics, trois conteneurs :
+Deux domaines publics, quatre conteneurs :
 
 | Service | Dossier | Domaine | Rôle |
 |---|---|---|---|
 | `web` | `apps/web` | `https://app.pingsell.com` | L'app, et l'API sous le même domaine (`/api`, `/t`, `/u`, `/media`, `/health`) |
 | `site` | `apps/site` | `https://pingsell.com` | Le site vitrine |
 | `api` | `apps/api` | aucun (interne) | Fastify + SQLite, joint par `web` via `http://api:4000` |
+| `mta` | `apps/mta` | port 25 de l'hôte | Notre serveur d'envoi d'emails (Postfix + DKIM) : voir [ENVOI-EMAIL.md](ENVOI-EMAIL.md) |
 
 ## Mise en place
 
@@ -19,10 +20,10 @@ Deux domaines publics, trois conteneurs :
 
 | Variable | Exemple | Rôle |
 |---|---|---|
-| `EMAIL_PROVIDER` | `ses` | `log` (défaut) = aucun email ne part ; `ses` = Amazon SES |
-| `AWS_REGION` | `eu-west-3` | Région SES |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | Identifiants IAM SES (secrets) |
-| `MAIL_FROM_EMAIL` | `bonjour@pingsell.com` | Expéditeur par défaut, vérifié dans SES |
+| `EMAIL_PROVIDER` | `smtp` | `smtp` (défaut) = notre serveur `mta` ; `log` = aucun email ne part ; `ses` = Amazon SES |
+| `MAIL_DOMAIN` | `pingsell.neokrome.tech` | Domaine d'envoi (DNS : voir [ENVOI-EMAIL.md](ENVOI-EMAIL.md)) |
+| `MAIL_FROM_EMAIL` | `bonjour@pingsell.neokrome.tech` | Expéditeur par défaut |
+| `MAIL_WARMUP_START` | `2026-11-20` | Premier jour d'envoi : active le plafond quotidien progressif |
 | `PUSH_MODE` | `live` | `live` = vrais envois FCM / APNs / Expo, `log` = test |
 | `PUBLIC_URL` / `WEB_URL` | `https://app.pingsell.com` | Forcer l'adresse de l'app (sinon : domaine du service `web`) |
 | `SITE_URL` | `https://pingsell.com` | Forcer l'adresse du site (sinon : domaine du service `site`) |

@@ -15,6 +15,7 @@ import type { EmailProvider } from './services/mailer.js';
 import { accountRoutes, authRoutes } from './routes/auth.js';
 import { accountDeletionRoutes, invitationRoutes, teamRoutes } from './routes/team.js';
 import { apiKeyRoutes } from './routes/apiKeys.js';
+import { mtaRoutes } from './routes/mta.js';
 import { contactRoutes } from './routes/contacts.js';
 import { segmentRoutes } from './routes/segments.js';
 import { campaignRoutes } from './routes/campaigns.js';
@@ -150,6 +151,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // Public routes: tracking, health.
   await app.register(async (scope) => trackingRoutes(scope, deps));
   await app.register(async (scope) => publicUploadRoutes(scope));
+  // Bounces and complaints forwarded by our own MTA (self-hosted sending).
+  await app.register(async (scope) => mtaRoutes(scope, deps));
 
   // REST API.
   await app.register(

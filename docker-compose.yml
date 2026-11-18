@@ -14,11 +14,21 @@ services:
       # Public base URL for tracking links, images and invitations = the app's domain.
       - PUBLIC_URL=${PUBLIC_URL:-${SERVICE_URL_WEB}}
       - WEB_URL=${WEB_URL:-${SERVICE_URL_WEB}}
-      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-log}
+      # Self-hosted sending through the "mta" service below (no third-party email service).
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-smtp}
+      - SMTP_HOST=mta
+      - SMTP_PORT=2525
+      - MAIL_DOMAIN=${MAIL_DOMAIN:-pingsell.neokrome.tech}
+      - MAIL_FROM_EMAIL=${MAIL_FROM_EMAIL:-}
+      - MTA_WEBHOOK_SECRET=${MTA_WEBHOOK_SECRET:-${SERVICE_PASSWORD_MTAHOOK}}
+      # IP warm-up: set the first sending day (YYYY-MM-DD) to cap the daily volume while the IP builds a reputation.
+      - MAIL_WARMUP_START=${MAIL_WARMUP_START:-}
+      - MAIL_WARMUP_INITIAL=${MAIL_WARMUP_INITIAL:-200}
+      - MAIL_WARMUP_GROWTH=${MAIL_WARMUP_GROWTH:-1.4}
+      - MAIL_WARMUP_MAX=${MAIL_WARMUP_MAX:-100000}
       - AWS_REGION=${AWS_REGION:-eu-west-3}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
-      - MAIL_FROM_EMAIL=${MAIL_FROM_EMAIL:-}
       - PUSH_MODE=${PUSH_MODE:-live}
       - SHOPIFY_API_KEY=${SHOPIFY_API_KEY:-}
       - SHOPIFY_API_SECRET=${SHOPIFY_API_SECRET:-}
@@ -26,6 +36,27 @@ services:
       - pingsell-data:/data
     expose:
       - "4000"
+
+  # Our own mail server (Postfix + DKIM): delivers to recipients on port 25 and receives
+  # bounces / complaints for MAIL_DOMAIN. Needs outbound port 25 open on the host, and DNS
+  # (A, MX, SPF, DKIM, DMARC, reverse DNS): the records are printed in this service's logs.
+  mta:
+    build:
+      context: ./apps/mta
+    restart: unless-stopped
+    environment:
+      - MAIL_DOMAIN=${MAIL_DOMAIN:-pingsell.neokrome.tech}
+      - MAIL_HOSTNAME=${MAIL_HOSTNAME:-}
+      - DKIM_SELECTOR=${DKIM_SELECTOR:-pingsell}
+      - MTA_WEBHOOK_SECRET=${MTA_WEBHOOK_SECRET:-${SERVICE_PASSWORD_MTAHOOK}}
+      - MTA_WEBHOOK_URL=http://api:4000/webhooks/mta
+    ports:
+      - "25:25"
+    expose:
+      - "2525"
+    volumes:
+      - mta-data:/data
+      - mta-queue:/var/spool/postfix
 
   web:
     build:
@@ -56,3 +87,5 @@ services:
 
 volumes:
   pingsell-data:
+  mta-data:
+  mta-queue:

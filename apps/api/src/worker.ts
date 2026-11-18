@@ -105,7 +105,37 @@ export class SendingWorker {
     }
   }
 
+  /** Emails handed to the provider today (UTC), cached and bumped as we send. */
+  private sentToday = { day: '', count: 0 };
+  private warmupLogged = '';
+
+  /** How many more emails the IP warm-up allows today (Infinity when no warm-up is configured). */
+  private warmupRemaining(): number {
+    const w = this.config.warmup;
+    if (!w) return Infinity;
+    const today = new Date().toISOString().slice(0, 10);
+    if (this.sentToday.day !== today) {
+      const row = get<{ n: number }>(
+        this.db,
+        "SELECT COUNT(*) AS n FROM messages WHERE sent_at >= ? AND status IN ('sent','bounced')",
+        `${today}T00:00:00.000Z`,
+      );
+      this.sentToday = { day: today, count: Number(row?.n ?? 0) };
+    }
+    const start = Date.parse(`${w.startDate.slice(0, 10)}T00:00:00Z`);
+    const day = Number.isFinite(start) ? Math.max(0, Math.floor((Date.now() - start) / 86_400_000)) : 0;
+    const limit = Math.min(w.max, Math.round(w.initial * Math.pow(w.growth, day)));
+    const remaining = Math.max(0, limit - this.sentToday.count);
+    if (!remaining && this.warmupLogged !== today) {
+      this.warmupLogged = today;
+      this.log.info(`[worker] warm-up : plafond du jour atteint (${limit} emails, jour ${day + 1}), la suite partira demain`);
+    }
+    return remaining;
+  }
+
   private async sendBatch(): Promise<number> {
+    const allowed = this.warmupRemaining();
+    if (allowed <= 0) return 0;
     const batch = all<{
       id: string;
       account_id: string;
@@ -116,7 +146,7 @@ export class SendingWorker {
     }>(
       this.db,
       "SELECT id, account_id, campaign_id, to_email, subject, html FROM messages WHERE status = 'queued' ORDER BY created_at LIMIT ?",
-      this.config.worker.batchSize,
+      Math.min(this.config.worker.batchSize, allowed),
     );
     if (!batch.length) return 0;
 
@@ -135,8 +165,11 @@ export class SendingWorker {
           html: message.html,
           text: htmlToText(message.html),
           unsubscribeUrl: `${this.config.publicUrl}/u/${message.id}`,
+          accountId: message.account_id,
+          campaignId: message.campaign_id,
         });
         markSent(this.db, message.id, providerId);
+        this.sentToday.count++;
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         markFailed(this.db, message.id, reason);
