@@ -42,26 +42,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
   }
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-      {/* Form side */}
-      <div className="relative flex flex-col px-6 py-8 sm:px-12 lg:px-16">
-        <div className="flex items-center justify-between gap-4">
-          <a href={SITE_URL} aria-label={t("Pingsell, retour au site", "Pingsell, back to website")}>
-            <Logo />
-          </a>
-          <div className="flex items-center gap-2">
-            <a
-              href={SITE_URL}
-              className="hidden items-center gap-1.5 rounded-full px-3 py-2 text-sm text-slate-500 transition hover:text-slate-900 sm:inline-flex dark:text-slate-400 dark:hover:text-white"
-            >
-              <ArrowLeft className="size-4" strokeWidth={1.75} />
-              {t("Retour au site", "Back to website")}
-            </a>
-            <LanguageToggle />
-            <ThemeToggle />
-          </div>
-        </div>
-
+    <AuthShell>
         <div key={mode} className="mx-auto flex w-full max-w-[400px] flex-1 animate-rise flex-col justify-center py-12">
           {/* Mode switch */}
           <div className="grid grid-cols-2 rounded-full bg-slate-100 p-1 font-display text-sm font-semibold dark:bg-white/5" role="tablist">
@@ -142,7 +123,22 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
                 className="h-12"
               />
             </Field>
-            <Field label={t("Mot de passe", "Password")} htmlFor="password" hint={!isLogin ? t("8 caractères minimum.", "At least 8 characters.") : undefined}>
+            <Field
+              label={
+                isLogin ? (
+                  <span className="flex items-center justify-between">
+                    {t("Mot de passe", "Password")}
+                    <Link to="/mot-de-passe-oublie" state={{ email }} className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400">
+                      {t("Mot de passe oublié ?", "Forgot password?")}
+                    </Link>
+                  </span>
+                ) : (
+                  t("Mot de passe", "Password")
+                )
+              }
+              htmlFor="password"
+              hint={!isLogin ? t("8 caractères minimum.", "At least 8 characters.") : undefined}
+            >
               <div className="relative">
                 <Input
                   id="password"
@@ -194,13 +190,36 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
             <p className="mt-10 font-display text-[11px] text-slate-400">{t("démo", "demo")} — demo@missive.local / demo1234</p>
           )}
         </div>
+    </AuthShell>
+  );
+}
 
+/** Shared layout of the sign-in pages: form on the left, the Pingsell story on the right. */
+export function AuthShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      <div className="relative flex flex-col px-6 py-8 sm:px-12 lg:px-16">
+        <div className="flex items-center justify-between gap-4">
+          <a href={SITE_URL} aria-label={t("Pingsell, retour au site", "Pingsell, back to website")}>
+            <Logo />
+          </a>
+          <div className="flex items-center gap-2">
+            <a
+              href={SITE_URL}
+              className="hidden items-center gap-1.5 rounded-full px-3 py-2 text-sm text-slate-500 transition hover:text-slate-900 sm:inline-flex dark:text-slate-400 dark:hover:text-white"
+            >
+              <ArrowLeft className="size-4" strokeWidth={1.75} />
+              {t("Retour au site", "Back to website")}
+            </a>
+            <LanguageToggle />
+            <ThemeToggle />
+          </div>
+        </div>
+        {children}
         <p className="font-display text-[10px] tracking-[0.2em] text-slate-400 uppercase">
           © {new Date().getFullYear()} Pingsell — {t("Chaque notif, une vente.", "Every ping, a sale.")}
         </p>
       </div>
-
-      {/* Story side */}
       <StoryPanel />
     </div>
   );

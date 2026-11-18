@@ -179,6 +179,9 @@ export const api = {
   auth: {
     register: (input: { name: string; email: string; password: string }) => post<AuthResponse>("/auth/register", input),
     login: (input: { email: string; password: string }) => post<AuthResponse>("/auth/login", input),
+    forgotPassword: (email: string) => post<void>("/auth/forgot-password", { email }),
+    checkResetToken: (token: string) => get<{ email: string }>(`/auth/reset-password/${encodeURIComponent(token)}`),
+    resetPassword: (token: string, password: string) => post<AuthResponse>("/auth/reset-password", { token, password }),
   },
   me: () => get<MeResponse>("/me"),
 

@@ -390,6 +390,18 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   );
   ALTER TABLE accounts ADD COLUMN from_email TEXT;
   `,
+  // v11 — "forgot password": one-time reset links (only a hash of the token is stored).
+  `
+  CREATE TABLE password_resets (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT
+  );
+  CREATE INDEX idx_password_resets_user ON password_resets(user_id, created_at);
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

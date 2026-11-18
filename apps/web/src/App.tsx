@@ -7,6 +7,7 @@ import { WifiOff } from "lucide-react";
 import { Button, Spinner } from "./components/ui/primitives";
 import { AppLayout } from "./components/layout/AppLayout";
 import { AuthPage } from "./pages/AuthPage";
+import { ForgotPasswordPage, ResetPasswordPage } from "./pages/PasswordResetPages";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ContactsPage } from "./pages/contacts/ContactsPage";
 import { SegmentsPage } from "./pages/segments/SegmentsPage";
@@ -80,6 +81,8 @@ export function App() {
             <Routes>
               <Route path="/connexion" element={<GuestOnly><AuthPage mode="login" /></GuestOnly>} />
               <Route path="/inscription" element={<GuestOnly><AuthPage mode="register" /></GuestOnly>} />
+              <Route path="/mot-de-passe-oublie" element={<GuestOnly><ForgotPasswordPage /></GuestOnly>} />
+              <Route path="/reinitialiser-mot-de-passe/:token" element={<ResetPasswordPage />} />
               <Route path="/invitation/:token" element={<InvitationPage />} />
               <Route path="/bienvenue" element={<RequireAuth><OnboardingPage /></RequireAuth>} />
               <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
