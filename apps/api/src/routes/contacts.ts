@@ -21,6 +21,7 @@ import {
 import { compileRules, loadSegmentRules } from '../services/segments.js';
 import { serializeMessage } from '../services/messages.js';
 import { t } from '../i18n.js';
+import { closeCartsForEmail, upsertCart } from '../services/carts.js';
 
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
 
@@ -50,6 +51,23 @@ const importSchema = z.union([
 ]);
 
 /** Orders from any shop, POS or back-office (Shopify sends its own through webhooks). */
+const money = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() !== '' ? Number(v.trim().replace(',', '.')) : v),
+  z.number().nonnegative().max(1_000_000_000, zmsg('Le total est trop élevé', 'Total is too high')),
+);
+
+/** « Panier » : sent when the customer leaves their email at checkout; Pingsell relaunches it if no order follows. */
+const cartSchema = z.object({
+  email: z.string().trim().min(1, zmsg("L'email est requis", 'Email is required')).max(254),
+  first_name: optionalText(100),
+  last_name: optionalText(100),
+  cart_id: z.string().trim().min(1, zmsg('cart_id est requis', 'cart_id is required')).max(100),
+  total: money.optional(),
+  currency: z.string().trim().max(8).optional(),
+  checkout_url: z.string().trim().url(zmsg('checkout_url doit être une adresse web complète', 'checkout_url must be a full web address')).max(2000).optional(),
+  items: z.array(z.object({ title: z.string().trim().min(1).max(200), quantity: z.number().int().positive().max(10_000).optional(), price: money.optional() })).max(50).optional(),
+});
+
 const orderSchema = z.object({
   email: z.string().trim().min(1, zmsg("L'email est requis", 'Email is required')).max(254),
   first_name: optionalText(100),
@@ -142,6 +160,13 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
     return reply.code(result.created ? 201 : 200).send({ ...result.contact, created: result.created });
   });
 
+  app.post('/carts', async (request, reply) => {
+    const body = parse(cartSchema, request.body);
+    if (!isValidEmail(normalizeEmail(body.email))) throw badRequest(t(`Adresse email invalide : ${body.email}`, `Invalid email address: ${body.email}`));
+    const result = upsertCart(db, request.accountId, { ...body, email: normalizeEmail(body.email) });
+    return reply.code(result === 'created' ? 201 : 200).send({ ok: true, status: result === 'closed' ? 'closed' : 'pending' });
+  });
+
   app.post('/orders', async (request, reply) => {
     const body = parse(orderSchema, request.body);
     const accountId = request.accountId;
@@ -194,6 +219,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       if (!duplicate) {
         const data = { order_id: body.order_id, total, currency: body.currency ?? null, source: 'api' };
         recordEvent(db, accountId, r.contact.id, 'order', data);
+        closeCartsForEmail(db, accountId, r.contact.email);
         fireTrigger(db, accountId, r.contact.id, 'order_created', data);
       }
       return { contact: r.contact, duplicate, skipped: false };

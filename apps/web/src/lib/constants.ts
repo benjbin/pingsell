@@ -38,7 +38,7 @@ export const TRIGGERS: Record<AutomationTrigger, { label: string; description: s
   contact_created: { label: t("Nouveau contact", "New contact"), description: t("Quand un contact est créé (formulaire, import, API, Shopify).", "When a contact is created (form, import, API, Shopify).") },
   tag_added: { label: t("Tag ajouté", "Tag added"), description: t("Quand un tag précis est ajouté à un contact.", "When a specific tag is added to a contact.") },
   order_created: { label: t("Commande passée", "Order placed"), description: t("Quand un client passe commande (Shopify, ou votre site, caisse ou back-office via l'API).", "When a customer places an order (Shopify, or your site, POS or back office via the API).") },
-  cart_abandoned: { label: t("Panier abandonné", "Abandoned cart"), description: t("Quand un panier Shopify reste sans commande pendant 1 h.", "When a Shopify cart goes 1 hour without an order.") },
+  cart_abandoned: { label: t("Panier abandonné", "Abandoned cart"), description: t("Quand un panier (Shopify ou votre site) reste sans commande pendant 1 h.", "When a cart (Shopify or your website) goes 1 hour without an order.") },
   order_fulfilled: {
     label: t("Commande expédiée", "Order fulfilled"),
     description: t("Quand la commande est expédiée (Shopify ou API). Transactionnel : atteint aussi les désabonnés marketing.", "When the order ships (Shopify or API). Transactional: also reaches contacts unsubscribed from marketing."),

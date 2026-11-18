@@ -2,6 +2,7 @@ import type { AppConfig } from './config.js';
 import { all, get, now, run, type DatabaseSync } from './db.js';
 import { finalizeCampaigns, queueCampaign } from './services/campaigns.js';
 import { processDueRuns } from './services/automations.js';
+import { processAbandonedCarts } from './services/carts.js';
 import { finalizePushCampaigns, queuePushCampaigns, sendPushBatch } from './services/push.js';
 import { processPushResends } from './services/pushGrowth.js';
 import { accountSender, markFailed, markSent } from './services/messages.js';
@@ -66,6 +67,7 @@ export class SendingWorker {
         this.rerun = false;
         this.promoteScheduled();
         this.queueSendingCampaigns();
+        processAbandonedCarts(this.db);
         processDueRuns(this.db, this.config);
         const sent = await this.sendBatch();
         finalizeCampaigns(this.db);

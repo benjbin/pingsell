@@ -402,6 +402,27 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   );
   CREATE INDEX idx_password_resets_user ON password_resets(user_id, created_at);
   `,
+  // v12 — carts sent by any website through the API (POST /carts): abandoned after 1 h without an order.
+  `
+  CREATE TABLE api_carts (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    cart_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    first_name TEXT,
+    last_name TEXT,
+    total REAL NOT NULL DEFAULT 0,
+    currency TEXT,
+    checkout_url TEXT,
+    line_items TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    abandoned_at TEXT,
+    UNIQUE (account_id, cart_id)
+  );
+  CREATE INDEX idx_api_carts_pending ON api_carts(status, updated_at);
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

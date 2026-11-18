@@ -405,15 +405,15 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
 /* -------------------------------------------------------------------------- */
 
 export type ApiKind = "site" | "crm" | "pos" | "backoffice" | "other";
-type EventId = "contact" | "order" | "shipped" | "tag";
+type EventId = "contact" | "cart" | "order" | "shipped" | "tag";
 type Lang = "cURL" | "Node.js" | "PHP" | "Python";
 
 const KINDS: Record<ApiKind, { icon: LucideIcon; title: string; intro: string; events: EventId[]; label: string }> = {
   site: {
     icon: Code2,
     title: t("Brancher votre site web", "Connect your website"),
-    intro: t("Site sur mesure, WordPress, Webflow avec un back-end… Deux ou trois appels suffisent : à l'inscription, à la commande et à l'expédition.", "Custom site, WordPress, Webflow with a back end… Two or three calls are all it takes: at sign-up, at checkout and at shipping."),
-    events: ["contact", "order", "shipped"],
+    intro: t("Site sur mesure, WordPress, Webflow avec un back-end… Votre site prévient Pingsell de ce qui se passe (inscription, panier, commande, expédition). Ce que vos clients reçoivent ensuite, vous le réglez dans Automatisations.", "Custom site, WordPress, Webflow with a back end… Your site tells Pingsell what happens (sign-up, cart, order, shipping). What your customers receive next, you set up in Automations."),
+    events: ["contact", "cart", "order", "shipped", "tag"],
     label: t("Mon site web", "My website"),
   },
   crm: {
@@ -434,14 +434,14 @@ const KINDS: Record<ApiKind, { icon: LucideIcon; title: string; intro: string; e
     icon: Code2,
     title: t("Brancher votre back-office", "Connect your back office"),
     intro: t("ERP, outil de gestion des commandes ou logistique : envoyez les commandes et leur expédition, Pingsell prévient le client par email ou par notification.", "ERP, order management or logistics tool: send orders and their shipping, and Pingsell notifies the customer by email or push notification."),
-    events: ["order", "shipped", "contact"],
+    events: ["order", "shipped", "contact", "cart"],
     label: t("Mon back-office", "My back office"),
   },
   other: {
     icon: Code2,
     title: t("Brancher n'importe quel outil", "Connect any tool"),
     intro: t("Tout ce qui sait faire un appel web peut alimenter Pingsell, dans n'importe quel langage.", "Anything that can make a web request can feed Pingsell, in any language."),
-    events: ["contact", "order", "shipped", "tag"],
+    events: ["contact", "cart", "order", "shipped", "tag"],
     label: t("Mon outil", "My tool"),
   },
 };
@@ -452,6 +452,12 @@ const EVENTS: Record<EventId, { label: string; path: string; body: Record<string
     path: "/contacts",
     body: { email: "camille@exemple.fr", first_name: "Camille", last_name: "Martin", tags: ["newsletter"] },
     effect: t("Crée le contact (ou le met à jour s'il existe déjà) et lance l'automatisation « Nouveau contact ».", "Creates the contact (or updates it if it already exists) and starts the “New contact” automation."),
+  },
+  cart: {
+    label: t("Panier en cours", "Cart in progress"),
+    path: "/carts",
+    body: { email: "camille@exemple.fr", first_name: "Camille", cart_id: "PANIER-77", total: 59.9, currency: "EUR", checkout_url: "https://boutique.exemple.fr/panier/77", items: [{ title: "Bougie Figue", quantity: 2, price: 29.95 }] },
+    effect: t("Sans commande dans l'heure qui suit, Pingsell considère le panier abandonné et lance « Panier abandonné ». Renvoyez-le à chaque changement : le compte à rebours repart. Une commande du même client l'annule.", "With no order within the next hour, Pingsell treats the cart as abandoned and starts “Abandoned cart”. Send it again on every change: the countdown restarts. An order from the same customer cancels it."),
   },
   order: {
     label: t("Commande passée", "Order placed"),
@@ -477,8 +483,10 @@ const EVENTS: Record<EventId, { label: string; path: string; body: Record<string
 const WHERE: Record<ApiKind, Partial<Record<EventId, string>>> = {
   site: {
     contact: t("Dans le code qui traite votre formulaire d'inscription ou de newsletter, juste après l'enregistrement.", "In the code that handles your sign-up or newsletter form, right after saving."),
+    cart: t("Dès que le client a saisi son email au paiement, puis à chaque modification du panier.", "As soon as the customer enters their email at checkout, then whenever the cart changes."),
     order: t("Sur la page de confirmation de paiement, ou mieux dans le webhook de votre prestataire de paiement (Stripe, PayPal…).", "On the payment confirmation page, or better, in your payment provider's webhook (Stripe, PayPal…)."),
     shipped: t("Là où vous passez la commande en « expédiée », par exemple quand l'étiquette transporteur est créée.", "Wherever you mark the order as “shipped”, for example when the shipping label is created."),
+    tag: t("Quand vous voulez classer un client (VIP, grossiste, a laissé un avis…) : le tag peut lancer son propre scénario.", "Whenever you want to label a customer (VIP, wholesale, left a review…): the tag can start its own workflow."),
   },
   crm: {
     contact: t("Dans le webhook ou l'automatisation de votre CRM qui se déclenche à la création d'une fiche.", "In the CRM webhook or automation that fires when a record is created."),
@@ -489,6 +497,7 @@ const WHERE: Record<ApiKind, Partial<Record<EventId, string>>> = {
     contact: t("Quand un client crée sa carte de fidélité en boutique.", "When a customer signs up for a loyalty card in store."),
   },
   backoffice: {
+    cart: t("Pour une commande en attente de paiement (devis, virement) : sans paiement dans l'heure, le client est relancé.", "For an order awaiting payment (quote, bank transfer): with no payment within the hour, the customer gets a reminder."),
     order: t("Quand une commande est créée dans votre outil, quel que soit le canal de vente.", "When an order is created in your tool, whatever the sales channel."),
     shipped: t("Quand le statut passe à « expédiée » : ajoutez le numéro de suivi, il sera disponible dans le message.", "When the status changes to “shipped”: add the tracking number and it will be available in the message."),
     contact: t("Quand un nouveau client est créé dans votre base.", "When a new customer is created in your database."),
@@ -568,9 +577,7 @@ export function ApiGuide({
   const meta = KINDS[kind];
   const [key, setKey] = useState<{ id: string; key: string } | null>(() => loadKey(kind));
   const [busy, setBusy] = useState(false);
-  const [event, setEvent] = useState<EventId>(meta.events[0]);
   const [lang, setLang] = useState<Lang>("cURL");
-  useEffect(() => setEvent(KINDS[kind].events[0]), [kind]);
 
   const received = usePoll(!!key && !done, async () => {
     const keys = await api.apiKeys.list();
@@ -603,8 +610,7 @@ export function ApiGuide({
     }
   }
 
-  const ev = EVENTS[event];
-  const where = WHERE[kind][event];
+  const apiKey = key?.key ?? t("VOTRE_CLE_API", "YOUR_API_KEY");
 
   return (
     <>
@@ -630,33 +636,51 @@ export function ApiGuide({
           )}
         </Step>
 
-        <Step n={2} title={t("Choisissez ce que votre outil envoie", "Choose what your tool sends")}>
-          <Tabs label={t("Événement", "Event")} value={event} onChange={setEvent} options={meta.events.map((id) => ({ id, label: EVENTS[id].label }))} />
-          <p>{ev.effect}</p>
-          {where && (
-            <Hint>
-              <span className="font-semibold text-slate-900 dark:text-white">{t("Où placer l'appel : ", "Where to make the call: ")}</span>
-              {where}
-            </Hint>
-          )}
-        </Step>
-
-        <Step n={3} title={t("Copiez le code dans votre outil", "Copy the code into your tool")}>
-          <Tabs label={t("Langage", "Language")} value={lang} onChange={setLang} options={["cURL", "Node.js", "PHP", "Python"] as const} />
-          <Code code={snippet(lang, key?.key ?? t("VOTRE_CLE_API", "YOUR_API_KEY"), ev.path, ev.body)} />
-          <p className="text-xs text-slate-500">
+        <Step n={2} title={t("Collez ces appels dans votre outil", "Paste these calls into your tool")}>
+          <p>
             {t(
               <>
-                Seul <code>email</code> est obligatoire{ev.path === "/orders" ? ", avec order_id pour les commandes" : ""}. Un autre langage (Java, C#, Ruby, Go…) ? C'est le même appel web : POST en JSON avec la clé dans l'en-tête Authorization.
+                Chaque appel prévient Pingsell d'un moment de la vie du client. Mettez-les tous en place une bonne fois : vous choisirez ensuite dans{" "}
+                <Link to="/automatisations" className="font-semibold text-brand-500 hover:text-brand-600">Automatisations</Link> ce qui part, quand et pour qui, sans retoucher au code.
               </>,
               <>
-                Only <code>email</code> is required{ev.path === "/orders" ? ", plus order_id for orders" : ""}. Another language (Java, C#, Ruby, Go…)? It's the same web request: a JSON POST with the key in the Authorization header.
+                Each call tells Pingsell about a moment in the customer's journey. Set them all up once: then choose in{" "}
+                <Link to="/automatisations" className="font-semibold text-brand-500 hover:text-brand-600">Automations</Link> what goes out, when and to whom, without touching the code again.
               </>,
+            )}
+          </p>
+          <Tabs label={t("Langage", "Language")} value={lang} onChange={setLang} options={["cURL", "Node.js", "PHP", "Python"] as const} />
+          <ol className="mt-4 space-y-6">
+            {meta.events.map((id, i) => {
+              const ev = EVENTS[id];
+              const where = WHERE[kind][id];
+              return (
+                <li key={id} className="space-y-2.5">
+                  <h4 className="flex items-center gap-2 font-display text-[15px] font-bold text-slate-900 dark:text-white">
+                    <span className="flex size-5 items-center justify-center rounded-full bg-brand-50 text-[11px] text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">{String.fromCharCode(65 + i)}</span>
+                    {ev.label}
+                  </h4>
+                  {where && (
+                    <Hint>
+                      <span className="font-semibold text-slate-900 dark:text-white">{t("Quand : ", "When: ")}</span>
+                      {where}
+                    </Hint>
+                  )}
+                  <Code code={snippet(lang, apiKey, ev.path, ev.body)} />
+                  <p className="text-xs text-slate-500">{ev.effect}</p>
+                </li>
+              );
+            })}
+          </ol>
+          <p className="text-xs text-slate-500">
+            {t(
+              "Seul email est obligatoire, avec cart_id pour un panier et order_id pour une commande. Un autre langage (Java, C#, Ruby, Go…) ? C'est le même appel web : POST en JSON avec la clé dans l'en-tête Authorization.",
+              "Only email is required, plus cart_id for a cart and order_id for an order. Another language (Java, C#, Ruby, Go…)? It's the same web request: a JSON POST with the key in the Authorization header.",
             )}
           </p>
         </Step>
 
-        <Step n={4} title={t("Faites un essai", "Run a test")} done={!!done} last>
+        <Step n={3} title={t("Faites un essai", "Run a test")} done={!!done} last>
           {done ? (
             <p>{t("Tout fonctionne. Activez maintenant un scénario dans Automatisations pour que les messages partent tout seuls.", "Everything works. Now turn on a workflow in Automations so messages go out on their own.")}</p>
           ) : key ? (
