@@ -87,6 +87,8 @@ export interface SendingDomain {
   verified_at: string | null;
   created_at: string;
   records: DnsRecord[];
+  /** DNS host guessed from the domain's name servers (to open the right guide). */
+  dns_provider?: string | null;
 }
 
 export interface SendingDomainResponse {

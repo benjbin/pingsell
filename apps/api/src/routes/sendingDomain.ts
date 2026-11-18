@@ -8,9 +8,11 @@ import {
   accountFromEmail,
   createSendingDomain,
   deleteSendingDomain,
+  detectDnsProvider,
   getSendingDomain,
   isFreemail,
   normalizeDomain,
+  refreshDmarc,
   onVerifiedDomain,
   serializeSendingDomain,
   verifySendingDomain,
@@ -34,11 +36,14 @@ export async function sendingDomainRoutes(app: FastifyInstance, { db, config }: 
     return serializeSendingDomain(row, own);
   };
 
-  app.get('/sending-domain', async (request) => ({
-    domain: current(request.accountId),
-    default_from_email: config.defaultFromEmail,
-    from_email: accountFromEmail(db, config, request.accountId),
-  }));
+  app.get('/sending-domain', async (request) => {
+    const domain = current(request.accountId);
+    return {
+      domain: domain && { ...domain, dns_provider: domain.status === 'verified' ? null : await detectDnsProvider(domain.domain) },
+      default_from_email: config.defaultFromEmail,
+      from_email: accountFromEmail(db, config, request.accountId),
+    };
+  });
 
   app.post('/sending-domain', async (request, reply) => {
     requireManager(request);
@@ -53,16 +58,21 @@ export async function sendingDomainRoutes(app: FastifyInstance, { db, config }: 
     }
     const ours = config.smtp.mailDomain;
     if (ours && (domain === ours || domain.endsWith(`.${ours}`))) throw badRequest(t('Ce domaine est déjà celui de Pingsell', 'This is already Pingsell’s domain'));
-    createSendingDomain(db, request.accountId, domain);
-    return reply.code(201).send({ domain: current(request.accountId) });
+    await refreshDmarc(db, createSendingDomain(db, request.accountId, domain));
+    const created = current(request.accountId)!;
+    return reply.code(201).send({ domain: { ...created, dns_provider: await detectDnsProvider(domain) }, from_email: accountFromEmail(db, config, request.accountId) });
   });
 
   app.post('/sending-domain/verify', async (request) => {
     requireManager(request);
     const row = getSendingDomain(db, request.accountId);
     if (!row) throw notFound(t('Aucun domaine d’envoi', 'No sending domain'));
-    await verifySendingDomain(db, row);
-    return { domain: current(request.accountId), from_email: accountFromEmail(db, config, request.accountId) };
+    const checked = await verifySendingDomain(db, row);
+    const domain = current(request.accountId)!;
+    return {
+      domain: { ...domain, dns_provider: checked.status === 'verified' ? null : await detectDnsProvider(checked.domain) },
+      from_email: accountFromEmail(db, config, request.accountId),
+    };
   });
 
   /** The default sender address for new campaigns and automations; must be on the verified domain. */

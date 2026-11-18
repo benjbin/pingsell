@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { resolveTxt } from 'node:dns/promises';
+import { resolveNs, resolveTxt } from 'node:dns/promises';
 import type { AppConfig } from '../config.js';
 import { get, newId, now, run, type DatabaseSync } from '../db.js';
 
@@ -105,6 +105,16 @@ async function txtRecords(lookup: TxtLookup, name: string): Promise<string[]> {
 const tag = (record: string, name: string) =>
   record.split(';').map((p) => p.trim()).find((p) => p.toLowerCase().startsWith(`${name}=`))?.slice(name.length + 1).replace(/\s+/g, '') ?? null;
 
+/** Records whether the domain already publishes DMARC, so we don't ask for a second one. */
+export async function refreshDmarc(db: DatabaseSync, row: SendingDomainRow, lookup: TxtLookup = resolveTxt): Promise<void> {
+  try {
+    const dmarc = (await txtRecords(lookup, `_dmarc.${row.domain}`)).find((r) => /^v=DMARC1/i.test(r.trim())) ?? null;
+    run(db, 'UPDATE sending_domains SET dmarc = ? WHERE id = ?', dmarc, row.id);
+  } catch {
+    /* checked again on « Vérifier » */
+  }
+}
+
 /** Looks the DKIM (required) and DMARC (recommended) records up and stores the result. */
 export async function verifySendingDomain(db: DatabaseSync, row: SendingDomainRow, lookup: TxtLookup = resolveTxt): Promise<SendingDomainRow> {
   let error: string | null = null;
@@ -128,6 +138,8 @@ export async function verifySendingDomain(db: DatabaseSync, row: SendingDomainRo
     verified ? 'verified' : 'pending', dmarc, error, timestamp, verified ? 1 : 0, timestamp, row.id,
   );
   if (!verified) run(db, 'UPDATE accounts SET from_email = NULL WHERE id = ?', row.account_id);
+  // First success: start sending from bonjour@<domain> right away (the merchant can change it).
+  else run(db, 'UPDATE accounts SET from_email = ? WHERE id = ? AND from_email IS NULL', `bonjour@${row.domain}`, row.account_id);
   return getSendingDomain(db, row.account_id)!;
 }
 
@@ -167,4 +179,41 @@ export function serializeSendingDomain(row: SendingDomainRow, fromEmail: string 
       { type: 'TXT', host: `_dmarc.${row.domain}`, value: row.dmarc ?? DMARC_SUGGESTION, required: false, ok: !!row.dmarc },
     ],
   };
+}
+
+/** Where the merchant manages their DNS, guessed from the domain's name servers (to show the right guide). */
+export type DnsProvider = 'ovh' | 'godaddy' | 'ionos' | 'gandi' | 'cloudflare' | 'wix' | 'squarespace' | 'aws' | 'google' | 'hostinger' | 'o2switch';
+
+const NS_PROVIDERS: Array<[RegExp, DnsProvider]> = [
+  [/\.(ovh\.net|anycast\.me|ovh\.ca)$/, 'ovh'],
+  [/\.domaincontrol\.com$/, 'godaddy'],
+  [/\.ui-dns\.(com|de|org|biz)$/, 'ionos'],
+  [/\.gandi\.net$/, 'gandi'],
+  [/\.cloudflare\.com$/, 'cloudflare'],
+  [/\.wixdns\.net$/, 'wix'],
+  [/\.(squarespacedns\.com|googledomains\.com)$/, 'squarespace'],
+  [/\.awsdns-\d+\./, 'aws'],
+  [/\.(dns-parking\.com|hostinger\.com)$/, 'hostinger'],
+  [/\.o2switch\.net$/, 'o2switch'],
+];
+
+export async function detectDnsProvider(domain: string): Promise<DnsProvider | null> {
+  // The zone may sit on the parent (shop.example.com → example.com).
+  const labels = domain.split('.');
+  for (let i = 0; i < labels.length - 1; i++) {
+    try {
+      const ns = await Promise.race([
+        resolveNs(labels.slice(i).join('.')),
+        new Promise<string[]>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500)),
+      ]);
+      for (const host of ns) {
+        const hit = NS_PROVIDERS.find(([re]) => re.test(host.toLowerCase().replace(/\.$/, '')));
+        if (hit) return hit[1];
+      }
+      if (ns.length) return null;
+    } catch {
+      /* try the parent zone */
+    }
+  }
+  return null;
 }
