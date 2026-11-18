@@ -4,9 +4,10 @@ import { z } from 'zod';
 import { all, get, newId, now, run, transaction } from '../db.js';
 import type { Deps } from '../deps.js';
 import { badRequest, conflict, forbidden, notFound, parse, zmsg } from '../lib/http.js';
-import { currentLang, t } from '../i18n.js';
+import { t } from '../i18n.js';
 import { createSession, hashPassword, publicUser, verifyPassword, type Role, type UserRow } from '../services/auth.js';
 import { normalizeEmail } from '../services/contacts.js';
+import { renderSystemEmail } from '../services/systemEmail.js';
 
 const INVITE_DAYS = 7;
 
@@ -37,10 +38,6 @@ interface InvitationRow {
 }
 
 const isExpired = (inv: InvitationRow) => Date.parse(inv.expires_at) < Date.now();
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-}
 
 /** Where the web app lives: the calling page's origin (already vetted by CORS), else the configured URL. */
 function webOrigin(request: FastifyRequest, fallback: string): string {
@@ -81,25 +78,36 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
       `${inviterName} vous invite à rejoindre ${account.name} sur Pingsell`,
       `${inviterName} invited you to join ${account.name} on Pingsell`,
     );
-    const html = `<!DOCTYPE html><html lang="${currentLang()}"><body style="margin:0;background:#EEF2F8;font-family:Helvetica,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 12px;">
-<table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:20px;"><tr><td style="padding:40px;">
-<p style="margin:0 0 24px;font-size:20px;font-weight:800;letter-spacing:-0.02em;color:#0B214A;">pingsell</p>
-<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;color:#0B214A;">${t('Rejoignez', 'Join')} ${escapeHtml(account.name)}</h1>
-<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#3d4d6a;">${t(
-   `${escapeHtml(inviterName)} vous invite à gérer les campagnes email de <strong>${escapeHtml(account.name)}</strong> en tant que <strong>${roleLabel.toLowerCase()}</strong>.`,
-   `${escapeHtml(inviterName)} invited you to manage email campaigns for <strong>${escapeHtml(account.name)}</strong> as <strong>${roleLabel.toLowerCase()}</strong>.`,
- )}</p>
-<a href="${link}" style="display:inline-block;padding:14px 28px;background:#145CFF;color:#FFFFFF;border-radius:999px;font-size:15px;font-weight:bold;text-decoration:none;">${t('Accepter l’invitation', 'Accept invitation')}</a>
-<p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#7a879e;">${t(
-   `Ce lien est valable ${INVITE_DAYS} jours. Si vous n’attendiez pas cette invitation, ignorez simplement cet email.`,
-   `This link is valid for ${INVITE_DAYS} days. If you weren’t expecting this invitation, you can safely ignore this email.`,
- )}</p>
-</td></tr></table></td></tr></table></body></html>`;
-    const text = t(
-      `${inviterName} vous invite à rejoindre ${account.name} sur Pingsell (${roleLabel}).\n\nAccepter l'invitation : ${link}\n\nLien valable ${INVITE_DAYS} jours.`,
-      `${inviterName} invited you to join ${account.name} on Pingsell (${roleLabel}).\n\nAccept the invitation: ${link}\n\nLink valid for ${INVITE_DAYS} days.`,
-    );
+    const { html, text } = renderSystemEmail({
+      appUrl: origin,
+      preheader: t(
+        `${inviterName} vous attend sur Pingsell pour gérer les emails de ${account.name}.`,
+        `${inviterName} is waiting for you on Pingsell to manage ${account.name}'s emails.`,
+      ),
+      eyebrow: t('Invitation', 'Invitation'),
+      title: [t('Rejoignez', 'Join'), `${account.name}.`],
+      paragraphs: [
+        t('Bonjour,', 'Hi,'),
+        t(
+          `**${inviterName}** vous invite à gérer les campagnes email de **${account.name}** sur Pingsell, en tant que **${roleLabel.toLowerCase()}**.`,
+          `**${inviterName}** invited you to manage email campaigns for **${account.name}** on Pingsell, as **${roleLabel.toLowerCase()}**.`,
+        ),
+        t(
+          'Créez votre accès en une minute : il suffit de choisir un mot de passe.',
+          'Set up your access in a minute: just choose a password.',
+        ),
+      ],
+      cta: { label: t('Accepter l’invitation', 'Accept invitation'), url: link },
+      facts: [t(`Valable ${INVITE_DAYS} jours`, `Valid for ${INVITE_DAYS} days`), roleLabel],
+      note: t(
+        '**Vous n’attendiez pas cette invitation ?** Ignorez simplement cet email, aucun compte ne sera créé.',
+        '**Weren’t expecting this?** Just ignore this email, no account will be created.',
+      ),
+      reason: t(
+        `Vous recevez cet email car ${inviterName} a saisi votre adresse sur Pingsell.`,
+        `You receive this email because ${inviterName} entered your address on Pingsell.`,
+      ),
+    });
     try {
       await provider.send({ messageId: `invite_${inv.id}_${Date.now()}`, to: inv.email, fromName: 'Pingsell', fromEmail: config.defaultFromEmail, subject, html, text });
       return true;

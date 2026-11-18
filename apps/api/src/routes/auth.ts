@@ -6,6 +6,7 @@ import { badRequest, conflict, notFound, parse, unauthorized, zmsg } from '../li
 import { currentLang, t } from '../i18n.js';
 import { bearerToken, createSession, hashPassword, publicAccount, publicUser, verifyPassword, type UserRow } from '../services/auth.js';
 import { normalizeEmail } from '../services/contacts.js';
+import { renderSystemEmail } from '../services/systemEmail.js';
 import { monthlyUsage } from '../services/stats.js';
 import { createPasswordReset, findResetUser, resetPassword, RESET_TTL_MINUTES } from '../services/passwordReset.js';
 
@@ -35,8 +36,6 @@ const passwordChangeSchema = z.object({
 const forgotSchema = z.object({ email: z.string().trim().min(1, zmsg("L'email est requis", 'Email is required')).max(254) });
 const resetSchema = z.object({ token: z.string().min(20).max(200), password: passwordSchema });
 
-const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-
 interface AccountRow {
   id: string;
   name: string;
@@ -57,25 +56,37 @@ export async function authRoutes(app: FastifyInstance, { db, config, provider }:
 
   async function sendResetEmail(user: UserRow, link: string) {
     const subject = t('Réinitialisez votre mot de passe Pingsell', 'Reset your Pingsell password');
-    const html = `<!DOCTYPE html><html lang="${currentLang()}"><body style="margin:0;background:#EEF2F8;font-family:Helvetica,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 12px;">
-<table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:20px;"><tr><td style="padding:40px;">
-<p style="margin:0 0 24px;font-size:20px;font-weight:800;letter-spacing:-0.02em;color:#0B214A;">pingsell</p>
-<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;color:#0B214A;">${t('Nouveau mot de passe', 'New password')}</h1>
-<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#3d4d6a;">${t(
-      `Bonjour ${escapeHtml(user.name)}, vous avez demandé à réinitialiser le mot de passe de votre compte Pingsell. Cliquez sur le bouton ci-dessous pour en choisir un nouveau.`,
-      `Hi ${escapeHtml(user.name)}, you asked to reset the password of your Pingsell account. Click the button below to choose a new one.`,
-    )}</p>
-<a href="${escapeHtml(link)}" style="display:inline-block;padding:14px 28px;background:#145CFF;color:#FFFFFF;border-radius:999px;font-size:15px;font-weight:bold;text-decoration:none;">${t('Choisir un nouveau mot de passe', 'Choose a new password')}</a>
-<p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#7a879e;">${t(
-      `Ce lien est valable ${RESET_TTL_MINUTES} minutes et ne fonctionne qu’une fois. Si vous n’êtes pas à l’origine de cette demande, ignorez cet email : votre mot de passe reste inchangé.`,
-      `This link is valid for ${RESET_TTL_MINUTES} minutes and works only once. If you didn’t ask for this, ignore this email: your password stays the same.`,
-    )}</p>
-</td></tr></table></td></tr></table></body></html>`;
-    const text = t(
-      `Bonjour ${user.name},\n\nPour choisir un nouveau mot de passe Pingsell, ouvrez ce lien :\n${link}\n\nIl est valable ${RESET_TTL_MINUTES} minutes et ne fonctionne qu'une fois. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.`,
-      `Hi ${user.name},\n\nTo choose a new Pingsell password, open this link:\n${link}\n\nIt is valid for ${RESET_TTL_MINUTES} minutes and works only once. If you didn't ask for this, ignore this email.`,
-    );
+    const firstName = user.name.trim().split(/\s+/)[0] || user.name;
+    const { html, text } = renderSystemEmail({
+      appUrl: new URL(link).origin,
+      preheader: t(
+        `Choisissez un nouveau mot de passe en un clic. Lien valable ${RESET_TTL_MINUTES} minutes.`,
+        `Choose a new password in one click. Link valid for ${RESET_TTL_MINUTES} minutes.`,
+      ),
+      eyebrow: t('Sécurité du compte', 'Account security'),
+      title: t(['Nouveau', 'mot de passe.'], ['New', 'password.']),
+      paragraphs: [
+        t(`Bonjour ${firstName},`, `Hi ${firstName},`),
+        t(
+          `Vous avez demandé à réinitialiser le mot de passe du compte **${user.email}**. Cliquez sur le bouton ci-dessous pour en choisir un nouveau : vous serez connecté directement.`,
+          `You asked to reset the password of the account **${user.email}**. Click the button below to choose a new one: you'll be signed in right away.`,
+        ),
+      ],
+      cta: { label: t('Choisir mon mot de passe', 'Choose my password'), url: link },
+      facts: [
+        t(`Valable ${RESET_TTL_MINUTES} minutes`, `Valid for ${RESET_TTL_MINUTES} minutes`),
+        t('Utilisable une seule fois', 'Works only once'),
+        t('Déconnecte vos autres appareils', 'Signs out other devices'),
+      ],
+      note: t(
+        '**Vous n’êtes pas à l’origine de cette demande ?** Ignorez simplement cet email : votre mot de passe reste inchangé et personne ne peut accéder à votre compte sans ce lien.',
+        '**Didn’t ask for this?** Just ignore this email: your password stays the same and nobody can access your account without this link.',
+      ),
+      reason: t(
+        'Vous recevez cet email car une réinitialisation a été demandée pour votre compte Pingsell.',
+        'You receive this email because a password reset was requested for your Pingsell account.',
+      ),
+    });
     try {
       await provider.send({ messageId: `reset_${user.id}_${Date.now()}`, to: user.email, fromName: 'Pingsell', fromEmail: config.defaultFromEmail, subject, html, text });
     } catch (err) {
