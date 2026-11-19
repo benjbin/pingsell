@@ -2,14 +2,27 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { run } from '../db.js';
 import type { Deps } from '../deps.js';
-import { HttpError, badRequest, notFound, parse } from '../lib/http.js';
+import { HttpError, badRequest, notFound, parse, zmsg } from '../lib/http.js';
 import { t } from '../i18n.js';
-import { normalizeEventName } from '../services/automations.js';
+import { SITE_ACTIONS, normalizeEventName, type SiteAction } from '../services/automations.js';
 import { BUILTIN_EVENTS, createIngest } from '../services/ingest.js';
 import { detectPayload, ensureHook, findHook, hookOrigins, markHookUsed, originAllowed, rotateHook, siteHost, type InboundHook } from '../services/inbound.js';
 import { FORM_SCRIPT } from '../services/formScript.js';
-import { VID_RE, cleanPageUrl, cleanProduct, ensureTracking, linkVisitor, linkVisitorByEmail, recordPageview, verifyContactToken } from '../services/webTracking.js';
-import { findContactByEmail } from '../services/contacts.js';
+import {
+  VID_RE,
+  cleanPageUrl,
+  cleanProduct,
+  ensureTracking,
+  linkVisitor,
+  linkVisitorByEmail,
+  listSites,
+  recordPageview,
+  CREATES_CONTACT,
+  deleteSite,
+  recordSiteAction,
+  verifyContactToken,
+} from '../services/webTracking.js';
+import { findContactByEmail, isValidEmail, normalizeEmail } from '../services/contacts.js';
 
 const PREFIX = '/api/v1';
 
@@ -60,6 +73,23 @@ export function parseMultipart(body: string, contentType: string): Record<string
 
 const clip = (v: unknown, max = 300) => (typeof v === 'string' ? v.slice(0, max) : v);
 
+/** Texte court venu du navigateur : sans caractères de contrôle, espaces resserrés, coupé à `max`. */
+const shortText = (v: unknown, max: number): string | undefined => {
+  if (typeof v !== 'string') return undefined;
+  const s = v.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim();
+  return s || undefined;
+};
+/** Un prénom ou un nom, jamais un lien ni du HTML (il finira dans « Bonjour {{first_name}} »). */
+const personName = (v: unknown) => {
+  const s = shortText(v, 100);
+  return s && !/[<>]|https?:|www\.|\.[a-z]{2,}\//i.test(s) ? s : undefined;
+};
+const phoneNumber = (v: unknown) => {
+  const s = shortText(v, 40);
+  return s && /^[+0-9 ().\-/]{4,40}$/.test(s) && /\d{4}/.test(s.replace(/\D/g, '')) ? s : undefined;
+};
+const siteActionKinds = new Set<string>(SITE_ACTIONS);
+
 export async function inboundRoutes(app: FastifyInstance, { db, config, kickWorker }: Deps) {
   const { ingestEvent } = createIngest(db);
 
@@ -82,6 +112,13 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
   const perHook = limiter(Number(process.env.WEBHOOK_RATE ?? 20_000), 60 * 60_000);
   const hitsPerIp = limiter(Number(process.env.TRACK_RATE_PER_IP ?? 300), 10 * 60_000);
   const hitsPerKey = limiter(Number(process.env.TRACK_RATE_PER_KEY ?? 200_000), 60 * 60_000);
+  // Actions repérées. Une création de compte ou une newsletter crée un contact et peut envoyer un email de
+  // bienvenue : limites aussi serrées que le formulaire public (par connexion, puis par adresse, puis par clé).
+  // Connexion, contact, autre formulaire ne créent rien : seule une limite par connexion, plus large.
+  const signupsPerIp = limiter(Number(process.env.TRACK_SIGNUP_RATE_PER_IP ?? 8), 10 * 60_000);
+  const signupsPerEmail = limiter(Number(process.env.TRACK_SIGNUP_RATE_PER_EMAIL ?? 5), 24 * 60 * 60_000);
+  const signupsPerKey = limiter(Number(process.env.TRACK_SIGNUP_RATE_PER_KEY ?? 600), 60 * 60_000);
+  const actsPerIp = limiter(Number(process.env.TRACK_ACT_RATE_PER_IP ?? 60), 10 * 60_000);
   const BOT_UA = /bot|crawl|spider|slurp|headless|lighthouse|preview|facebookexternalhit|monitor|curl|wget|python-requests/i;
 
   /** Runs each detected event; never throws, so the platform does not retry or disable the webhook. */
@@ -141,7 +178,7 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
     const tracking = ensureTracking(db, hook.account_id);
     return FORM_SCRIPT.replace('__PINGSELL_ENDPOINT__', JSON.stringify(`${base}/forms/${hook.token}`)).replace(
       '__PINGSELL_TRACK__',
-      JSON.stringify({ on: !!tracking.enabled, consent: !!tracking.require_consent }),
+      JSON.stringify({ on: !!tracking.enabled, consent: !!tracking.require_consent, act: !!tracking.capture_actions }),
     );
   });
 
@@ -202,9 +239,9 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
     if (!originAllowed(hook, origin)) {
       return fail(403, t('Ce site n’est pas autorisé à utiliser ce formulaire (Pingsell › Intégrations › Domaines autorisés)', 'This site is not allowed to use this form (Pingsell › Integrations › Allowed domains)'));
     }
-    // Per form first (keyed by the key itself, so rotating it starts afresh), then per visitor.
-    if (!perKey(hook.token)) return fail(429, t('Ce formulaire reçoit trop d’envois, réessayez plus tard', 'This form is receiving too many submissions, try again later'));
+    // Per visitor first (a blocked connection never uses up the form quota), then per form (keyed by the key itself, so rotating it starts afresh).
     if (!perIp(`${hook.token}:${request.ip}`)) return fail(429, t('Trop d’envois depuis cette connexion, réessayez dans quelques minutes', 'Too many submissions from this connection, try again in a few minutes'));
+    if (!perKey(hook.token)) return fail(429, t('Ce formulaire reçoit trop d’envois, réessayez plus tard', 'This form is receiving too many submissions, try again later'));
 
     const pageUrl = clip(raw._page ?? request.headers.referer, 500);
     const fields: Record<string, unknown> = {};
@@ -256,8 +293,59 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
     if (BOT_UA.test(String(request.headers['user-agent'] ?? ''))) return done({ bot: true });
     const origin = (request.headers.origin as string | undefined) ?? (request.headers.referer as string | undefined);
     if (!originAllowed(hook, origin)) throw new HttpError(403, t('Ce site n’est pas autorisé (Pingsell › Intégrations › Domaines autorisés)', 'This site is not allowed (Pingsell › Integrations › Allowed domains)'));
-    if (!hitsPerKey(hook.token) || !hitsPerIp(`${hook.token}:${request.ip}`)) throw new HttpError(429, t('Trop de requêtes', 'Too many requests'));
+    // Par connexion d'abord : une connexion bloquée n'use pas le quota du site entier.
+    if (!hitsPerIp(`${hook.token}:${request.ip}`) || !hitsPerKey(hook.token)) throw new HttpError(429, t('Trop de requêtes', 'Too many requests'));
     const vid = typeof raw.v === 'string' && VID_RE.test(raw.v) ? raw.v : null;
+
+    // Action repérée par le script : `v` est facultatif (sans consentement, l'action part quand même, sans visiteur).
+    if (raw.k === 'act') {
+      if (!tracking.capture_actions) return done({ off: true });
+      if (raw.v !== undefined && raw.v !== null && raw.v !== '' && !vid) throw badRequest(t('Visiteur invalide', 'Invalid visitor'));
+      const kind = typeof raw.a === 'string' && siteActionKinds.has(raw.a) ? (raw.a as SiteAction) : null;
+      if (!kind) throw badRequest(t('Action inconnue', 'Unknown action'));
+      const formKey = shortText(raw.f, 200);
+      if (!formKey) throw badRequest(t('Formulaire non identifié', 'Unidentified form'));
+      const label = shortText(raw.l, 120) ?? null;
+      let url: URL;
+      try {
+        url = new URL(String(raw.u ?? '').slice(0, 2000));
+      } catch {
+        throw badRequest(t('Adresse de page invalide', 'Invalid page URL'));
+      }
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') throw badRequest(t('Adresse de page invalide', 'Invalid page URL'));
+      // Une action peut créer un contact : elle doit venir d'une page du site qui l'envoie, jamais d'ailleurs.
+      const from = origin ? siteHost(origin) : '';
+      if (!from) throw new HttpError(403, t('Origine de l’envoi inconnue', 'Unknown sender origin'));
+      if (from !== siteHost(url.href)) throw badRequest(t('Page d’un autre site', 'Page from another site'));
+      const email = typeof raw.e === 'string' && raw.e.length <= 254 ? normalizeEmail(raw.e) : '';
+      if (!isValidEmail(email)) throw badRequest(t('Indiquez une adresse email valide.', 'Enter a valid email address.'));
+      // Consentement exigé et non donné (pas de visiteur) : rien n'est gardé, même si le script envoyait quand même.
+      if (tracking.require_consent && !vid) return done({ consent: false });
+      const allowed = CREATES_CONTACT.has(kind)
+        ? signupsPerIp(`${hook.token}:${request.ip}`) && signupsPerEmail(`${hook.token}:${email}`) && signupsPerKey(hook.token)
+        : actsPerIp(`${hook.token}:${request.ip}`);
+      if (!allowed) throw new HttpError(429, t('Trop d’envois, réessayez plus tard', 'Too many submissions, try again later'));
+      const page = cleanPageUrl(url.href);
+      const r = recordSiteAction(
+        db,
+        hook.account_id,
+        {
+          vid,
+          kind,
+          formKey,
+          label,
+          url: page.slice(0, 1000),
+          email,
+          first_name: personName(raw.fn),
+          last_name: personName(raw.ln),
+          phone: phoneNumber(raw.ph),
+        },
+      );
+      if (r.created || r.started) kickWorker();
+      // Rien sur le contact dans la réponse : la ligne publique ne dit pas qui est déjà client.
+      return done();
+    }
+
     if (!vid) throw badRequest(t('Visiteur invalide', 'Invalid visitor'));
 
     // Identification: signed link from a Pingsell email (trusted), or an email typed on the site.
@@ -285,7 +373,7 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
         title: typeof raw.ti === 'string' ? raw.ti : undefined,
         referrer: typeof raw.r === 'string' && /^https?:\/\//.test(raw.r) ? (() => { try { return cleanPageUrl(raw.r as string); } catch { return undefined; } })() : undefined,
         product: cleanProduct(raw.p, page),
-      });
+      }, !!origin && siteHost(origin) === siteHost(url.href));
       if (r.contactId) kickWorker();
       return done({ known: !!r.contactId });
     }
@@ -319,6 +407,7 @@ export async function inboundSettingsRoutes(app: FastifyInstance, { db, config }
           sites: JSON.parse(tr.site_hosts) as string[],
           visitors: scalarCount('SELECT COUNT(*) AS n FROM web_visitors WHERE account_id = ?', accountId),
           identified: scalarCount('SELECT COUNT(*) AS n FROM web_visitors WHERE account_id = ? AND contact_id IS NOT NULL', accountId),
+          capture_actions: !!tr.capture_actions,
         };
       })(),
       form: {
@@ -338,11 +427,35 @@ export async function inboundSettingsRoutes(app: FastifyInstance, { db, config }
     return view(request.accountId);
   });
 
+  // « Vos sites » : domaines repérés tout seuls, ce que le script y a vu passer, pages les plus vues.
+  app.get('/inbound/sites', async (request) => ({ data: listSites(db, request.accountId) }));
+
+  app.patch<{ Params: { host: string } }>('/inbound/sites/:host', async (request) => {
+    const body = parse(z.object({ name: z.string().max(80, zmsg('Nom trop long (80 caractères maximum)', 'Name too long (80 characters max)')).nullable() }), request.body);
+    const host = siteHost(String(request.params.host ?? '').slice(0, 253));
+    const name = body.name?.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim() || null;
+    if (!host || !run(db, 'UPDATE web_sites SET name = ? WHERE account_id = ? AND host = ?', name, request.accountId, host)) {
+      throw notFound(t('Site introuvable', 'Site not found'));
+    }
+    return { data: listSites(db, request.accountId) };
+  });
+
+  // « Retirer ce site » : le site et ses actions repérées ; il réapparaît s'il envoie de nouveau des pages.
+  app.delete<{ Params: { host: string } }>('/inbound/sites/:host', async (request) => {
+    const host = siteHost(String(request.params.host ?? '').slice(0, 253));
+    if (!host || !deleteSite(db, request.accountId, host)) throw notFound(t('Site introuvable', 'Site not found'));
+    return { data: listSites(db, request.accountId) };
+  });
+
   app.patch('/inbound/tracking', async (request) => {
-    const body = parse(z.object({ enabled: z.boolean().optional(), require_consent: z.boolean().optional() }), request.body);
+    const body = parse(
+      z.object({ enabled: z.boolean().optional(), require_consent: z.boolean().optional(), capture_actions: z.boolean().optional() }),
+      request.body,
+    );
     ensureTracking(db, request.accountId);
     if (body.enabled !== undefined) run(db, 'UPDATE web_tracking SET enabled = ? WHERE account_id = ?', body.enabled ? 1 : 0, request.accountId);
     if (body.require_consent !== undefined) run(db, 'UPDATE web_tracking SET require_consent = ? WHERE account_id = ?', body.require_consent ? 1 : 0, request.accountId);
+    if (body.capture_actions !== undefined) run(db, 'UPDATE web_tracking SET capture_actions = ? WHERE account_id = ?', body.capture_actions ? 1 : 0, request.accountId);
     return view(request.accountId);
   });
 

@@ -45,9 +45,17 @@ export async function automationRoutes(app: FastifyInstance, { db }: Deps) {
     const automation = load(accountId, id);
     return { ...automation, ...automationStats(db, automation.id) };
   };
-  const assertTagConfig = (trigger: string, config: { tag?: string } | undefined) => {
+  const assertTagConfig = (trigger: string, config: { tag?: string; action?: string } | undefined) => {
     if (trigger === 'tag_added' && !config?.tag) {
       throw badRequest(t('Le déclencheur « tag ajouté » nécessite trigger_config.tag', 'The “tag added” trigger requires trigger_config.tag'));
+    }
+    if (trigger === 'site_action' && !config?.action) {
+      throw badRequest(
+        t(
+          'Le déclencheur « Une action sur votre site » nécessite trigger_config.action (signup, login, newsletter, contact ou form)',
+          'The “Action on your site” trigger requires trigger_config.action (signup, login, newsletter, contact or form)',
+        ),
+      );
     }
   };
 

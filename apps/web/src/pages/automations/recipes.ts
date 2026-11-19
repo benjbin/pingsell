@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { CalendarClock, CalendarHeart, Crown, Eye, Globe, Hourglass, MousePointerClick, PackageCheck, Repeat, ShoppingCart, Sparkles } from "lucide-react";
+import { CalendarClock, CalendarHeart, Crown, Eye, Globe, Hourglass, MousePointerClick, PackageCheck, Repeat, ShoppingCart, Sparkles, UserRoundPlus } from "lucide-react";
 import type { AutomationStep, AutomationTrigger } from "../../lib/types";
 import { DEFAULT_EMAIL_HTML } from "../campaigns/defaultTemplate";
 import { t } from "../../lib/i18n";
@@ -49,6 +49,42 @@ export const RECIPES: Recipe[] = [
       days(5),
       { type: "exit_if", condition: "ordered" },
       email(t("{{first_name|}}, -10 % sur votre première commande", "{{first_name|}}, 10% off your first order"), t("Un cadeau de bienvenue", "A welcome gift"), [t("Avec le code <strong>BIENVENUE10</strong>, valable 7 jours.", "With the code <strong>WELCOME10</strong>, valid for 7 days.")], t("En profiter", "Use it")),
+    ],
+  },
+  {
+    id: "compte-bienvenue",
+    icon: UserRoundPlus,
+    name: t("Bienvenue après la création de compte", "Welcome after account creation"),
+    pitch: t(
+      "Quelqu'un crée un compte sur votre site\u00a0: email de bienvenue tout de suite, votre équipe est prévenue, puis un petit suivi 3 jours après. Rien à programmer, la ligne Pingsell le repère toute seule.",
+      "Someone creates an account on your site: welcome email right away, your team is alerted, then a short follow-up 3 days later. Nothing to code, the Pingsell line spots it on its own.",
+    ),
+    tags: [t("Vos sites", "Your sites"), t("Alerte équipe", "Team alert")],
+    trigger: "site_action",
+    trigger_config: { action: "signup" },
+    steps: [
+      email(
+        t("Bienvenue {{first_name|}}\u00a0!", "Welcome {{first_name|}}!"),
+        t("Votre compte est prêt", "Your account is ready"),
+        [
+          t("Bonjour {{first_name|}}, merci d'avoir créé votre compte sur {{event.site}}.", "Hi {{first_name|}}, thanks for creating your account on {{event.site}}."),
+          t("Vous pouvez maintenant vous connecter quand vous voulez. Une question\u00a0? Répondez simplement à cet email, nous vous répondons rapidement.", "You can now sign in whenever you like. Any question? Just reply to this email, we'll get back to you quickly."),
+        ],
+        t("Accéder à mon compte", "Go to my account"),
+      ),
+      {
+        type: "notify",
+        to: "",
+        subject: t("Nouveau compte créé\u00a0: {{first_name|}} {{last_name|}}", "New account created: {{first_name|}} {{last_name|}}"),
+        message: t("{{email}} vient de créer un compte sur {{event.site}} ({{event.page}}).", "{{email}} just created an account on {{event.site}} ({{event.page}})."),
+      },
+      days(3),
+      email(
+        t("Tout se passe bien, {{first_name|}}\u00a0?", "All good, {{first_name|}}?"),
+        t("On peut vous aider\u00a0?", "Can we help?"),
+        [t("Vous avez créé votre compte il y a quelques jours. Si quelque chose n'est pas clair, répondez à cet email\u00a0: une vraie personne vous lira.", "You created your account a few days ago. If anything is unclear, reply to this email: a real person will read it.")],
+        t("Revenir sur le site", "Back to the site"),
+      ),
     ],
   },
   {

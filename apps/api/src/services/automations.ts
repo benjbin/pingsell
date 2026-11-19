@@ -23,8 +23,24 @@ export const TRIGGERS = [
   'segment_entered',
   'page_visited',
   'product_viewed',
+  'site_action',
 ] as const;
 export type Trigger = (typeof TRIGGERS)[number];
+
+/** Actions que le script repère tout seul sur le site du marchand (déclencheur « Une action sur votre site »). */
+export const SITE_ACTIONS = ['signup', 'login', 'newsletter', 'contact', 'form'] as const;
+export type SiteAction = (typeof SITE_ACTIONS)[number];
+
+/** « https://www.Exemple.fr/x » ou « www.exemple.fr » → « exemple.fr » (même règle que siteHost() des formulaires). */
+export function hostOf(value: string): string {
+  const raw = value.trim().toLowerCase();
+  if (!raw) return '';
+  try {
+    return new URL(/^[a-z]+:\/\//.test(raw) ? raw : `https://${raw}`).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
 
 /** « Rappel Réservation » → « rappel_reservation »: the name a site sends and an automation listens to. */
 export function normalizeEventName(name: string): string {
@@ -235,6 +251,17 @@ export const triggerConfigSchema = z
     segment_id: z.string().trim().min(1).max(64).optional(),
     /** product_viewed: hours without purchase before the journey starts. */
     hours: z.number().min(0.25).max(168).optional(),
+    /** page_visited, product_viewed, site_action : un seul site (domaine) ; vide = tous les sites. */
+    host: z
+      .string()
+      .trim()
+      .max(253)
+      .transform((v) => (v ? hostOf(v) || v.toLowerCase() : ''))
+      .optional(),
+    /** site_action : l'action repérée (création de compte, connexion…). */
+    action: z.enum(SITE_ACTIONS).optional(),
+    /** site_action : un formulaire précis (form_key) ; vide = tous les formulaires de cette action. */
+    form: z.string().trim().max(200).optional(),
   })
   .loose();
 export type TriggerConfig = z.output<typeof triggerConfigSchema>;
@@ -268,6 +295,13 @@ function matchesConfig(trigger: Trigger, config: TriggerConfig, data: Record<str
   if (trigger === 'tag_added' && config.tag) {
     return typeof data.tag === 'string' && data.tag.trim().toLowerCase() === config.tag.trim().toLowerCase();
   }
+  if (trigger === 'site_action') {
+    if (!config.action || data.action !== config.action) return false;
+    if (config.host && data.host !== config.host) return false;
+    return !config.form || data.form_key === config.form;
+  }
+  // « Page visitée » sur un seul site : le domaine de la page doit être celui choisi.
+  if (trigger === 'page_visited' && config.host && (typeof data.url !== 'string' || hostOf(data.url) !== config.host)) return false;
   if ((trigger === 'email_clicked' || trigger === 'page_visited') && config.url_contains) {
     return typeof data.url === 'string' && data.url.toLowerCase().includes(config.url_contains.toLowerCase());
   }
@@ -858,6 +892,33 @@ export function firePageVisited(db: DatabaseSync, accountId: string, contactId: 
     if (startOnce(db, a.id, contactId, `page:${day.y}-${day.m}-${day.d}`, data)) started++;
   }
   return started;
+}
+
+/**
+ * « Une action sur votre site » : un contact abonné vient de créer un compte, se connecter, s'inscrire à la
+ * newsletter, écrire via un formulaire… Une création de compte démarre chaque automatisation au plus une
+ * fois par contact (à vie) ; les autres actions au plus une fois par jour. Le même envoi reçu deux fois
+ * ne démarre donc jamais deux parcours.
+ */
+export function fireSiteAction(
+  db: DatabaseSync,
+  accountId: string,
+  contactId: string,
+  data: { action: SiteAction; host: string; form_key: string; site: string; page: string; form: string },
+): number {
+  return transaction(db, () => {
+    const contact = get<{ status: string }>(db, 'SELECT status FROM contacts WHERE id = ? AND account_id = ?', contactId, accountId);
+    if (contact?.status !== 'subscribed') return 0;
+    const day = parisParts(Date.now());
+    let started = 0;
+    for (const a of all(db, "SELECT * FROM automations WHERE account_id = ? AND trigger = 'site_action' AND status = 'active'", accountId).map(serializeAutomation)) {
+      if (!matchesConfig('site_action', a.trigger_config, data)) continue;
+      const key = data.action === 'signup' ? 'site:signup' : `site:${data.action}:${day.y}-${day.m}-${day.d}`;
+      if (data.action !== 'signup' && scalar(db, "SELECT COUNT(*) FROM automation_runs WHERE automation_id = ? AND contact_id = ? AND status = 'pending'", a.id, contactId) > 0) continue;
+      if (startOnce(db, a.id, contactId, key, data)) started++;
+    }
+    return started;
+  });
 }
 
 /** « 1990-05-14 », « 14/05/1990 », « 1990-05-14T… » → [month, day, year?]. */

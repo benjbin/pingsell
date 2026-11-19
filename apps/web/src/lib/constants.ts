@@ -7,6 +7,8 @@ import type {
   SegmentField,
   SegmentOp,
   ExitCondition,
+  SiteActionKind,
+  WebSite,
 } from "./types";
 import { t } from "./i18n";
 
@@ -51,6 +53,13 @@ export const TRIGGERS: Record<AutomationTrigger, { label: string; description: s
   segment_entered: { label: t("Entre dans un segment", "Enters a segment"), description: t("Quand un client rejoint un segment (gros clients, fidèles, à risque…).", "When a customer joins a segment (big spenders, loyal, at risk…).") },
   page_visited: { label: t("Page visitée", "Page visited"), description: t("Quand un client connu ouvre une page de votre site (toutes, ou celles qui contiennent un mot : /tarifs, /reservation…). Une fois par jour au plus.", "When a known customer opens a page of your site (any, or those containing a word: /pricing, /booking…). At most once a day.") },
   product_viewed: { label: t("Produit consulté sans achat", "Product viewed, not bought"), description: t("Quand un client a regardé un produit sans l'acheter ni le mettre au panier. Le produit, sa photo et son prix sont repris dans le message.", "When a customer looked at a product without buying it or adding it to the cart. The product, its photo and price go into the message.") },
+  site_action: {
+    label: t("Une action sur votre site", "An action on your site"),
+    description: t(
+      "Création de compte, connexion, inscription newsletter, formulaire de contact\u00a0: repérés tout seuls par la ligne Pingsell, sans rien programmer.",
+      "Account created, sign-in, newsletter sign-up, contact form: spotted automatically by the Pingsell line, nothing to code.",
+    ),
+  },
   event: {
     label: t("Événement de votre site", "Event from your site"),
     description: t("N'importe quel moment envoyé par votre site : réservation, rendez-vous, avis, abonnement, anniversaire…", "Any moment your site sends: booking, appointment, review, subscription, birthday…"),
@@ -130,3 +139,16 @@ export const OPS_BY_KIND: Record<FieldKind, Array<{ op: SegmentOp; label: string
     { op: "neq", label: t("jamais visitée, contenant", "never visited, containing") },
   ],
 };
+
+/** Actions the Pingsell line spots on its own, in plain words. */
+export const SITE_ACTIONS: Record<SiteActionKind, { label: string; any: string; short: string }> = {
+  signup: { label: t("Création de compte", "Account created"), any: t("N'importe quelle création de compte", "Any account creation"), short: t("une création de compte", "an account creation") },
+  login: { label: t("Connexion", "Sign-in"), any: t("N'importe quelle connexion", "Any sign-in"), short: t("une connexion", "a sign-in") },
+  newsletter: { label: t("Inscription newsletter", "Newsletter sign-up"), any: t("N'importe quelle inscription newsletter", "Any newsletter sign-up"), short: t("une inscription newsletter", "a newsletter sign-up") },
+  contact: { label: t("Formulaire de contact", "Contact form"), any: t("N'importe quel formulaire de contact", "Any contact form"), short: t("un formulaire de contact", "a contact form") },
+  form: { label: t("Formulaire", "Form"), any: t("N'importe quel autre formulaire", "Any other form"), short: t("un formulaire", "a form") },
+};
+export const SITE_ACTION_KINDS = Object.keys(SITE_ACTIONS) as SiteActionKind[];
+
+/** « Night Square » when the merchant named it, else its domain. */
+export const siteLabel = (site: Pick<WebSite, "host" | "name">) => site.name?.trim() || site.host;

@@ -28,6 +28,7 @@ import { cx } from "../lib/format";
 import { Button, Card, Input, PageHeader } from "../components/ui/primitives";
 import { useToast } from "../components/ui/Toast";
 import { ApiGuide, AppGuide, FileGuide, ShopifyGuide, type ApiKind } from "../components/connect/ConnectGuides";
+import { SiteEventsPanel } from "../components/connect/SiteEvents";
 import { FormGuide, NoCodeGuide, PluginGuide, TrackingGuide, type NoCodeTab } from "../components/connect/NoCodeGuides";
 
 type ToolId = "shopify" | "wordpress" | "prestashop" | "nocode" | "form" | "suivi" | "site" | "crm" | "pos" | "backoffice" | "app" | "file" | "other";
@@ -37,7 +38,7 @@ const TOOLS: Array<{ id: ToolId; icon: LucideIcon; title: string; text: string; 
   { id: "wordpress", icon: Blocks, title: "WordPress & WooCommerce", text: t("Comptes, paniers abandonnés, commandes, suivi et formulaires.", "Accounts, abandoned carts, orders, tracking and forms."), how: t("Extension · 2 min", "Plugin · 2 min") },
   { id: "prestashop", icon: ShoppingBasket, title: "PrestaShop", text: t("Comptes, newsletter, paniers, commandes et suivi.", "Accounts, newsletter, carts, orders and tracking."), how: t("Module · 2 min", "Module · 2 min") },
   { id: "nocode", icon: Webhook, title: "Framer, Webflow, Wix…", text: t("Formulaires et commandes, sans code ni Zapier.", "Forms and orders, no code, no Zapier."), how: t("Webhook · 2 min", "Webhook · 2 min") },
-  { id: "suivi", icon: Activity, title: t("Suivi du site", "Site tracking"), text: t("Pages et produits vus, visiteurs reconnus. Une ligne à coller.", "Pages and products viewed, visitors recognised. One line to paste."), how: t("1 ligne", "1 line") },
+  { id: "suivi", icon: Activity, title: t("Vos sites", "Your sites"), text: t("Une ligne à coller\u00a0: pages, produits, comptes créés et formulaires repérés tout seuls.", "One line to paste: pages, products, accounts created and forms spotted on their own."), how: t("1 ligne", "1 line") },
   { id: "form", icon: FormInput, title: t("Formulaire à coller", "Paste-in form"), text: t("Un formulaire d'inscription pour n'importe quel site.", "A sign-up form for any site."), how: t("Copier-coller", "Copy & paste") },
   { id: "site", icon: Globe, title: t("Site sur mesure", "Custom website"), text: t("Inscriptions, commandes, réservations : un seul appel API.", "Sign-ups, orders, bookings: a single API call."), how: "API · 5 min", api: "site" },
   { id: "crm", icon: Contact, title: t("Votre CRM", "Your CRM"), text: t("Fiches clients et étapes, envoyées comme tags.", "Customer records and stages, sent as tags."), how: "API · 5 min", api: "crm" },
@@ -76,12 +77,14 @@ export function IntegrationsPage() {
   const [done, setDone] = useState<Partial<Record<ToolId, string>>>({});
   const [nocodeTab, setNocodeTab] = useState<NoCodeTab>("framer");
   const status = useAsync(async () => {
-    const [shopify, keys, push, contacts, inbound] = await Promise.all([
+    const [shopify, keys, push, contacts, inbound, events, sites] = await Promise.all([
       api.integrations.shopify.status().catch(() => null),
       api.apiKeys.list().catch(() => []),
       api.push.config().catch(() => null),
       api.contacts.list({ limit: 1 }).catch(() => null),
       api.inbound.get().catch(() => null),
+      api.automations.eventNames().catch(() => []),
+      api.inbound.sites().catch(() => []),
     ]);
     return {
       shopify: !!shopify?.integration && shopify.integration.connected !== false,
@@ -89,6 +92,8 @@ export function IntegrationsPage() {
       devices: push?.devices.total ?? 0,
       contacts: contacts?.total ?? 0,
       pageviews: inbound?.tracking?.pageviews ?? 0,
+      siteEvents: events.length,
+      sites: sites.length,
     };
   }, [done]);
 
@@ -106,8 +111,15 @@ export function IntegrationsPage() {
     if (it.id === "file") return s.contacts
         ? t(`${s.contacts.toLocaleString(LOCALE)} contacts`, `${s.contacts.toLocaleString(LOCALE)} contact${s.contacts === 1 ? "" : "s"}`)
         : null;
+    if (it.id === "suivi" && s.sites) return t(`${s.sites} site${s.sites > 1 ? "s" : ""}`, `${s.sites} site${s.sites === 1 ? "" : "s"}`);
     if (it.id === "suivi") return s.pageviews
         ? t(`${s.pageviews.toLocaleString(LOCALE)} pages vues`, `${s.pageviews.toLocaleString(LOCALE)} page views`)
+        : null;
+    if (it.id === "site") return s.siteEvents
+        ? t(
+            `${s.siteEvents} événement${s.siteEvents > 1 ? "s" : ""} reçu${s.siteEvents > 1 ? "s" : ""}`,
+            `${s.siteEvents} event${s.siteEvents === 1 ? "" : "s"} received`,
+          )
         : null;
     if (it.id === "other") return s.keysUsed
         ? t(
@@ -204,6 +216,24 @@ export function IntegrationsPage() {
               {tool.id === "nocode" && <NoCodeGuide key={nocodeTab} initialTab={nocodeTab} done={done.nocode} onDone={mark("nocode")} onUseForm={() => open("form")} />}
               {tool.id === "form" && <FormGuide done={done.form} onDone={mark("form")} />}
               {tool.id === "suivi" && <TrackingGuide done={done.suivi} onDone={mark("suivi")} />}
+              {tool.id === "site" && (
+                <div className="mb-8 border-b border-slate-900/10 pb-8 dark:border-white/10">
+                  <p className="mb-6 rounded-2xl bg-brand-50/70 px-4 py-3 text-sm text-slate-700 dark:bg-brand-500/15 dark:text-slate-200">
+                    {t(
+                      "Pas besoin de l'API pour les comptes créés, les connexions ou les formulaires\u00a0: la ligne de ",
+                      "No need for the API for accounts created, sign-ins or forms: the ",
+                    )}
+                    <button type="button" onClick={() => open("suivi")} className="font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300">
+                      {t("Vos sites", "Your sites")}
+                    </button>
+                    {t(
+                      " les capte toute seule dans le navigateur. L'API sert seulement à ce qui se passe sur votre serveur, par exemple un paiement confirmé.",
+                      " line captures them on its own in the browser. The API is only for what happens on your server, for example a confirmed payment.",
+                    )}
+                  </p>
+                  <SiteEventsPanel />
+                </div>
+              )}
               {tool.api && <ApiGuide key={tool.id} kind={tool.api} done={done[tool.id]} onDone={mark(tool.id)} onUseFile={() => open("file")} onKeyCreated={() => void status.reload()} />}
               {tool.id === "app" && <AppGuide done={done.app} onDone={mark("app")} />}
               {tool.id === "file" && <FileGuide done={done.file} onDone={mark("file")} />}

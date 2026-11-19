@@ -11,7 +11,14 @@
  *   schema.org / Open Graph data shops already publish), and who the visitor is — a click in a Pingsell
  *   email, any form with an email on the site, or `Pingsell.identify(email)`. Waits for cookie consent when
  *   the merchant asks (`Pingsell.consent(true)`, Cookiebot, Axeptio).
- * Plain ES5, no dependency, ~7 KB.
+ * - action capture, with no code (merchant setting `act`, and only with cookie consent when it is required):
+ *   any form of the site with an email in it is recognised as a création de compte (signup), connexion (login),
+ *   newsletter, contact or other form — password-reset and checkout / payment forms are left out — and reported
+ *   (`k:'act'`: email, first/last name, phone — never a password, hidden, card or IBAN field; token-looking URL
+ *   segments masked) only once the submission succeeded: next page in the tab, single-page navigation, or the form
+ *   removed, hidden or emptied within 20 s; nothing is sent when the form shows errors. Optional escape hatch on the
+ *   form: `data-pingsell-action="signup|login|newsletter|contact|form|ignore"` and `data-pingsell-name="Inscription"`.
+ * Plain ES5, no dependency, ~28 KB (~10 KB gzipped).
  */
 export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
 (function () {
@@ -79,6 +86,9 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
     if (!TRACK.on || navigator.webdriver) return;
     if (!granted) { if (held.length < 20) held.push(p); return; }
     p.v = visitor(true);
+    beam(p);
+  }
+  function beam(p) {
     var body = JSON.stringify(p);
     try {
       if (navigator.sendBeacon && navigator.sendBeacon(HIT, new Blob([body], { type: 'text/plain' }))) return;
@@ -186,7 +196,209 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
   api.identify = function (email) { if (email && String(email).indexOf('@') > 0) hit({ k: 'id', e: String(email).trim() }); };
   /** Pingsell.page(): count a page by hand (rarely needed, single-page apps are handled). */
   api.page = function () { lastUrl = null; page(); };
+
+  /* Actions: which form was sent (signup, login, newsletter, contact, form), reported once it succeeded. */
+  // TRACK.act: the merchant's « Repérer les actions automatiquement » (missing in old cached configs = on).
+  var ACT = TRACK.act !== false, KINDS = { signup: 1, login: 1, newsletter: 1, contact: 1, form: 1 };
+  var PK = 'ps_pending:' + ENDPOINT.split('/').pop(), LIFE = 18e5;
+  var EMAIL = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+  var SECRET = /\\bcc\\b|card|carte|cvc|cvv|csc|iban|\\bbic\\b|secu|\\bssn\\b/, PASSW = /pass|pwd|mot de passe|\\bmdp\\b/;
+  var SIGNUP = /inscri|sign ?up|\\bregist|creer (un |mon |votre )?compte|create (an |your )?account|\\bjoin|rejoindre|nouveau compte|new account/;
+  var LOGIN = /connexion|connecter|\\blog ?in\\b|sign ?in\\b|identifi/;
+  var RESET = /oubli|forgot|reset|reinitialis|recuper|recover|lost password|nouveau mot de passe|change password|modifier le mot de passe/;
+  var UNSUB = /unsubscri|desabonn|desinscri|opt ?out|me retirer/, REFER = /friend|\\bamis?\\b|recipient|destinataire|parrain|filleul|\\brefer|gift|cadeau|invit/;
+  var PROFILE = /profile|profil|mon compte|my account|edit account|modifier (mon|le) compte|parametres|settings|password change|changement de mot de passe|changer (de |le |mon )?mot de passe/;
+  var MINE = /creer (un |mon |votre )?compte|create (an |my |your )?account/g; // « Créer mon compte » is a signup, not a profile
+  var SHOP = /checkout|commande|paiement|payment|panier|\\bcart\\b|billing|facturation|livraison|shipping/;
+  var ERR = '[class*=error],[class*=Error],[class*=erreur],[class*=invalid],[class*=Invalid],[id*=error],[id*=erreur],[id*=invalid]';
+  function norm(s) {
+    s = String(s || '').toLowerCase();
+    if (s.normalize) s = s.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+    return s.replace(/[-_.]+/g, ' ');
+  }
+  function txt(el) { return (el.textContent || '').replace(/\\s+/g, ' ').replace(/^ | $/g, ''); }
+  function here() { return location.pathname + location.search; }
+  /** Path segments / query values that look like a token (uuid, long hex, long letters+digits) → ':id'. */
+  function mask(s) {
+    return s.replace(/[^\\/?&=#]+/g, function (g) {
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(g) || /^[0-9a-f]{16,}$/i.test(g) ||
+        (/^[A-Za-z0-9]{16,}$/.test(g) && /[a-z]/i.test(g) && /[0-9]/.test(g)) ||
+        /^[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}$/.test(g) ? ':id' : g;
+    });
+  }
+  function pend() { try { return JSON.parse(sessionStorage.getItem(PK) || '{}') || {}; } catch (e) { return {}; } }
+  function keep(m) {
+    try { for (var k in m) { sessionStorage.setItem(PK, JSON.stringify(m)); return; } sessionStorage.removeItem(PK); } catch (e) {}
+  }
+  function drop(f, id) { var m = pend(); if (m[f] && (!id || m[f].id === id)) { delete m[f]; keep(m); } }
+  /** Sends a pending action once (removed from the tab's storage first), with the visitor only if consented. */
+  function land(f, id) {
+    var m = pend(), P = m[f];
+    if (!P || (id && P.id !== id)) return;
+    delete m[f]; keep(m);
+    if (Date.now() - P.t > LIFE || !TRACK.on || !ACT || !granted || window.__pingsellNoTrack || navigator.webdriver) return;
+    var p = { k: 'act', a: P.a, f: P.f, l: P.l, u: P.u, e: P.e, v: visitor(true) };
+    if (P.fn) p.fn = P.fn; if (P.ln) p.ln = P.ln; if (P.ph) p.ph = P.ph;
+    beam(p);
+  }
+  function shown(el) {
+    for (; el && el.nodeType === 1; el = el.parentNode) {
+      var cs = window.getComputedStyle ? getComputedStyle(el) : null;
+      if (el.hidden || (cs && (cs.display === 'none' || cs.visibility === 'hidden'))) return false;
+    }
+    return el === document;
+  }
+  function heading(form) {
+    var h = form.querySelector('h1,h2,h3,h4,legend');
+    for (var n = form, up = 0; !h && n && n !== document.body && up < 3; n = n.parentNode, up++) {
+      for (var s = n.previousElementSibling; s && !h; s = s.previousElementSibling) {
+        if (/^(H[1-4]|LEGEND)$/.test(s.tagName)) h = s;
+        else { var l = s.querySelectorAll('h1,h2,h3,h4'); h = l[l.length - 1]; }
+      }
+    }
+    return h ? txt(h) : '';
+  }
+  /** Same form on every page (footer newsletter) = same key: '#' + name, id, name or action; else path + '#form<n>'. */
+  function formKey(form) {
+    var k = form.getAttribute('data-pingsell-name') || form.getAttribute('id') || form.getAttribute('name'), act = form.getAttribute('action');
+    if (!k && act && !/^(#|javascript:)/i.test(act)) {
+      var a = document.createElement('a'); a.href = act;
+      k = (a.hostname && a.hostname !== location.hostname ? a.hostname : '') + mask(a.pathname || '');
+    }
+    return (k ? '#' + k : mask(location.pathname) + '#form' + Array.prototype.indexOf.call(document.forms, form)).slice(0, 200);
+  }
+  /** Reads only email, names and phone; counts the visible fields (never reads passwords, hidden or card fields). */
+  function scrape(form) {
+    var r = { pw: 0, n: 0, ta: 0, nm: 0, tel: 0, ox: 0 }, els = form.elements || [], full = '';
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i], ty = String(el.type || '').toLowerCase();
+      if (!/^(text|email|tel|search|url|number|password|textarea|select-one|select-multiple)$/.test(ty) || !shown(el)) continue;
+      if (el.getAttribute('tabindex') === '-1' || (el.closest && el.closest('[aria-hidden=true]'))) continue; // honeypots
+      var ac = norm(el.getAttribute('autocomplete')), nm = norm(el.getAttribute('name')), key = nm + ' ' + norm(el.id) + ' ' + ac;
+      if (ty === 'password' || PASSW.test(key)) { r.pw++; if (ac === 'current password') r.cur = 1; continue; }
+      r.n++;
+      if (/address line|postal code|^cc |\\bcc /.test(ac)) r.shop = 1;
+      if (ty === 'textarea') { r.ta++; continue; }
+      if (ty.indexOf('select') === 0 || SECRET.test(key)) { r.ox++; continue; }
+      if (ty === 'search' || /^(q|s|search|query|recherche|keywords?)$/.test(nm)) r.q = 1;
+      var v = String(el.value || '').replace(/^\\s+|\\s+$/g, '');
+      if (ty === 'email' || /mail/.test(key)) {
+        // A friend's / recipient's address (referral, gift, invitation) is never the visitor's.
+        var lb = ''; try { for (var b = 0; el.labels && b < el.labels.length; b++) lb += ' ' + txt(el.labels[b]); } catch (e) {}
+        if (REFER.test(key + ' ' + norm(el.getAttribute('placeholder')) + ' ' + norm(el.getAttribute('aria-label')) + ' ' + norm(lb))) continue;
+        if (!r.e && EMAIL.test(v)) { r.e = v.slice(0, 254); r.el = el; }
+      }
+      else if (ty === 'tel' || /^tel/.test(ac) || /phone|telephone|mobile|portable|\\btel\\b/.test(key)) { r.tel = 1; r.ox++; if (v && !r.ph) r.ph = v.slice(0, 40); }
+      else if (ac === 'given name' || /prenom|first|given|\\bfname\\b/.test(key)) { r.nm = 1; if (v && !r.fn) r.fn = v.slice(0, 100); }
+      else if (ac === 'family name' || (/\\bnom\\b|last|surname|family|\\blname\\b/.test(key) && !/complet/.test(key))) { r.nm = 1; if (v && !r.ln) r.ln = v.slice(0, 100); }
+      else if (ac === 'name' || (/\\bname\\b|display name|full ?name|nom complet/.test(key) && !/user|company|societe|entreprise/.test(key))) { r.nm = 1; if (v && !full) full = v; }
+      else r.ox++;
+    }
+    if (full && !r.fn && !r.ln) { var sp = full.indexOf(' '); r.fn = (sp > 0 ? full.slice(0, sp) : full).slice(0, 100); if (sp > 0) r.ln = full.slice(sp + 1).slice(0, 100); }
+    return r;
+  }
+  /** null = not an action (password reset, checkout / payment). */
+  function classify(form, F, bt) {
+    var own = norm([form.getAttribute('id'), form.getAttribute('class'), form.getAttribute('name'), form.getAttribute('action'), bt].join(' '));
+    var local = own + ' ' + norm(heading(form)), wide = norm(location.pathname + ' ' + document.title);
+    // Not an action: password reset, unsubscribe, account / profile edit (page words only when no password, so the
+    // login and signup forms of a « Mon compte » page still count), password change.
+    if (RESET.test(local + ' ' + wide) || UNSUB.test(local + ' ' + wide) ||
+      PROFILE.test(local.replace(MINE, '')) || (!F.pw && PROFILE.test(wide.replace(MINE, '')))) return null;
+    if (F.cur && F.pw >= 2) return null;
+    // Checkout: the form's own words or address / card fields; the page's words only for a big form (not the footer newsletter).
+    if (F.shop || SHOP.test(own) || (F.n > 3 && SHOP.test(wide))) return null;
+    if (F.pw >= 2) return 'signup';
+    if (F.pw === 1) {
+      if (SIGNUP.test(local)) return 'signup';
+      if (LOGIN.test(local)) return 'login';
+      if (SIGNUP.test(wide)) return 'signup';
+      if (LOGIN.test(wide)) return 'login';
+      return F.nm || F.tel ? 'signup' : 'login';
+    }
+    if (F.ta) return 'contact';
+    if (F.ox) return 'form';
+    // Email alone (+ names / checkboxes): a newsletter, unless the form itself speaks of signing in (magic link).
+    return !F.nm && LOGIN.test(local) ? 'login' : 'newsletter';
+  }
+  function errors(form) {
+    if (form.querySelector('[aria-invalid=true]')) return true;
+    // Field by field, no checkValidity() (it fires 'invalid' events); an empty required field is not an error
+    // (forms are often reset after success).
+    if (!form.hasAttribute('novalidate')) {
+      for (var j = 0, els = form.elements || []; j < els.length; j++) {
+        var va = els[j].validity;
+        if (va && !va.valid && !va.valueMissing && els[j].type !== 'hidden' && shown(els[j])) return true;
+      }
+    }
+    var roots = [form], box = form.parentNode;
+    if (box && box !== document.body && box.querySelectorAll) roots.push(box);
+    for (var r = 0; r < roots.length; r++) {
+      var l = roots[r].querySelectorAll(ERR);
+      for (var i = 0; i < l.length; i++) {
+        if (!l[i].contains(form) && !/^(INPUT|SELECT|TEXTAREA)$/.test(l[i].tagName) && txt(l[i]) && shown(l[i])) return true;
+      }
+    }
+    return false;
+  }
+  function onAct(e) {
+    var form = e.target;
+    if (!form || !form.querySelectorAll || !form.getAttribute || form.__pingsell || form.hasAttribute('data-pingsell')) return;
+    if (form.closest && form.closest('[data-pingsell-form]')) return;
+    var o = norm(form.getAttribute('data-pingsell-action'));
+    if (o === 'ignore') return;
+    if (TRACK.consent && !granted) return;
+    var F = scrape(form);
+    if (!F.e) return;
+    if (KINDS[o] !== 1 && ((form.closest && form.closest('[role=search]')) || (F.n === 1 && F.q))) return;
+    var btn = e.submitter || form.querySelector('[type=submit],button:not([type])');
+    var bt = btn ? (txt(btn) || btn.value || '').slice(0, 120) : '';
+    var label = form.getAttribute('data-pingsell-name'), kind = KINDS[o] === 1 ? o : classify(form, F, bt);
+    if (!kind) return;
+    var P = { id: Math.random().toString(36).slice(2), t: Date.now(), a: kind, f: formKey(form),
+      l: (label || heading(form) || bt || form.getAttribute('id') || '').slice(0, 120),
+      u: (location.protocol + '//' + location.host + mask(here())).slice(0, 1000),
+      pu: here(), e: F.e, fn: F.fn, ln: F.ln, ph: F.ph };
+    var m = pend(); m[P.f] = P; keep(m);
+    setTimeout(function () { verify(form, F.el, P.f, P.id); }, 400);
+  }
+  /** 400 ms after the submit: errors shown → forget it; else wait for a sign of success. */
+  function verify(form, mail, f, id) {
+    var m = pend(), P = m[f];
+    if (!P || P.id !== id) return;
+    if (document.documentElement.contains(form) && errors(form)) return drop(f, id);
+    P.ok = 1; keep(m);
+    if (here() !== P.pu) return land(f, id);
+    (function watch() {
+      var Q = pend()[f];
+      if (!Q || Q.id !== id) return;
+      if (!document.documentElement.contains(form) || !shown(form) || (mail && !mail.value)) return land(f, id);
+      if (errors(form)) return drop(f, id);
+      if (Date.now() < P.t + 2e4) setTimeout(watch, 500);
+    })();
+  }
+  /** Single-page navigation away from the form's page: the submission went through. */
+  function settle() {
+    var m = pend();
+    for (var f in m) if (m[f] && m[f].ok && m[f].pu !== here()) land(f, m[f].id);
+  }
+  /** New page in the tab: an action submitted on another page (or whose form is gone) succeeded. */
+  function resume() {
+    var m = pend();
+    for (var f in m) {
+      var P = m[f], seen = false;
+      if (!P || P.t >= started) continue;
+      if (Date.now() - P.t > LIFE) { drop(f); continue; }
+      if (P.pu === here()) for (var i = 0; i < document.forms.length; i++) if (formKey(document.forms[i]) === f) seen = true;
+      if (seen) drop(f, P.id); else land(f, P.id);
+    }
+  }
+
   if (TRACK.on) {
+    if (ACT) {
+      document.addEventListener('submit', onAct, true);
+      if (document.readyState === 'complete') setTimeout(resume, 1000); else window.addEventListener('load', function () { setTimeout(resume, 1000); });
+    }
     // Any form on the site with an email in it (newsletter, account, checkout, contact…).
     document.addEventListener('submit', function (e) {
       var f = e.target; if (!f || !f.querySelectorAll) return;
@@ -197,7 +409,7 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
       }
     }, true);
     // Single-page sites (Framer, Wix, Webflow, React…): count each navigation.
-    var navigated = function () { setTimeout(page, 400); };
+    var navigated = function () { setTimeout(page, 400); setTimeout(settle, 450); };
     var wrap = function (name) {
       var orig = history[name];
       if (!orig) return;

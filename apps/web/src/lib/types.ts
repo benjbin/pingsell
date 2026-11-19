@@ -337,7 +337,21 @@ export type AutomationTrigger =
   | "inactive"
   | "segment_entered"
   | "page_visited"
-  | "product_viewed";
+  | "product_viewed"
+  | "site_action";
+
+/** What the Pingsell script spots on its own on the merchant's sites. */
+export type SiteActionKind = "signup" | "login" | "newsletter" | "contact" | "form";
+
+/** trigger_config of « Une action sur votre site » (host empty = every site). */
+export interface SiteActionConfig {
+  host?: string;
+  action: SiteActionKind;
+  /** A precise form (form_key); empty = any form of that kind. */
+  form?: string;
+  /** Readable label of that form, kept for the automation list (UI only). */
+  form_label?: string;
+}
 
 export type ExitCondition = "push_opened" | "email_opened" | "email_clicked" | "ordered";
 
@@ -642,12 +656,33 @@ export interface InboundLastCall {
 export interface TrackingSettings {
   enabled: boolean;
   require_consent: boolean;
+  /** « Repérer les actions automatiquement » (comptes, connexions, newsletter, formulaires). Absent = on. */
+  capture_actions?: boolean;
   pageviews: number;
   last_seen_at: string | null;
   last_url: string | null;
   sites: string[];
   visitors: number;
   identified: number;
+}
+/** A site recognised by its domain (GET /inbound/sites). */
+export interface WebSiteAction {
+  kind: SiteActionKind;
+  form_key: string;
+  label: string | null;
+  path: string | null;
+  count: number;
+  last_at: string;
+}
+export interface WebSite {
+  host: string;
+  name: string | null;
+  pageviews: number;
+  first_seen: string;
+  last_seen: string;
+  actions: WebSiteAction[];
+  /** Most viewed pages over 90 days. */
+  pages: Array<{ path: string; count: number }>;
 }
 export interface InboundSettings {
   webhook: InboundLastCall & { url: string };

@@ -544,6 +544,19 @@ function loadKey(kind: ApiKind): { id: string; key: string } | null {
   }
 }
 
+/** The exact call a site must add to send `event` (same format as the « Site sur mesure » guide). */
+export function EventSnippet({ event }: { event: string }) {
+  const [lang, setLang] = useState<Lang>("cURL");
+  const apiKey = loadKey("site")?.key ?? t("VOTRE_CLE_API", "YOUR_API_KEY");
+  const body = { event, email: "camille@exemple.fr", first_name: "Camille", id: "123" };
+  return (
+    <div className="space-y-2">
+      <Tabs label={t("Langage", "Language")} value={lang} onChange={setLang} options={["cURL", "Node.js", "PHP", "Python"] as const} />
+      <Code code={snippet(lang, apiKey, "/events", body)} />
+    </div>
+  );
+}
+
 export function ApiGuide({
   done,
   onDone,

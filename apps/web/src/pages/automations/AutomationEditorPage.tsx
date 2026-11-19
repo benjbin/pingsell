@@ -23,6 +23,7 @@ import {
   Pause,
   Play,
   Plus,
+  Pointer,
   Save,
   ShoppingBag,
   ShoppingCart,
@@ -40,16 +41,18 @@ import {
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useAsync } from "../../lib/useAsync";
-import { EXIT_CONDITIONS, TRIGGERS } from "../../lib/constants";
+import { EXIT_CONDITIONS, SITE_ACTIONS, SITE_ACTION_KINDS, TRIGGERS, siteLabel } from "../../lib/constants";
 import { cx } from "../../lib/format";
-import type { AutomationStep, AutomationTrigger, BranchCondition, ExitCondition, Segment } from "../../lib/types";
+import type { AutomationStep, AutomationTrigger, BranchCondition, ExitCondition, Segment, SiteActionKind, WebSite, WebSiteAction } from "../../lib/types";
 import { Badge, Button, Card, ErrorState, Field, Input, PageHeader, Select, Skeleton, Textarea } from "../../components/ui/primitives";
 import { useToast } from "../../components/ui/Toast";
 import { AiGeneratePanel } from "../../components/AiGeneratePanel";
 import { EmailPreview } from "../../components/EmailPreview";
 import { DEFAULT_EMAIL_HTML } from "../campaigns/defaultTemplate";
-import { t } from "../../lib/i18n";
+import { t, LOCALE } from "../../lib/i18n";
 import { RECIPES } from "./recipes";
+import { EventNeverSent, eventSlug } from "../../components/connect/SiteEvents";
+import { SITE_ACTION_ICONS, timesSeen, useSites } from "../../components/connect/Sites";
 
 const TRIGGER_ICONS: Record<AutomationTrigger, LucideIcon> = {
   contact_created: UserPlus,
@@ -66,6 +69,7 @@ const TRIGGER_ICONS: Record<AutomationTrigger, LucideIcon> = {
   segment_entered: Users,
   page_visited: Globe,
   product_viewed: Eye,
+  site_action: Pointer,
 };
 
 /* ------------------------------------------------------------------ step tree in the editor */
@@ -106,10 +110,6 @@ const newWaitStep = (): AutomationStep => ({ type: "wait", hours: 24 });
 const newPushStep = (): AutomationStep => ({ type: "push", title: "", body: "", url: "", in_app: true });
 const newExitStep = (): AutomationStep => ({ type: "exit_if", condition: "push_opened" });
 const newWaitUntilStep = (): AutomationStep => ({ type: "wait_until", hours: 24, direction: "before" });
-
-/** « Rappel Réservation » → « rappel_reservation », exactly like the API. */
-const eventSlug = (name: string) =>
-  name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
 
 const STEP_META: Record<UIStep["type"], { label: string; icon: LucideIcon; tone: string }> = {
   email: { label: t("Envoyer un email", "Send an email"), icon: Mail, tone: "bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300" },
@@ -676,25 +676,43 @@ export function AutomationEditorPage() {
   const isNew = !id;
   const recipeId = new URLSearchParams(window.location.search).get("modele");
   const recipe = isNew && recipeId ? RECIPES.find((rc) => rc.id === recipeId) : undefined;
+  // ?evenement=reservation (from Intégrations › Site sur mesure): start on that site event.
+  const presetEvent = isNew && !recipe ? eventSlug(new URLSearchParams(window.location.search).get("evenement") ?? "") : "";
+  // ?declencheur=site_action&action=signup&site=<host>&form=<form_key> (from Intégrations › Vos sites).
+  const presetSite = isNew && !recipe ? sitePreset(new URLSearchParams(window.location.search)) : null;
+  const siteRecipe = presetSite?.action === "signup" ? RECIPES.find((rc) => rc.id === "compte-bienvenue") : undefined;
   const navigate = useNavigate();
   const toast = useToast();
   const { account } = useAuth();
   const existing = useAsync(() => (id ? api.automations.get(id) : Promise.resolve(null)), [id]);
   const tags = useAsync(() => api.tags(), []);
-  const eventNames = useAsync(() => api.automations.eventNames().catch(() => []), []);
+  const eventNames = useAsync(() => api.automations.eventNames().catch(() => null), []);
   const segments = useAsync(() => api.segments.list().catch(() => [] as Segment[]), []);
-  const [eventName, setEventName] = useState(typeof recipe?.trigger_config?.event === "string" ? recipe.trigger_config.event : "");
-  const [cfg, setCfg] = useState<Record<string, unknown>>(recipe?.trigger_config ?? {});
+  const sites = useSites();
+  const [eventName, setEventName] = useState(typeof recipe?.trigger_config?.event === "string" ? recipe.trigger_config.event : presetEvent);
+  const [cfg, setCfg] = useState<Record<string, unknown>>(recipe?.trigger_config ?? presetSite ?? {});
 
-  const [name, setName] = useState(recipe?.name ?? "");
-  const [trigger, setTrigger] = useState<AutomationTrigger>(recipe?.trigger ?? "contact_created");
+  const [name, setName] = useState(
+    recipe?.name ??
+      (presetSite
+        ? (siteRecipe?.name ?? t(`Après ${SITE_ACTIONS[presetSite.action].short} sur votre site`, `After ${SITE_ACTIONS[presetSite.action].short} on your site`))
+        : presetEvent
+          ? t(`Quand votre site envoie «\u00a0${presetEvent}\u00a0»`, `When your site sends “${presetEvent}”`)
+          : ""),
+  );
+  const [trigger, setTrigger] = useState<AutomationTrigger>(recipe?.trigger ?? (presetSite ? "site_action" : presetEvent ? "event" : "contact_created"));
   const [tag, setTag] = useState(typeof recipe?.trigger_config?.tag === "string" ? recipe.trigger_config.tag : "");
   const [steps, setSteps] = useState<KeyedStep[]>(() =>
-    (recipe?.steps ?? [
-      { type: "email", subject: t("Bienvenue {{first_name}} !", "Welcome {{first_name}}!"), html: DEFAULT_EMAIL_HTML },
-      { type: "wait", hours: 72 },
-      newEmailStep(),
-    ]).map(keyed),
+    (recipe?.steps ??
+      siteRecipe?.steps ??
+      (presetEvent || presetSite
+        ? [{ type: "email", subject: t("Merci {{first_name|}}\u00a0!", "Thank you {{first_name|}}!"), html: DEFAULT_EMAIL_HTML }]
+        : [
+            { type: "email", subject: t("Bienvenue {{first_name}} !", "Welcome {{first_name}}!"), html: DEFAULT_EMAIL_HTML },
+            { type: "wait", hours: 72 },
+            newEmailStep(),
+          ])
+    ).map(keyed),
   );
   const [status, setStatus] = useState<"active" | "paused">("paused");
   const [saving, setSaving] = useState(false);
@@ -719,6 +737,7 @@ export function AutomationEditorPage() {
     if (trigger !== "event" && steps.some((s) => s.step.type === "wait_until"))
       return t("L'étape « avant / après la date » ne marche qu'avec le déclencheur « Événement de votre site »", "The “before / after the date” step only works with the “Event from your site” trigger");
     if (trigger === "segment_entered" && !cfg.segment_id) return t("Choisissez le segment", "Choose the segment");
+    if (trigger === "site_action" && !SITE_ACTION_KINDS.includes(cfg.action as SiteActionKind)) return t("Choisissez l'action sur votre site", "Choose the action on your site");
     const all = walk(steps);
     if (!all.some((st) => ["email", "push", "notify", "webhook", "tag"].includes(st.type))) return t("Ajoutez au moins une action (email, push, alerte, tag ou webhook)", "Add at least one action (email, push, alert, tag or webhook)");
     for (const step of all) {
@@ -742,6 +761,7 @@ export function AutomationEditorPage() {
       return;
     }
     setSaving(true);
+    const host = typeof cfg.host === "string" && cfg.host.trim() ? { host: cfg.host.trim() } : {};
     const input = {
       name: name.trim(),
       trigger,
@@ -750,10 +770,12 @@ export function AutomationEditorPage() {
           ? { tag: tag.trim().toLowerCase() }
           : trigger === "event"
             ? { event: eventSlug(eventName) }
+            : trigger === "site_action"
+              ? siteActionConfig(cfg, sites.data ?? [])
             : trigger === "email_clicked" || trigger === "page_visited"
-              ? (typeof cfg.url_contains === "string" && cfg.url_contains.trim() ? { url_contains: cfg.url_contains.trim() } : {})
+              ? { ...(typeof cfg.url_contains === "string" && cfg.url_contains.trim() ? { url_contains: cfg.url_contains.trim() } : {}), ...(trigger === "page_visited" ? host : {}) }
               : trigger === "product_viewed"
-                ? { hours: Number(cfg.hours ?? 2) }
+                ? { hours: Number(cfg.hours ?? 2), ...host }
               : trigger === "date_anniversary"
                 ? { field: typeof cfg.field === "string" && cfg.field.trim() ? cfg.field.trim() : "birthday", days_before: Number(cfg.days_before ?? 0) }
                 : trigger === "inactive"
@@ -862,7 +884,10 @@ export function AutomationEditorPage() {
                 <button
                   key={tr}
                   type="button"
-                  onClick={() => setTrigger(tr)}
+                  onClick={() => {
+                    setTrigger(tr);
+                    if (tr === "site_action" && !cfg.action) setCfg({ ...cfg, action: "signup" });
+                  }}
                   className={cx(
                     "flex items-start gap-3 rounded-xl p-3 text-left ring-1 transition",
                     active
@@ -912,6 +937,16 @@ export function AutomationEditorPage() {
                   ))}
                 </div>
               )}
+              {eventNames.data && eventSlug(eventName) && !eventNames.data.some((ev) => eventSlug(ev.name) === eventSlug(eventName)) && (
+                <div className="space-y-1.5">
+                  <EventNeverSent event={eventSlug(eventName)} onUseTrigger={setTrigger} />
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <Link to="/integrations?outil=site" className="font-semibold text-brand-600">
+                      {t("Voir ce que votre site envoie déjà", "See what your site already sends")}
+                    </Link>
+                  </p>
+                </div>
+              )}
               <p className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
                 {t(
                   "Dans vos messages, reprenez ce que le site envoie : {{event.date}} (écrite en toutes lettres), {{event.id}} ou n'importe quel champ, par exemple {{event.restaurant}}. Pour un rappel, ajoutez l'étape « Avant / après la date ».",
@@ -925,16 +960,20 @@ export function AutomationEditorPage() {
               <Input id="auto-url" value={String(cfg.url_contains ?? "")} onChange={(e) => setCfg({ ...cfg, url_contains: e.target.value })} placeholder="promo-noel" />
             </Field>
           )}
+          {trigger === "site_action" && <SiteActionEditor cfg={cfg} setCfg={setCfg} sites={sites.data} />}
           {trigger === "page_visited" && (
             <div className="mt-4 space-y-3">
+              <SiteSelect sites={sites.data} value={String(cfg.host ?? "")} onChange={(h) => setCfg({ ...cfg, host: h })} />
               <Field label={t("Adresse de la page contenant (optionnel)", "Page address containing (optional)")} htmlFor="auto-page" hint={t("Vide = n'importe quelle page. Ex : « /tarifs », « /reservation », « /contact ».", "Empty = any page. E.g. “/pricing”, “/booking”, “/contact”.")}>
                 <Input id="auto-page" value={String(cfg.url_contains ?? "")} onChange={(e) => setCfg({ ...cfg, url_contains: e.target.value })} placeholder="/tarifs" />
               </Field>
+              <TopPages sites={sites.data} host={String(cfg.host ?? "")} value={String(cfg.url_contains ?? "")} onPick={(path) => setCfg({ ...cfg, url_contains: path })} />
               <TrackingHint />
             </div>
           )}
           {trigger === "product_viewed" && (
             <div className="mt-4 space-y-3">
+              <SiteSelect sites={sites.data} value={String(cfg.host ?? "")} onChange={(h) => setCfg({ ...cfg, host: h })} />
               <Field label={t("Sans achat depuis", "Not bought after")} htmlFor="auto-hours" hint={t("Rien ne part s'il a commandé ou rempli un panier entre-temps (la relance panier prend le relais). Une relance tous les 3 jours au plus.", "Nothing goes out if they ordered or filled a cart in the meantime (the cart reminder takes over). At most one reminder every 3 days.")}>
                 <Select id="auto-hours" value={String(cfg.hours ?? 2)} onChange={(e) => setCfg({ ...cfg, hours: Number(e.target.value) })}>
                   {[1, 2, 4, 12, 24, 48].map((h) => <option key={h} value={h}>{t(`${h} heure${h > 1 ? "s" : ""}`, `${h} hour${h > 1 ? "s" : ""}`)}</option>)}
@@ -1030,5 +1069,218 @@ function TrackingHint() {
       {t("Il faut le script Pingsell sur votre site (une ligne à coller). ", "Requires the Pingsell script on your site (one line to paste). ")}
       <Link to="/integrations?outil=suivi" className="font-semibold text-brand-600">{t("Voir comment", "See how")}</Link>
     </p>
+  );
+}
+
+/* ------------------------------------------------------------------ « Une action sur votre site » */
+
+function sitePreset(p: URLSearchParams): { action: SiteActionKind; host?: string; form?: string } | null {
+  if (p.get("declencheur") !== "site_action") return null;
+  const a = p.get("action") as SiteActionKind | null;
+  const host = p.get("site")?.trim();
+  const form = p.get("form")?.trim();
+  return { action: a && SITE_ACTION_KINDS.includes(a) ? a : "signup", ...(host ? { host } : {}), ...(form ? { form } : {}) };
+}
+
+/** Detected actions of the chosen site (or every site), each with its site. */
+function actionsOf(sites: WebSite[], host: string): Array<WebSiteAction & { site: WebSite }> {
+  return sites
+    .filter((s) => !host || s.host === host)
+    .flatMap((site) => site.actions.map((a) => ({ ...a, site })))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** trigger_config sent to the API; form_label only keeps the list readable. */
+function siteActionConfig(cfg: Record<string, unknown>, sites: WebSite[]): Record<string, unknown> {
+  const host = typeof cfg.host === "string" ? cfg.host.trim() : "";
+  const form = typeof cfg.form === "string" ? cfg.form.trim() : "";
+  const found = form ? actionsOf(sites, host).find((a) => a.form_key === form && a.kind === cfg.action) : undefined;
+  const label = found?.label ?? (typeof cfg.form_label === "string" ? cfg.form_label : "");
+  return { action: cfg.action, ...(host ? { host } : {}), ...(form ? { form, ...(label ? { form_label: label } : {}) } : {}) };
+}
+
+function SiteSelect({ sites, value, onChange }: { sites: WebSite[] | undefined; value: string; onChange: (host: string) => void }) {
+  if (!sites || (sites.length === 0 && !value)) return null;
+  const known = sites.some((s) => s.host === value);
+  return (
+    <Field label={t("Sur quel site ?", "On which site?")} htmlFor="auto-site">
+      <Select id="auto-site" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{t("Tous mes sites", "All my sites")}</option>
+        {sites.map((s) => (
+          <option key={s.host} value={s.host}>
+            {s.name ? `${s.name} (${s.host})` : s.host}
+          </option>
+        ))}
+        {value && !known && <option value={value}>{value}</option>}
+      </Select>
+    </Field>
+  );
+}
+
+function NothingSpotted({ children }: { children: ReactNode }) {
+  return (
+    <p className="rounded-xl border border-dashed border-slate-300 px-3.5 py-3 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
+      {children}{" "}
+      <Link to="/integrations?outil=suivi" className="font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300">
+        {t("Ouvrir Vos sites", "Open Your sites")}
+      </Link>
+    </p>
+  );
+}
+
+function SiteActionEditor({ cfg, setCfg, sites }: { cfg: Record<string, unknown>; setCfg: (c: Record<string, unknown>) => void; sites: WebSite[] | undefined }) {
+  const host = String(cfg.host ?? "");
+  const action = (SITE_ACTION_KINDS.includes(cfg.action as SiteActionKind) ? cfg.action : "signup") as SiteActionKind;
+  const form = String(cfg.form ?? "");
+  const detected = actionsOf(sites ?? [], host);
+  const nothingAnywhere = !!sites && sites.every((s) => s.actions.length === 0);
+  const inbound = useAsync(() => api.inbound.get().catch(() => null), []);
+  const tr = inbound.data?.tracking;
+  const captureOff = !!tr && (!tr.enabled || tr.capture_actions === false);
+
+  function changeSite(next: string) {
+    // The precise form only stays if the new site has it.
+    const keep = form && actionsOf(sites ?? [], next).some((a) => a.form_key === form && a.kind === action);
+    setCfg({ ...cfg, host: next, ...(keep ? {} : { form: "", form_label: "" }) });
+  }
+
+  const option = (on: boolean) =>
+    cx(
+      "flex w-full items-start gap-3 rounded-xl p-3 text-left ring-1 transition",
+      on ? "bg-brand-50 ring-2 ring-brand-600 dark:bg-brand-900/30" : "ring-slate-200 hover:bg-slate-50 dark:ring-slate-700 dark:hover:bg-slate-800/50",
+    );
+
+  return (
+    <div className="mt-4 space-y-4">
+      {captureOff && (
+        <p className="rounded-xl bg-amber-50 px-3.5 py-2.5 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-100">
+          {t("Le repérage des actions est désactivé\u00a0: ce déclencheur ne partira pas. ", "Action spotting is turned off: this trigger won't fire. ")}
+          <Link to="/integrations?outil=suivi" className="font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300">
+            {t("Le réactiver dans Vos sites", "Turn it back on in Your sites")}
+          </Link>
+        </p>
+      )}
+      <SiteSelect sites={sites} value={host} onChange={changeSite} />
+
+      <div>
+        <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">{t("Quelle action ?", "Which action?")}</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {SITE_ACTION_KINDS.map((kind) => {
+            const Icon = SITE_ACTION_ICONS[kind];
+            const on = action === kind && !form;
+            const n = detected.filter((a) => a.kind === kind).reduce((sum, a) => sum + a.count, 0);
+            const fem = kind === "signup" || kind === "login" || kind === "newsletter";
+            return (
+              <button key={kind} type="button" className={option(on)} onClick={() => setCfg({ ...cfg, action: kind, form: "", form_label: "" })}>
+                <Icon className={cx("mt-0.5 size-4 shrink-0", on ? "text-brand-600 dark:text-brand-300" : "text-slate-400")} />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-slate-900 dark:text-white">{SITE_ACTIONS[kind].any}</span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    {n > 0
+                      ? t(`Repéré${fem ? "e" : ""} ${n.toLocaleString(LOCALE)} fois`, `Spotted ${n.toLocaleString(LOCALE)} time${n === 1 ? "" : "s"}`)
+                      : t(`Pas encore repéré${fem ? "e" : ""}`, "Not spotted yet")}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {detected.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+            {host ? t("Ou un formulaire précis repéré sur ce site :", "Or a precise form spotted on this site:") : t("Ou un formulaire précis repéré sur vos sites :", "Or a precise form spotted on your sites:")}
+          </p>
+          <div className="space-y-2">
+            {detected.map((a) => {
+              const Icon = SITE_ACTION_ICONS[a.kind] ?? Pointer;
+              const on = form === a.form_key && action === a.kind && (!host || host === a.site.host);
+              return (
+                <button
+                  key={`${a.site.host}|${a.kind}|${a.form_key}`}
+                  type="button"
+                  className={option(on)}
+                  onClick={() => setCfg({ ...cfg, action: a.kind, form: a.form_key, form_label: a.label ?? "", host: a.site.host })}
+                >
+                  <Icon className={cx("mt-0.5 size-4 shrink-0", on ? "text-brand-600 dark:text-brand-300" : "text-slate-400")} />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-slate-900 dark:text-white">
+                      {SITE_ACTIONS[a.kind]?.label ?? a.kind}
+                      {a.label && <span className="font-normal text-slate-600 dark:text-slate-300">{t(` · « ${a.label} »`, ` · “${a.label}”`)}</span>}
+                    </span>
+                    <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                      {!host && `${siteLabel(a.site)} · `}
+                      {a.path && <span className="font-mono">{a.path}</span>}
+                      {a.path && " · "}
+                      {timesSeen(a.count, a.last_at)}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {sites && (nothingAnywhere || detected.length === 0) && (
+        <NothingSpotted>
+          {nothingAnywhere
+            ? t(
+                "Pingsell n'a encore rien repéré sur vos sites. Collez la ligne Pingsell sur votre site, puis faites un essai (créez un compte de test) : l'action apparaîtra ici.",
+                "Pingsell hasn't spotted anything on your sites yet. Paste the Pingsell line on your site, then try it (create a test account): the action will show up here.",
+              )
+            : t("Rien encore repéré sur ce site. Faites un essai (créez un compte de test) : l'action apparaîtra ici.", "Nothing spotted on this site yet. Try it (create a test account): the action will show up here.")}
+        </NothingSpotted>
+      )}
+
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {action === "signup" || action === "newsletter"
+          ? t("La personne est ajoutée à vos contacts si elle n'y est pas encore.", "The person is added to your contacts if they aren't already.")
+          : t(
+              "Ne démarre que pour une personne déjà dans vos contacts (un email inconnu est seulement compté).",
+              "Only starts for someone already in your contacts (an unknown email is only counted).",
+            )}
+      </p>
+
+      <p className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+        {t(
+          "Dans vos messages : {{event.site}} (le nom du site), {{event.form}} (le formulaire), {{event.page}} (la page). Une création de compte ne lance le parcours qu'une fois par client ; les autres actions, une fois par jour au plus.",
+          "In your messages: {{event.site}} (the site's name), {{event.form}} (the form), {{event.page}} (the page). An account creation starts the journey only once per customer; other actions, at most once a day.",
+        )}
+      </p>
+    </div>
+  );
+}
+
+/** Most viewed pages of the chosen site (or every site): one click fills « contenant ». */
+function TopPages({ sites, host, value, onPick }: { sites: WebSite[] | undefined; host: string; value: string; onPick: (path: string) => void }) {
+  if (!sites) return null;
+  const counts = new Map<string, number>();
+  for (const s of sites) if (!host || s.host === host) for (const p of s.pages ?? []) counts.set(p.path, (counts.get(p.path) ?? 0) + p.count);
+  const pages = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
+  if (pages.length === 0)
+    return (
+      <NothingSpotted>
+        {t("Aucune page vue pour l'instant sur ce site. Dès les premières visites, les pages les plus vues apparaîtront ici.", "No page viewed on this site yet. As soon as visits come in, the most viewed pages will show up here.")}
+      </NothingSpotted>
+    );
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+      <span>{t("Les plus vues :", "Most viewed:")}</span>
+      {pages.map(([path, n]) => (
+        <button
+          key={path}
+          type="button"
+          onClick={() => onPick(path)}
+          className={cx(
+            "max-w-full truncate rounded-full px-2.5 py-1 font-medium",
+            value === path ? "bg-brand-500 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200",
+          )}
+        >
+          <span className="font-mono">{path}</span> · {n.toLocaleString(LOCALE)}
+        </button>
+      ))}
+    </div>
   );
 }

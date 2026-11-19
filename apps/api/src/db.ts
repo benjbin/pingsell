@@ -562,6 +562,60 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
 
   ALTER TABLE contacts ADD COLUMN last_seen_at TEXT;
   `,
+  // v17 — « Une ligne, et Pingsell voit tout » : chaque site reconnu par son domaine (nom modifiable),
+  // pages rattachées à leur site, actions repérées par le script (création de compte, connexion,
+  // newsletter, contact, autre formulaire). Supprimer un contact supprime ses actions ; une action d'une
+  // personne inconnue (connexion, contact…) est gardée sans contact, pour le compteur de « Vos sites ».
+  `
+  CREATE TABLE web_sites (
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    host TEXT NOT NULL,
+    name TEXT,
+    pageviews INTEGER NOT NULL DEFAULT 0,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    PRIMARY KEY (account_id, host)
+  );
+
+  ALTER TABLE web_pageviews ADD COLUMN host TEXT;
+  -- Rattrapage des anciennes pages : le domaine de l'adresse, sans port ni « www. » (comme siteHost()).
+  UPDATE web_pageviews SET host = lower(substr(url, instr(url, '://') + 3)) WHERE instr(url, '://') > 0;
+  UPDATE web_pageviews SET host = substr(host, 1, instr(host, '/') - 1) WHERE instr(host, '/') > 0;
+  UPDATE web_pageviews SET host = substr(host, 1, instr(host, '?') - 1) WHERE instr(host, '?') > 0;
+  UPDATE web_pageviews SET host = substr(host, 1, instr(host, '#') - 1) WHERE instr(host, '#') > 0;
+  UPDATE web_pageviews SET host = substr(host, instr(host, '@') + 1) WHERE instr(host, '@') > 0;
+  UPDATE web_pageviews SET host = substr(host, 1, instr(host, ':') - 1) WHERE instr(host, ':') > 0;
+  UPDATE web_pageviews SET host = substr(host, 5) WHERE host LIKE 'www.%';
+  UPDATE web_pageviews SET host = NULL WHERE host = '';
+  CREATE INDEX idx_web_pageviews_host ON web_pageviews(account_id, host, created_at);
+
+  INSERT OR IGNORE INTO web_sites (account_id, host, pageviews, first_seen, last_seen)
+    SELECT account_id, host, COUNT(*), MIN(created_at), MAX(created_at)
+      FROM web_pageviews WHERE host IS NOT NULL GROUP BY account_id, host;
+  INSERT OR IGNORE INTO web_sites (account_id, host, pageviews, first_seen, last_seen)
+    SELECT t.account_id, lower(j.value), 0, t.created_at, COALESCE(t.last_seen_at, t.created_at)
+      FROM web_tracking t, json_each(CASE WHEN json_valid(t.site_hosts) THEN t.site_hosts ELSE '[]' END) j
+     WHERE j.type = 'text' AND j.value != '';
+
+  CREATE TABLE web_actions (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    host TEXT NOT NULL,
+    vid TEXT,
+    contact_id TEXT REFERENCES contacts(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    form_key TEXT NOT NULL,
+    label TEXT,
+    path TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_web_actions_site ON web_actions(account_id, host, kind, form_key, created_at);
+  CREATE INDEX idx_web_actions_contact ON web_actions(contact_id);
+  CREATE INDEX idx_web_actions_created ON web_actions(created_at);
+
+  -- « Repérer les actions automatiquement » (réglable par compte, activé par défaut).
+  ALTER TABLE web_tracking ADD COLUMN capture_actions INTEGER NOT NULL DEFAULT 1;
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

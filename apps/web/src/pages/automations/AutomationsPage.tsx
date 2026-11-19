@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { BellRing, Clock, Mail, Pause, Play, Plus, Trash2, Workflow, Zap } from "lucide-react";
 import { api } from "../../lib/api";
 import { useAsync } from "../../lib/useAsync";
-import { TRIGGERS } from "../../lib/constants";
+import { SITE_ACTIONS, TRIGGERS } from "../../lib/constants";
 import { formatNumber } from "../../lib/format";
 import type { Automation } from "../../lib/types";
 import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton } from "../../components/ui/primitives";
@@ -21,6 +21,18 @@ export function triggerLabel(a: Pick<Automation, "trigger" | "trigger_config">):
   const tag = a.trigger_config && typeof a.trigger_config.tag === "string" ? a.trigger_config.tag : null;
   const event = a.trigger_config && typeof a.trigger_config.event === "string" ? a.trigger_config.event : null;
   if (a.trigger === "event" && event) return t(`Événement : ${event}`, `Event: ${event}`);
+  const cfg = a.trigger_config ?? {};
+  const host = typeof cfg.host === "string" && cfg.host ? cfg.host : null;
+  const where = host ? t(` sur ${host}`, ` on ${host}`) : "";
+  if (a.trigger === "site_action") {
+    const kind = SITE_ACTIONS[cfg.action as keyof typeof SITE_ACTIONS];
+    if (!kind) return base;
+    const form = typeof cfg.form_label === "string" && cfg.form && cfg.form_label ? t(` «\u00a0${cfg.form_label}\u00a0»`, ` “${cfg.form_label}”`) : "";
+    return `${cfg.form ? kind.label : kind.any}${form}${where}`;
+  }
+  if (a.trigger === "page_visited" && typeof cfg.url_contains === "string" && cfg.url_contains)
+    return t(`${base} : ${cfg.url_contains}${where}`, `${base}: ${cfg.url_contains}${where}`);
+  if ((a.trigger === "page_visited" || a.trigger === "product_viewed") && host) return `${base}${where}`;
   return a.trigger === "tag_added" && tag ? t(`${base} : #${tag}`, `${base}: #${tag}`) : base;
 }
 

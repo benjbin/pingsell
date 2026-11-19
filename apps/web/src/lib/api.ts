@@ -2,6 +2,7 @@
 import { LANG, t } from "./i18n";
 import type {
   InboundSettings,
+  WebSite,
   Analytics,
   ApiKey,
   SendingDomainResponse,
@@ -219,7 +220,12 @@ export const api = {
     get: () => get<InboundSettings>("/inbound"),
     rotate: (kind: "webhook" | "form") => post<InboundSettings>(`/inbound/${kind}/rotate`),
     setOrigins: (allowed_origins: string[]) => patch<InboundSettings>("/inbound/form", { allowed_origins }),
-    setTracking: (input: { enabled?: boolean; require_consent?: boolean }) => patch<InboundSettings>("/inbound/tracking", input),
+    setTracking: (input: { enabled?: boolean; require_consent?: boolean; capture_actions?: boolean }) => patch<InboundSettings>("/inbound/tracking", input),
+    /** Sites recognised by their domain, with what the script spotted on each. */
+    sites: () => get<{ data: WebSite[] }>("/inbound/sites").then((r) => r.data ?? []),
+    renameSite: (host: string, name: string) => patch<unknown>(`/inbound/sites/${encodeURIComponent(host)}`, { name }),
+    /** Forgets a site and what was spotted on it (its page views stay). */
+    removeSite: (host: string) => del(`/inbound/sites/${encodeURIComponent(host)}`),
   },
 
   apiKeys: {
