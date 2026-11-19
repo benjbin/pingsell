@@ -253,8 +253,15 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
     }
     return el === document;
   }
+  /** The form's own name: aria-label / aria-labelledby (« Demande de rendez-vous »). */
+  function named(form) {
+    var by = form.getAttribute('aria-labelledby'), el = by && document.getElementById(by.split(/\\s+/)[0]);
+    return (el ? txt(el) : '') || String(form.getAttribute('aria-label') || '').replace(/^\\s+|\\s+$/g, '');
+  }
   function heading(form) {
-    var h = form.querySelector('h1,h2,h3,h4,legend');
+    // A legend names the whole form only when its fieldset wraps the form; else it names one group (« Créneau »).
+    var h = form.querySelector('h1,h2,h3,h4'), fs = form.firstElementChild;
+    if (!h && fs && fs.tagName === 'FIELDSET' && fs === form.lastElementChild) h = fs.querySelector('legend');
     for (var n = form, up = 0; !h && n && n !== document.body && up < 3; n = n.parentNode, up++) {
       for (var s = n.previousElementSibling; s && !h; s = s.previousElementSibling) {
         if (/^(H[1-4]|LEGEND)$/.test(s.tagName)) h = s;
@@ -275,8 +282,11 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
   /** Reads only email, names and phone; counts the visible fields (never reads passwords, hidden or card fields). */
   function scrape(form) {
     var r = { pw: 0, n: 0, ta: 0, nm: 0, tel: 0, ox: 0 }, els = form.elements || [], full = '';
+    var radios = {};
     for (var i = 0; i < els.length; i++) {
       var el = els[i], ty = String(el.type || '').toLowerCase();
+      // A choice between options (« Salon » / « Office de tourisme ») makes it a request, not a newsletter.
+      if (ty === 'radio') { if (shown(el) && !radios[el.name || i]) { radios[el.name || i] = 1; r.n++; r.ox++; } continue; }
       if (!/^(text|email|tel|search|url|number|password|textarea|select-one|select-multiple)$/.test(ty) || !shown(el)) continue;
       if (el.getAttribute('tabindex') === '-1' || (el.closest && el.closest('[aria-hidden=true]'))) continue; // honeypots
       var ac = norm(el.getAttribute('autocomplete')), nm = norm(el.getAttribute('name')), key = nm + ' ' + norm(el.id) + ' ' + ac;
@@ -305,7 +315,7 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
   /** null = not an action (password reset, checkout / payment). */
   function classify(form, F, bt) {
     var own = norm([form.getAttribute('id'), form.getAttribute('class'), form.getAttribute('name'), form.getAttribute('action'), bt].join(' '));
-    var local = own + ' ' + norm(heading(form)), wide = norm(location.pathname + ' ' + document.title);
+    var local = own + ' ' + norm(named(form) + ' ' + heading(form)), wide = norm(location.pathname + ' ' + document.title);
     // Not an action: password reset, unsubscribe, account / profile edit (page words only when no password, so the
     // login and signup forms of a « Mon compte » page still count), password change.
     if (RESET.test(local + ' ' + wide) || UNSUB.test(local + ' ' + wide) ||
@@ -361,7 +371,7 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
     var label = form.getAttribute('data-pingsell-name'), kind = KINDS[o] === 1 ? o : classify(form, F, bt);
     if (!kind) return;
     var P = { id: Math.random().toString(36).slice(2), t: Date.now(), a: kind, f: formKey(form),
-      l: (label || heading(form) || bt || form.getAttribute('id') || '').slice(0, 120),
+      l: (label || named(form) || heading(form) || bt || form.getAttribute('id') || '').slice(0, 120),
       u: (location.protocol + '//' + location.host + mask(here())).slice(0, 1000),
       pu: here(), e: F.e, fn: F.fn, ln: F.ln, ph: F.ph };
     var m = pend(); m[P.f] = P; keep(m);
