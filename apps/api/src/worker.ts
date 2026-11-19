@@ -8,6 +8,7 @@ import { processTracking } from './services/webTracking.js';
 import { finalizePushCampaigns, queuePushCampaigns, sendPushBatch } from './services/push.js';
 import { processPushResends } from './services/pushGrowth.js';
 import { accountSender, markFailed, markSent } from './services/messages.js';
+import { platformAdminAccountIds } from './services/platformAdmin.js';
 import { htmlToText } from './services/render.js';
 import type { EmailProvider } from './services/mailer.js';
 import { outsideLang } from './i18n.js';
@@ -123,10 +124,13 @@ export class SendingWorker {
     if (!w) return Infinity;
     const today = new Date().toISOString().slice(0, 10);
     if (this.sentToday.day !== today) {
+      // The platform admin's own sends are outside the cap, so they don't use up the other accounts' share either.
+      const admins = platformAdminAccountIds(this.db);
       const row = get<{ n: number }>(
         this.db,
-        "SELECT COUNT(*) AS n FROM messages WHERE sent_at >= ? AND status IN ('sent','bounced')",
+        `SELECT COUNT(*) AS n FROM messages WHERE sent_at >= ? AND status IN ('sent','bounced')${admins.length ? ` AND account_id NOT IN (${admins.map(() => '?').join(',')})` : ''}`,
         `${today}T00:00:00.000Z`,
+        ...admins,
       );
       this.sentToday = { day: today, count: Number(row?.n ?? 0) };
     }
@@ -142,20 +146,26 @@ export class SendingWorker {
   }
 
   private async sendBatch(): Promise<number> {
-    const allowed = this.warmupRemaining();
-    if (allowed <= 0) return 0;
-    const batch = all<{
-      id: string;
-      account_id: string;
-      campaign_id: string | null;
-      to_email: string;
-      subject: string;
-      html: string;
-    }>(
-      this.db,
-      "SELECT id, account_id, campaign_id, to_email, subject, html FROM messages WHERE status = 'queued' ORDER BY created_at LIMIT ?",
-      Math.min(this.config.worker.batchSize, allowed),
-    );
+    type Queued = { id: string; account_id: string; campaign_id: string | null; to_email: string; subject: string; html: string };
+    const cols = 'SELECT id, account_id, campaign_id, to_email, subject, html FROM messages';
+    const size = this.config.worker.batchSize;
+    // The platform admin's own account skips the warm-up's daily cap (PLATFORM_ADMIN_EMAILS); everyone else stays under it.
+    const admins = this.config.warmup ? platformAdminAccountIds(this.db) : [];
+    const inAdmins = admins.map(() => '?').join(',');
+    const batch: Queued[] = admins.length
+      ? all<Queued>(this.db, `${cols} WHERE status = 'queued' AND account_id IN (${inAdmins}) ORDER BY created_at LIMIT ?`, ...admins, size)
+      : [];
+    const allowed = Math.min(size - batch.length, this.warmupRemaining());
+    if (allowed > 0) {
+      batch.push(
+        ...all<Queued>(
+          this.db,
+          `${cols} WHERE status = 'queued'${admins.length ? ` AND account_id NOT IN (${inAdmins})` : ''} ORDER BY created_at LIMIT ?`,
+          ...admins,
+          allowed,
+        ),
+      );
+    }
     if (!batch.length) return 0;
 
     const minInterval = 1000 / this.config.worker.ratePerSecond;
@@ -177,7 +187,7 @@ export class SendingWorker {
           campaignId: message.campaign_id,
         });
         markSent(this.db, message.id, providerId);
-        this.sentToday.count++;
+        if (!admins.includes(message.account_id)) this.sentToday.count++;
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         markFailed(this.db, message.id, reason);

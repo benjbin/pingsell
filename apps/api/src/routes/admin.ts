@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { all, get, scalar, type DatabaseSync, type Row, type SQLInputValue } from '../db.js';
+import { platformAdminEmails } from '../services/platformAdmin.js';
 import type { Deps } from '../deps.js';
 import { notFound, parse } from '../lib/http.js';
 import { t } from '../i18n.js';
@@ -31,13 +32,7 @@ const accountsSchema = z.object({
 const activitySchema = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) });
 const idSchema = z.object({ id: z.string().min(1).max(100) });
 
-/** Emails allowed in, read on every call (trimmed, case-insensitive). Empty ⇒ nobody. */
-function adminEmails(): string[] {
-  return (process.env.PLATFORM_ADMIN_EMAILS ?? '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-}
+const adminEmails = platformAdminEmails;
 
 export function isPlatformAdmin(db: DatabaseSync, request: FastifyRequest): boolean {
   // A session belongs to a user; an API key acts as the whole account and is never an admin.
