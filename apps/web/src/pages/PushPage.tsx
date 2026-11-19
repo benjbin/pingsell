@@ -45,6 +45,8 @@ import {
 import { ConfirmModal } from "../components/ui/Overlay";
 import { useToast } from "../components/ui/Toast";
 import { t, LOCALE } from "../lib/i18n";
+import { PushSetupGuide } from "../components/push/PushSetupGuide";
+import { publishPushSetup, pushSetupDone, pushSetupOf } from "../lib/usePushSetup";
 
 type Tab = "send" | "devices" | "setup";
 
@@ -56,6 +58,11 @@ export function PushPage() {
   const [tab, setTab] = useState<Tab>("send");
   const devices = config.data?.devices;
   const ready = !!config.data && (config.data.fcm.configured || config.data.apns.configured || config.data.expo.configured);
+  const setup = config.data ? pushSetupOf(config.data) : null;
+  // Keeps the sidebar's « À configurer » badge in step with this page.
+  useEffect(() => {
+    if (config.data) publishPushSetup(config.data);
+  }, [config.data]);
 
   return (
     <>
@@ -76,6 +83,8 @@ export function PushPage() {
           <ErrorState message={config.error} onRetry={config.reload} />
         </div>
       )}
+
+      {setup && !pushSetupDone(setup) && <PushSetupGuide setup={setup} onSetup={() => setTab("setup")} />}
 
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label={t("Appareils actifs", "Active devices")} value={formatNumber(devices?.total)} icon={Smartphone} loading={config.loading} />
@@ -101,7 +110,16 @@ export function PushPage() {
         ]}
       />
 
-      {tab === "send" && <SendTab ready={ready} onSetup={() => setTab("setup")} />}
+      {tab === "send" &&
+        (ready || !config.data ? (
+          <SendTab ready={ready} onSetup={() => setTab("setup")} />
+        ) : (
+          <EmptyState
+            icon={Send}
+            title={t("L'envoi s'ouvrira une fois la clé ajoutée", "Sending opens once the key is added")}
+            description={t("Suivez les étapes ci-dessus : dès que la clé d'envoi est enregistrée, vous pourrez écrire votre première notification ici.", "Follow the steps above: as soon as the sending key is saved, you can write your first notification here.")}
+          />
+        ))}
       {tab === "devices" && <DevicesTab onChange={config.reload} />}
       {tab === "setup" &&
         (config.data ? (

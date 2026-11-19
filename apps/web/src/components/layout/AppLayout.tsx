@@ -9,6 +9,7 @@ import { NavIcon, type NavIconName } from "../brand/NavIcons";
 import { LanguageToggle } from "./LanguageToggle";
 import { t, LOCALE } from "../../lib/i18n";
 import { useAdminAccess } from "../../lib/useAdminAccess";
+import { pushSetupDone, usePushSetup } from "../../lib/usePushSetup";
 
 interface NavItem {
   to: string;
@@ -66,6 +67,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { account, user, usage, logout } = useAuth();
   const admin = useAdminAccess();
   const groups = admin ? [...NAV, ADMIN_GROUP] : NAV;
+  const push = usePushSetup();
+  const pushTodo = !!push && !pushSetupDone(push);
   // Visual quota: a soft monthly reference so the bar means something at a glance.
   const quota = 10000;
   const pct = usage ? Math.min(100, (usage.emails_sent_month / quota) * 100) : 0;
@@ -106,7 +109,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                     ) : (
                       <item.icon className="size-[19px] shrink-0" strokeWidth={1.75} />
                     )}
-                    {item.label}
+                    {item.to === "/notifications" && pushTodo ? (
+                      <span className="min-w-0 leading-tight" title={t("Les notifications push ne sont pas encore prêtes : ouvrez la page pour voir ce qui manque.", "Push notifications aren't ready yet: open the page to see what's missing.")}>
+                        <span className="block truncate">{item.label}</span>
+                        <span className="mt-0.5 flex items-center gap-1 font-sans text-[11px] font-semibold text-amber-300 group-aria-[current=page]:text-white">
+                          <span className="size-1.5 rounded-full bg-amber-300 group-aria-[current=page]:bg-white" aria-hidden="true" />
+                          {t("À configurer", "Needs setup")}
+                        </span>
+                      </span>
+                    ) : (
+                      item.label
+                    )}
                   </NavLink>
                 </li>
               ))}
