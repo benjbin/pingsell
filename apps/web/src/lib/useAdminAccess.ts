@@ -36,3 +36,8 @@ export function useAdminAccess(): boolean | undefined {
   }, []);
   return admin;
 }
+
+/** Asks (and caches) whether the user who just signed in is a platform admin. */
+export function checkAdminAccess(): Promise<boolean> {
+  return load().promise;
+}

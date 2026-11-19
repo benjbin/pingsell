@@ -11,6 +11,7 @@ import { LanguageToggle } from "../components/layout/LanguageToggle";
 import { t } from "../lib/i18n";
 import { pendingClaimPath, safeReturnPath } from "../lib/shopifyClaim";
 import { pendingStoreConnectPath } from "../lib/storeConnect";
+import { checkAdminAccess } from "../lib/useAdminAccess";
 
 /** Public marketing site, for the "back to site" link. */
 const SITE_URL = (import.meta.env.VITE_SITE_URL ?? "http://localhost:5191").replace(/\/+$/, "");
@@ -38,7 +39,9 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
       // (it also survives the sign-up).
       const claim = pendingClaimPath() ?? pendingStoreConnectPath();
       const from = safeReturnPath((location.state as { from?: unknown } | null)?.from);
-      navigate(claim ?? (mode === "register" ? "/bienvenue" : from && from !== "/connexion" ? from : "/"), { replace: true });
+      // The platform's creator lands on the Administration dashboard (rights come from PLATFORM_ADMIN_EMAILS on the server).
+      const admin = isLogin && !claim && !(from && from !== "/connexion" && from !== "/") ? await checkAdminAccess() : false;
+      navigate(claim ?? (admin ? "/admin" : mode === "register" ? "/bienvenue" : from && from !== "/connexion" ? from : "/"), { replace: true });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
