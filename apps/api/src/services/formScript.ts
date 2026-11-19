@@ -215,7 +215,7 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
   var PROFILE = /profile|profil|mon compte|my account|edit account|modifier (mon|le) compte|parametres|settings|password change|changement de mot de passe|changer (de |le |mon )?mot de passe/;
   var MINE = /creer (un |mon |votre )?compte|create (an |my |your )?account/g; // « Créer mon compte » is a signup, not a profile
   var SHOP = /checkout|commande|paiement|payment|panier|\\bcart\\b|billing|facturation|livraison|shipping/;
-  var ERR = '[class*=error],[class*=Error],[class*=erreur],[class*=invalid],[class*=Invalid],[id*=error],[id*=erreur],[id*=invalid]';
+  var ERR = '[class*=error],[class*=Error],[class*=erreur],[class*=invalid],[class*=Invalid],[id*=error],[id*=erreur],[id*=invalid],[class~=err],[class*=-err],[class*=_err],[class~=fail],[class*=failed],[class*=echec]';
   function norm(s) {
     s = String(s || '').toLowerCase();
     if (s.normalize) s = s.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
@@ -356,6 +356,20 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
     }
     return false;
   }
+  /** A visible thank-you next to the form (« Message envoyé. Merci ! ») = the submission went through. */
+  var OK = '[class*=success],[class*=succes],[class~=ok],[class*=merci],[class*=thank],[role=status],[aria-live]';
+  var DONE = /merci|thank|envoye|\\bsent\\b|bien recu|received|succes|confirm/;
+  function success(form) {
+    var roots = [form], box = form.parentNode;
+    if (box && box !== document.body && box.querySelectorAll) roots.push(box);
+    for (var r = 0; r < roots.length; r++) {
+      var l = roots[r].querySelectorAll(OK);
+      for (var i = 0; i < l.length; i++) {
+        if (!l[i].contains(form) && shown(l[i]) && DONE.test(norm(txt(l[i])))) return true;
+      }
+    }
+    return false;
+  }
   function onAct(e) {
     var form = e.target;
     if (!form || !form.querySelectorAll || !form.getAttribute || form.__pingsell || form.hasAttribute('data-pingsell')) return;
@@ -389,13 +403,17 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
       if (!Q || Q.id !== id) return;
       if (!document.documentElement.contains(form) || !shown(form) || (mail && !mail.value)) return land(f, id);
       if (errors(form)) return drop(f, id);
-      if (Date.now() < P.t + 2e4) setTimeout(watch, 500);
+      if (success(form)) return land(f, id);
+      // Slow senders (form services can take 30 s): keep watching for a minute. Still no sign of success then:
+      // the form is still there, filled in → not sent; another page opened later must not count it.
+      if (Date.now() < P.t + 6e4) return setTimeout(watch, 500);
+      var n = pend(); if (n[f] && n[f].id === id) { n[f].stale = 1; keep(n); }
     })();
   }
   /** Single-page navigation away from the form's page: the submission went through. */
   function settle() {
     var m = pend();
-    for (var f in m) if (m[f] && m[f].ok && m[f].pu !== here()) land(f, m[f].id);
+    for (var f in m) if (m[f] && m[f].ok && !m[f].stale && m[f].pu !== here()) land(f, m[f].id);
   }
   /** New page in the tab: an action submitted on another page (or whose form is gone) succeeded. */
   function resume() {
@@ -403,7 +421,7 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
     for (var f in m) {
       var P = m[f], seen = false;
       if (!P || P.t >= started) continue;
-      if (Date.now() - P.t > LIFE) { drop(f); continue; }
+      if (P.stale || Date.now() - P.t > LIFE) { drop(f); continue; }
       if (P.pu === here()) for (var i = 0; i < document.forms.length; i++) if (formKey(document.forms[i]) === f) seen = true;
       if (seen) drop(f, P.id); else land(f, P.id);
     }
