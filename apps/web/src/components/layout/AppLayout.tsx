@@ -5,40 +5,47 @@ import { useAuth } from "../../lib/auth";
 import { useTheme } from "../../lib/theme";
 import { cx, formatNumber } from "../../lib/format";
 import { PingsellLogo } from "../brand/PingsellLogo";
+import { NavIcon, type NavIconName } from "../brand/NavIcons";
 import { LanguageToggle } from "./LanguageToggle";
 import { t, LOCALE } from "../../lib/i18n";
 
 interface NavItem {
   to: string;
   label: string;
+  icon: NavIconName;
   end?: boolean;
 }
 
 const NAV: Array<{ section: string; items: NavItem[] }> = [
   {
-    section: "Studio",
+    section: t("Pilotage", "Overview"),
     items: [
-      { to: "/", label: t("Tableau de bord", "Dashboard"), end: true },
-      { to: "/campagnes", label: t("Campagnes", "Campaigns") },
-      { to: "/automatisations", label: t("Automatisations", "Automations") },
-      { to: "/notifications", label: t("Notifications push", "Push notifications") },
-      { to: "/statistiques", label: t("Statistiques", "Analytics") },
+      { to: "/", label: t("Tableau de bord", "Dashboard"), icon: "dashboard", end: true },
+      { to: "/statistiques", label: t("Statistiques", "Analytics"), icon: "stats" },
+    ],
+  },
+  {
+    section: "Messages",
+    items: [
+      { to: "/campagnes", label: t("Campagnes", "Campaigns"), icon: "campaigns" },
+      { to: "/automatisations", label: t("Automatisations", "Automations"), icon: "automations" },
+      { to: "/notifications", label: t("Notifications push", "Push notifications"), icon: "push" },
+      { to: "/boite-envoi", label: t("Boîte d'envoi", "Outbox"), icon: "outbox" },
     ],
   },
   {
     section: "Audience",
     items: [
-      { to: "/contacts", label: "Contacts" },
-      { to: "/segments", label: "Segments" },
+      { to: "/contacts", label: "Contacts", icon: "contacts" },
+      { to: "/segments", label: "Segments", icon: "segments" },
     ],
   },
   {
     section: t("Réglages", "Settings"),
     items: [
-      { to: "/integrations", label: t("Intégrations", "Integrations") },
-      { to: "/boite-envoi", label: t("Boîte d'envoi", "Outbox") },
-      { to: "/profil", label: t("Profil & équipe", "Profile & team") },
-      { to: "/parametres", label: t("Paramètres", "Settings") },
+      { to: "/integrations", label: t("Intégrations", "Integrations"), icon: "integrations" },
+      { to: "/profil", label: t("Profil & équipe", "Profile & team"), icon: "team" },
+      { to: "/parametres", label: t("Paramètres", "Settings"), icon: "settings" },
     ],
   },
 ];
@@ -60,10 +67,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <Logo tone="light" />
       </div>
 
-      <nav className="flex-1 space-y-8 overflow-y-auto px-4 pt-4 pb-6">
+      <nav className="flex-1 space-y-6 overflow-y-auto px-4 pt-2 pb-6">
         {NAV.map((group, gi) => (
           <div key={group.section}>
-            <p className="mb-3 px-3 font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/40 uppercase">
+            <p className="mb-2 px-4 font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/40 uppercase">
               {String(gi + 1).padStart(2, "0")} — {group.section}
             </p>
             <ul className="space-y-0.5">
@@ -75,11 +82,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                     onClick={onNavigate}
                     className={({ isActive }) =>
                       cx(
-                        "group relative flex items-center rounded-full px-4 py-2.5 font-display text-[14.5px] font-medium transition-colors duration-300",
-                        isActive ? "bg-brand-500 text-white" : "text-white/60 hover:bg-white/[0.06] hover:text-white",
+                        "group relative flex items-center gap-3 rounded-full px-4 py-2 font-display text-[14.5px] font-medium transition-colors duration-300",
+                        isActive
+                          ? "bg-brand-500 text-white [&_.ping-dot]:text-white"
+                          : "text-white/60 hover:bg-white/[0.06] hover:text-white [&_.ping-dot]:text-white/35 hover:[&_.ping-dot]:text-[#f8603a]",
                       )
                     }
                   >
+                    <NavIcon
+                      name={item.icon}
+                      className="size-[19px] shrink-0 [&_.ping-dot]:origin-[19px_5px] [&_.ping-dot]:transition-all [&_.ping-dot]:duration-300 group-hover:[&_.ping-dot]:scale-125"
+                    />
                     {item.label}
                   </NavLink>
                 </li>
