@@ -81,8 +81,8 @@ export function SitesPanel({ onFirstSite, onFirstAction, captureOff }: { onFirst
   const who = (
     <p className="text-xs text-slate-500 dark:text-slate-400">
       {t(
-        `Une création de compte ou une inscription newsletter ajoute la personne à vos contacts. Une connexion, un formulaire de contact ou un autre formulaire ne lance une automatisation que pour une personne déjà dans vos contacts. Si vous attendez l'accord cookies, rien n'est repéré chez un visiteur qui ne l'a pas donné.`,
-        "An account creation or a newsletter sign-up adds the person to your contacts. A sign-in, a contact form or another form only starts an automation for someone already in your contacts. If you wait for cookie consent, nothing is spotted for a visitor who hasn't given it.",
+        `Une création de compte ou une inscription newsletter ajoute la personne à vos contacts, abonnée. Un formulaire de contact ou un autre formulaire l'ajoute sans l'abonner : elle reçoit la réponse à sa demande, jamais vos campagnes. Une connexion ne lance une automatisation que pour une personne déjà dans vos contacts. Si vous attendez l'accord cookies, rien n'est repéré chez un visiteur qui ne l'a pas donné.`,
+        "An account creation or a newsletter sign-up adds the person to your contacts, subscribed. A contact form or another form adds them without subscribing them: they get the answer to their request, never your campaigns. A sign-in only starts an automation for someone already in your contacts. If you wait for cookie consent, nothing is spotted for a visitor who hasn't given it.",
       )}
     </p>
   );

@@ -316,8 +316,13 @@ export interface SiteActionInput {
   learnSite?: boolean;
 }
 
-/** Seules une création de compte et une inscription à la newsletter ajoutent la personne aux contacts. */
+/** Une création de compte et une inscription à la newsletter ajoutent la personne aux contacts, abonnée. */
 export const CREATES_CONTACT: ReadonlySet<SiteAction> = new Set<SiteAction>(['signup', 'newsletter']);
+/**
+ * Un formulaire de contact ou un autre formulaire ajoute la personne, NON abonnée : elle reçoit la réponse à sa
+ * demande (accusé de réception…), jamais les campagnes marketing.
+ */
+export const CREATES_GUEST: ReadonlySet<SiteAction> = new Set<SiteAction>(['contact', 'form']);
 
 const TOKEN_SEGMENT = (seg: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg) ||
@@ -368,8 +373,10 @@ export function maskFormKey(formKey: string): string {
  * Une action repérée par le script (création de compte, connexion, newsletter, contact, autre formulaire).
  * - signup / newsletter : la personne devient contact si elle ne l'est pas (abonnée, comme le formulaire public),
  *   SANS « Nouveau contact » : c'est « Une action sur votre site » qui souhaite la bienvenue (pas de double email).
- * - login / contact / form : ne créent jamais de contact. Email connu : visiteur rattaché, action enregistrée,
- *   automatisations démarrées. Email inconnu : l'action compte pour « Vos sites », sans contact, rien ne démarre.
+ * - contact / form : la personne devient contact NON abonnée si elle ne l'est pas (sans « Nouveau contact ») ;
+ *   « Une action sur votre site » lui envoie la réponse à sa demande, comme un message transactionnel.
+ * - login : ne crée jamais de contact. Email connu : visiteur rattaché, action enregistrée, automatisations
+ *   démarrées. Email inconnu : l'action compte pour « Vos sites », sans contact, rien ne démarre.
  * Le même envoi reçu deux fois en 30 s (double clic, renvoi du navigateur) ne compte qu'une fois.
  */
 export function recordSiteAction(
@@ -385,13 +392,15 @@ export function recordSiteAction(
     const formKey = maskFormKey(input.formKey).slice(0, 200);
     let contactId: string | null = null;
     let created = false;
-    if (CREATES_CONTACT.has(input.kind)) {
+    if (CREATES_CONTACT.has(input.kind) || CREATES_GUEST.has(input.kind)) {
       const r = upsertContact(db, accountId, {
         email: input.email,
         first_name: input.first_name,
         last_name: input.last_name,
         phone: input.phone,
         source: 'api',
+        // Only used when the contact is new: an existing contact keeps its status.
+        status: CREATES_GUEST.has(input.kind) ? 'unsubscribed' : undefined,
         fill_only: true,
       });
       contactId = r.contact.id;

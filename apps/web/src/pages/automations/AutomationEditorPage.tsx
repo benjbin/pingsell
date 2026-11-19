@@ -1237,6 +1237,8 @@ function SiteActionEditor({ cfg, setCfg, sites }: { cfg: Record<string, unknown>
       <p className="text-xs text-slate-500 dark:text-slate-400">
         {action === "signup" || action === "newsletter"
           ? t("La personne est ajoutée à vos contacts si elle n'y est pas encore.", "The person is added to your contacts if they aren't already.")
+          : action === "contact" || action === "form"
+          ? t("La personne est ajoutée à vos contacts sans être abonnée : elle reçoit ce message (la réponse à sa demande), jamais vos campagnes.", "The person is added to your contacts without being subscribed: they get this message (the answer to their request), never your campaigns.")
           : t(
               "Ne démarre que pour une personne déjà dans vos contacts (un email inconnu est seulement compté).",
               "Only starts for someone already in your contacts (an unknown email is only counted).",

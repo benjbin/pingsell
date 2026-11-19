@@ -18,6 +18,7 @@ import {
   listSites,
   recordPageview,
   CREATES_CONTACT,
+  CREATES_GUEST,
   deleteSite,
   recordSiteAction,
   verifyContactToken,
@@ -119,6 +120,7 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
   const signupsPerEmail = limiter(Number(process.env.TRACK_SIGNUP_RATE_PER_EMAIL ?? 5), 24 * 60 * 60_000);
   const signupsPerKey = limiter(Number(process.env.TRACK_SIGNUP_RATE_PER_KEY ?? 600), 60 * 60_000);
   const actsPerIp = limiter(Number(process.env.TRACK_ACT_RATE_PER_IP ?? 60), 10 * 60_000);
+  const requestsPerEmail = limiter(Number(process.env.TRACK_REQUEST_RATE_PER_EMAIL ?? 10), 24 * 60 * 60_000);
   const BOT_UA = /bot|crawl|spider|slurp|headless|lighthouse|preview|facebookexternalhit|monitor|curl|wget|python-requests/i;
 
   /** Runs each detected event; never throws, so the platform does not retry or disable the webhook. */
@@ -321,9 +323,11 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
       if (!isValidEmail(email)) throw badRequest(t('Indiquez une adresse email valide.', 'Enter a valid email address.'));
       // Consentement exigé et non donné (pas de visiteur) : rien n'est gardé, même si le script envoyait quand même.
       if (tracking.require_consent && !vid) return done({ consent: false });
+      // Contact / other form now add the person and answer them: an address can't be flooded through the site.
       const allowed = CREATES_CONTACT.has(kind)
         ? signupsPerIp(`${hook.token}:${request.ip}`) && signupsPerEmail(`${hook.token}:${email}`) && signupsPerKey(hook.token)
-        : actsPerIp(`${hook.token}:${request.ip}`);
+        : actsPerIp(`${hook.token}:${request.ip}`) &&
+          (!CREATES_GUEST.has(kind) || (requestsPerEmail(`${hook.token}:${email}`) && signupsPerKey(hook.token)));
       if (!allowed) throw new HttpError(429, t('Trop d’envois, réessayez plus tard', 'Too many submissions, try again later'));
       const page = cleanPageUrl(url.href);
       const r = recordSiteAction(

@@ -57,9 +57,12 @@ export function normalizeEventName(name: string): string {
 /** Transactional triggers reach customers unsubscribed from marketing (never complaints or hard bounces). */
 export const TRANSACTIONAL_TRIGGERS: readonly Trigger[] = ['order_fulfilled'];
 /** A site event marked `transactional` (booking reminder, receipt…) also reaches unsubscribed customers. */
+/** A contact or other form on the site: the answer to the person's own request (« we got your message »). */
+const answersRequest = (trigger: Trigger, data?: Record<string, unknown> | null) =>
+  trigger === 'site_action' && (data?.action === 'contact' || data?.action === 'form');
 const reachable = (trigger: Trigger, status: string, data?: Record<string, unknown> | null) =>
   status === 'subscribed' ||
-  ((TRANSACTIONAL_TRIGGERS.includes(trigger) || (trigger === 'event' && data?.transactional === true)) &&
+  ((TRANSACTIONAL_TRIGGERS.includes(trigger) || (trigger === 'event' && data?.transactional === true) || answersRequest(trigger, data)) &&
     status !== 'complained' &&
     status !== 'bounced');
 
@@ -908,7 +911,7 @@ export function fireSiteAction(
 ): number {
   return transaction(db, () => {
     const contact = get<{ status: string }>(db, 'SELECT status FROM contacts WHERE id = ? AND account_id = ?', contactId, accountId);
-    if (contact?.status !== 'subscribed') return 0;
+    if (!contact || !reachable('site_action', contact.status, data)) return 0;
     const day = parisParts(Date.now());
     let started = 0;
     for (const a of all(db, "SELECT * FROM automations WHERE account_id = ? AND trigger = 'site_action' AND status = 'active'", accountId).map(serializeAutomation)) {
