@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import {
   ArrowDown,
@@ -13,6 +13,8 @@ import {
   Smartphone,
   Eye,
   Globe,
+  LayoutTemplate,
+  PenLine,
   EyeOff,
   Flag,
   GitBranch,
@@ -48,6 +50,10 @@ import { Badge, Button, Card, ErrorState, Field, Input, PageHeader, Select, Skel
 import { useToast } from "../../components/ui/Toast";
 import { AiGeneratePanel } from "../../components/AiGeneratePanel";
 import { EmailPreview } from "../../components/EmailPreview";
+import { EmailBuilder } from "../../components/email-builder/EmailBuilder";
+import { MiniPreview } from "../../components/email-builder/panels";
+import { PRESETS, parseDesign, renderEmail, serializeDesign, type Design } from "../../components/email-builder/model";
+import { ConfirmModal } from "../../components/ui/Overlay";
 import { DEFAULT_EMAIL_HTML } from "../campaigns/defaultTemplate";
 import { t, LOCALE } from "../../lib/i18n";
 import { RECIPES } from "./recipes";
@@ -271,27 +277,62 @@ function EmailStepEditor({
   brand?: string;
 }) {
   const [showPreview, setShowPreview] = useState(false);
-  const [showAi, setShowAi] = useState(false);
+  const [panel, setPanel] = useState<"ai" | "templates" | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [askBlank, setAskBlank] = useState(false);
+  const design = useMemo(() => parseDesign(step.design), [step.design]);
+  const brandName = brand || t("Votre marque", "Your brand");
+
+  /** Le design est la source : l'HTML envoyé en est toujours le rendu. */
+  const setDesign = (d: Design, extra: Partial<Extract<AutomationStep, { type: "email" }>> = {}) => {
+    const next = { ...step, ...extra };
+    onChange({ ...next, design: serializeDesign(d), html: renderEmail(d, next.preheader ?? "") });
+  };
+
+  function openEditor() {
+    if (design) return setEditorOpen(true);
+    // Un email écrit en HTML ne se convertit pas en blocs : on le dit avant de repartir d'une page blanche.
+    if (step.html.trim() && step.html !== DEFAULT_EMAIL_HTML) return setAskBlank(true);
+    setDesign(PRESETS[0].build(brandName));
+    setEditorOpen(true);
+  }
+
   return (
     <div className="space-y-3">
       <Field label={t("Objet", "Subject")}>
         <Input value={step.subject} onChange={(e) => onChange({ ...step, subject: e.target.value })} placeholder={t("Bienvenue {{first_name}} !", "Welcome {{first_name}}!")} />
       </Field>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" icon={Sparkles} onClick={() => setShowAi((v) => !v)}>
-          {showAi ? t("Masquer les modèles", "Hide templates") : t("Partir d'un modèle", "Start from a template")}
+        <Button size="sm" icon={PenLine} onClick={openEditor}>
+          {design ? t("Modifier dans l'éditeur", "Edit in the editor") : t("Éditeur visuel", "Visual editor")}
+        </Button>
+        <Button variant="outline" size="sm" icon={LayoutTemplate} onClick={() => setPanel((p) => (p === "templates" ? null : "templates"))}>
+          {t("Mes modèles", "My templates")}
+        </Button>
+        <Button variant="outline" size="sm" icon={Sparkles} onClick={() => setPanel((p) => (p === "ai" ? null : "ai"))}>
+          {t("Générer l'email", "Generate the email")}
         </Button>
         <Button variant="secondary" size="sm" icon={showPreview ? EyeOff : Eye} onClick={() => setShowPreview((v) => !v)}>
           {showPreview ? t("Voir le code", "View code") : t("Aperçu", "Preview")}
         </Button>
       </div>
-      {showAi && (
+      {panel === "templates" && (
+        <SavedTemplatesPicker
+          current={design}
+          onPick={(d) => {
+            setDesign(d);
+            setPanel(null);
+            setShowPreview(true);
+          }}
+        />
+      )}
+      {panel === "ai" && (
         <AiGeneratePanel
           compact
           defaultBrand={brand}
           onGenerated={(email) => {
             onChange({ type: "email", subject: email.subject, html: email.html });
-            setShowAi(false);
+            setPanel(null);
             setShowPreview(true);
           }}
         />
@@ -301,14 +342,127 @@ function EmailStepEditor({
           <EmailPreview html={step.html} height={420} />
         </div>
       ) : (
-        <Textarea
-          rows={8}
-          spellCheck={false}
-          className="font-mono text-xs"
-          value={step.html}
-          onChange={(e) => onChange({ ...step, html: e.target.value })}
-          aria-label={t("HTML de l'email", "Email HTML")}
+        <>
+          <Textarea
+            rows={8}
+            spellCheck={false}
+            className="font-mono text-xs"
+            value={step.html}
+            // Modifier le code à la main détache l'email de l'éditeur visuel.
+            onChange={(e) => onChange({ type: "email", subject: step.subject, preheader: step.preheader, html: e.target.value })}
+            aria-label={t("HTML de l'email", "Email HTML")}
+          />
+          {design && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {t("Cet email vient de l'éditeur visuel : si vous modifiez le code ici, il ne pourra plus y être rouvert.", "This email comes from the visual editor: if you edit the code here, it can no longer be reopened there.")}
+            </p>
+          )}
+        </>
+      )}
+      {editorOpen && design && (
+        <EmailBuilder
+          design={design}
+          onChange={(d) => setDesign(d)}
+          onApplyPreset={(p) => setDesign(p.build(brandName), { subject: step.subject || p.subject, preheader: step.preheader || p.preheader })}
+          brand={brandName}
+          subject={step.subject}
+          preheader={step.preheader ?? ""}
+          fromName={brandName}
+          onSubjectChange={(v) => onChange({ ...step, subject: v })}
+          onPreheaderChange={(v) => setDesign(design, { preheader: v })}
+          title={step.subject || t("Email de l'automatisation", "Automation email")}
+          onClose={() => setEditorOpen(false)}
+          onSave={() => setEditorOpen(false)}
+          saveLabel={t("Terminé", "Done")}
+          onPreview={() => {
+            setEditorOpen(false);
+            setShowPreview(true);
+          }}
         />
+      )}
+      <ConfirmModal
+        open={askBlank}
+        onClose={() => setAskBlank(false)}
+        onConfirm={() => {
+          setAskBlank(false);
+          setDesign(PRESETS[0].build(brandName));
+          setEditorOpen(true);
+        }}
+        title={t("Passer à l'éditeur visuel ?", "Switch to the visual editor?")}
+        confirmLabel={t("Repartir d'une page blanche", "Start from a blank page")}
+      >
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          {t(
+            "Cet email a été écrit en HTML : il ne peut pas être converti en blocs. Vous repartirez d'une page blanche, ou choisissez plutôt un de vos modèles.",
+            "This email was written in HTML and can't be converted into blocks. You'll start from a blank page, or pick one of your templates instead.",
+          )}
+        </p>
+      </ConfirmModal>
+    </div>
+  );
+}
+
+/** Les modèles enregistrés depuis l'éditeur visuel (« Enregistrer ce design »). */
+function SavedTemplatesPicker({ current, onPick }: { current: Design | null; onPick: (d: Design) => void }) {
+  const toast = useToast();
+  const saved = useAsync(() => api.emailTemplates.list(), []);
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!current || !name.trim()) return;
+    setSaving(true);
+    try {
+      await api.emailTemplates.create({ name: name.trim(), design: serializeDesign(current) });
+      toast.success(t("Modèle enregistré", "Template saved"), name.trim());
+      setName("");
+      await saved.reload();
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const list = (saved.data ?? []).map((tpl) => ({ tpl, d: parseDesign(tpl.design) })).filter((x): x is { tpl: typeof x.tpl; d: Design } => !!x.d);
+  return (
+    <div className="space-y-3 rounded-2xl bg-slate-50 p-3 dark:bg-white/[0.03]">
+      {saved.loading && !saved.data ? (
+        <div className="h-16 animate-pulse rounded-xl bg-slate-100 dark:bg-white/5" />
+      ) : list.length === 0 ? (
+        <p className="text-xs text-slate-500">
+          {t("Aucun modèle enregistré. Créez votre email dans l'éditeur visuel, puis enregistrez-le comme modèle.", "No saved templates. Build your email in the visual editor, then save it as a template.")}
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {list.map(({ tpl, d }) => (
+            <button
+              key={tpl.id}
+              type="button"
+              onClick={() => onPick(d)}
+              className="group overflow-hidden rounded-xl bg-white text-left ring-1 ring-slate-900/10 transition hover:ring-brand-500 dark:bg-slate-900 dark:ring-white/10"
+            >
+              <MiniPreview design={d} />
+              <span className="block truncate px-2.5 py-2 text-xs font-semibold text-slate-900 group-hover:text-brand-500 dark:text-white">{tpl.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {current ? (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Nom du modèle", "Template name")} className="h-9 text-xs" />
+          <Button type="submit" variant="outline" size="sm" icon={Save} loading={saving} disabled={!name.trim()}>
+            {t("Enregistrer cet email comme modèle", "Save this email as a template")}
+          </Button>
+        </form>
+      ) : (
+        <p className="text-xs text-slate-500">{t("Pour enregistrer cet email comme modèle, ouvrez-le d'abord dans l'éditeur visuel.", "To save this email as a template, open it in the visual editor first.")}</p>
       )}
     </div>
   );

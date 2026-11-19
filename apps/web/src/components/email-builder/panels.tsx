@@ -235,7 +235,7 @@ export function MediaPanel({ onPick }: { onPick: (asset: Asset) => void }) {
 
 // --- Templates ----------------------------------------------------------------------------
 
-function MiniPreview({ design }: { design: Design }) {
+export function MiniPreview({ design }: { design: Design }) {
   const th = design.theme;
   return (
     <span className="flex h-20 flex-col justify-end gap-1 p-2.5" style={{ background: th.background }}>

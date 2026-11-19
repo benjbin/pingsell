@@ -110,6 +110,8 @@ const leafStepSchema = z.discriminatedUnion('type', [
     subject: z.string().trim().min(1).max(300),
     html: z.string().min(1).max(500_000),
     preheader: z.string().max(300).optional(),
+    /** Blocs de l'éditeur visuel (JSON), pour rouvrir l'email dans l'éditeur ; l'envoi utilise `html`. */
+    design: z.string().max(500_000).optional(),
   }),
   z.object({
     type: z.literal('push'),

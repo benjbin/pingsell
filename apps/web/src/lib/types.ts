@@ -370,7 +370,7 @@ export type BranchCondition =
 export type AutomationStep =
   | { type: "wait"; hours: number }
   | { type: "wait_until"; hours: number; direction: "before" | "after" }
-  | { type: "email"; subject: string; html: string }
+  | { type: "email"; subject: string; html: string; preheader?: string; /** Blocs de l'éditeur visuel (JSON) ; l'HTML en est le rendu. */ design?: string }
   | { type: "push"; title: string; body: string; url?: string | null; image_url?: string | null; in_app?: boolean }
   | { type: "exit_if"; condition: ExitCondition }
   | { type: "tag"; action: "add" | "remove"; tag: string }

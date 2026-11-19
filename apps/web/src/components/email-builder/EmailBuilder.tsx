@@ -98,8 +98,11 @@ export interface EmailBuilderProps {
   dirty?: boolean;
   onClose: () => void;
   onSave: () => void;
-  onTest: () => void;
+  /** Absent : pas de bouton « Tester ». */
+  onTest?: () => void;
   onPreview: () => void;
+  /** Libellé du bouton d'enregistrement (ex. « Terminé » quand l'email fait partie d'une automatisation). */
+  saveLabel?: string;
 }
 
 /** Image slot of a block, if it has one (used when picking from the media library). */
@@ -464,11 +467,13 @@ export function EmailBuilder(props: EmailBuilderProps) {
           </Button>
           {!disabled && (
             <>
-              <Button variant="secondary" size="sm" icon={FlaskConical} onClick={props.onTest} className="hidden sm:inline-flex">
-                {t("Tester", "Test")}
-              </Button>
+              {props.onTest && (
+                <Button variant="secondary" size="sm" icon={FlaskConical} onClick={props.onTest} className="hidden sm:inline-flex">
+                  {t("Tester", "Test")}
+                </Button>
+              )}
               <Button size="sm" icon={Save} onClick={props.onSave} loading={props.saving}>
-                {t("Enregistrer", "Save")}
+                {props.saveLabel ?? t("Enregistrer", "Save")}
               </Button>
             </>
           )}
