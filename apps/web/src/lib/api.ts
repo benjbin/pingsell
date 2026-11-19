@@ -34,6 +34,10 @@ import type {
   SegmentPreview,
   SegmentRules,
   ShopifySyncResult,
+  ShopifyStatus,
+  ShopifyPendingClaim,
+  StoreConnectAuthorizeInput,
+  StoreConnectAuthorizeResponse,
   StatsOverview,
   TagCount,
   PushCampaign,
@@ -333,12 +337,14 @@ export const api = {
 
   integrations: {
     list: () => get<{ data: Integration[] }>("/integrations").then((r) => r.data),
+    /** "Connect to Pingsell" from the WordPress / PrestaShop plugin: one-time code sent back to the shop. */
+    connectAuthorize: (body: StoreConnectAuthorizeInput) => post<StoreConnectAuthorizeResponse>("/integrations/connect/authorize", body),
     shopify: {
-      status: () =>
-        get<{ integration: Integration | null; oauth_available: boolean; sync_running: boolean }>("/integrations/shopify"),
-      /** OAuth install page of the shop ("1 clic"), when the Shopify app keys are configured on the server. */
-      installUrl: (shop: string) => get<{ url: string }>("/integrations/shopify/install", { shop, format: "json" }).then((r) => r.url),
-      connect: (input: { shop_domain: string; access_token: string }) => post<unknown>("/integrations/shopify/connect", input),
+      status: () => get<ShopifyStatus>("/integrations/shopify"),
+      /** Shop installed from Shopify and waiting for an account (one-time claim token). */
+      pending: (claim: string) => get<ShopifyPendingClaim>("/integrations/shopify/pending", { claim }),
+      /** Attaches the pending shop to the signed-in account. */
+      claim: (claim: string) => post<{ integration: Integration; shop: string }>("/integrations/shopify/claim", { claim }),
       sync: () => post<ShopifySyncResult>("/integrations/shopify/sync"),
       disconnect: () => del("/integrations/shopify"),
       simulate: (input: { type: "order" | "order_fulfilled" | "cart_abandoned"; email: string }) =>
@@ -346,6 +352,9 @@ export const api = {
     },
   },
 };
+
+/** Shortcut for api.integrations.connectAuthorize. */
+export const connectAuthorize = (body: StoreConnectAuthorizeInput) => api.integrations.connectAuthorize(body);
 
 export function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;

@@ -1,0 +1,32 @@
+# Configuration de l'app publique Pingsell sur Shopify.
+# Après avoir créé l'app dans le Dev Dashboard : remplacez client_id, puis
+#   npx @shopify/cli app config link   (choisir l'app Pingsell)
+#   npx @shopify/cli app deploy
+# Les mêmes valeurs peuvent aussi être saisies à la main dans le Dev Dashboard (Versions → Créer une version).
+
+name = "Pingsell"
+client_id = "A_REMPLACER_PAR_LE_CLIENT_ID"
+# Page où Shopify envoie le marchand après « Installer » et chaque fois qu'il ouvre Pingsell depuis son admin.
+application_url = "https://app.pingsell.neokrome.tech/api/v1/integrations/shopify/app"
+# Pingsell s'ouvre dans son propre onglet (app autonome, non intégrée à l'admin).
+embedded = false
+
+[access_scopes]
+scopes = "read_customers,read_orders"
+# Pingsell gère lui-même l'échange OAuth (authorization code grant + jetons qui expirent).
+use_legacy_install_flow = true
+
+[auth]
+redirect_urls = [ "https://app.pingsell.neokrome.tech/api/v1/integrations/shopify/callback" ]
+
+[webhooks]
+api_version = "2026-07"
+
+  # Les webhooks de la boutique (clients, commandes, paniers, désinstallation) sont créés par l'API à la connexion.
+  # Les trois webhooks de confidentialité sont obligatoires et se déclarent ici.
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "https://app.pingsell.neokrome.tech/api/v1/webhooks/shopify"
+
+[pos]
+embedded = false

@@ -2,10 +2,12 @@
 <module>
     <name>pingsell</name>
     <displayName><![CDATA[Pingsell]]></displayName>
-    <version><![CDATA[1.2.0]]></version>
-    <description><![CDATA[Inscriptions, paniers abandonnés, commandes et expéditions envoyés à Pingsell, sans code.]]></description>
+    <version><![CDATA[1.3.0]]></version>
+    <description><![CDATA[Sends sign-ups, abandoned carts, orders and shipments to Pingsell, no code needed.]]></description>
     <author><![CDATA[Pingsell]]></author>
     <tab><![CDATA[emailing]]></tab>
+    <confirmUninstall><![CDATA[Your shop will no longer be linked to Pingsell. Continue?]]></confirmUninstall>
     <is_configurable>1</is_configurable>
     <need_instance>0</need_instance>
+    <limited_countries></limited_countries>
 </module>

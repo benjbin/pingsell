@@ -448,6 +448,37 @@ export interface Integration {
   created_at: string;
 }
 
+export interface ShopifyStatus {
+  integration: Integration | null;
+  oauth_available: boolean;
+  sync_running: boolean;
+  /** Link that starts the install on Shopify; null while the Shopify app isn't configured. */
+  app_install_url: string | null;
+}
+
+/** Shop installed from Shopify, waiting to be attached to a Pingsell account. */
+export interface ShopifyPendingClaim {
+  shop_domain: string;
+  shop_name: string | null;
+  /** Shop already connected to this account, which the claim would replace. */
+  current_shop: string | null;
+}
+
+/** Shop platforms whose plugin has a "Connect to Pingsell" button. */
+export type StorePlatform = "wordpress" | "prestashop";
+
+export interface StoreConnectAuthorizeInput {
+  platform: StorePlatform;
+  site: string;
+  return_url: string;
+  state: string;
+}
+
+export interface StoreConnectAuthorizeResponse {
+  /** Plugin admin URL carrying the one-time code and the state. */
+  redirect: string;
+}
+
 export interface ShopifySyncResult {
   customers: number;
   orders: number;

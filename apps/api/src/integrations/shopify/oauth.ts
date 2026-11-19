@@ -5,7 +5,8 @@ import { SHOPIFY_SCOPES } from './types.js';
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 interface PendingInstall {
-  accountId: string;
+  /** null when the install started on Shopify (App Store / admin): the account is chosen after OAuth. */
+  accountId: string | null;
   shop: string;
   expiresAt: number;
 }
@@ -17,7 +18,7 @@ function purgeExpired(): void {
   for (const [key, value] of pending) if (value.expiresAt < now) pending.delete(key);
 }
 
-export function createState(accountId: string, shop: string): string {
+export function createState(accountId: string | null, shop: string): string {
   purgeExpired();
   const state = randomBytes(24).toString('hex');
   pending.set(state, { accountId, shop, expiresAt: Date.now() + STATE_TTL_MS });
@@ -44,6 +45,6 @@ export function buildInstallUrl(shop: string, apiKey: string, publicUrl: string,
     redirect_uri: callbackUrl(publicUrl),
     state,
   });
-  // No grant_options[]=per-user → offline (non-expiring) access token, needed for background sync.
+  // No grant_options[]=per-user → offline access token (made expiring at the code exchange, expiring=1).
   return `https://${shop}/admin/oauth/authorize?${params.toString()}`;
 }

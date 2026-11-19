@@ -67,18 +67,30 @@ export function IntegrationsPage() {
   const [params, setParams] = useSearchParams();
   const guideRef = useRef<HTMLDivElement>(null);
 
-  // Back from Shopify's OAuth page during onboarding: resume the welcome flow.
+  // Back from Shopify (install or claim): say how it went, then resume the welcome flow if it started there.
+  const shopifyNotified = useRef(false);
   useEffect(() => {
-    if (params.get("shopify") !== "connected") return;
+    const result = params.get("shopify");
+    if ((result !== "connected" && result !== "error") || shopifyNotified.current) return;
+    shopifyNotified.current = true;
+    if (result === "connected") toast.success(t("Boutique Shopify connectée", "Shopify store connected"), t("Vos clients et vos commandes arrivent dans Pingsell.", "Your customers and orders are on their way into Pingsell."));
+    else toast.error(t("La connexion Shopify n'a pas abouti", "The Shopify connection didn't go through"), params.get("message") || t("Relancez l'installation depuis Shopify.", "Start the install again from Shopify."));
     try {
-      if (sessionStorage.getItem("missive_onboarding_return")) {
+      if (result === "connected" && sessionStorage.getItem("missive_onboarding_return")) {
         sessionStorage.removeItem("missive_onboarding_return");
         navigate("/bienvenue?shopify=connected", { replace: true });
+        return;
       }
     } catch {
       /* ignore */
     }
-  }, [params, navigate]);
+    // Keep the Shopify guide open, but don't toast again on reload.
+    const next = new URLSearchParams(params);
+    next.delete("shopify");
+    next.delete("message");
+    next.set("outil", "shopify");
+    setParams(next, { replace: true });
+  }, [params, navigate, setParams, toast]);
 
   const outil = params.get("outil") as ToolId | null;
   const selected = outil && IDS.includes(outil) ? outil : params.get("shopify") ? "shopify" : null;

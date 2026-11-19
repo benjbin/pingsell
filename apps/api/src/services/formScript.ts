@@ -64,6 +64,11 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
   var TRACK = __PINGSELL_TRACK__;
   // The Pingsell app's own preview of the form must not count as a visit of the merchant's site.
   if (window.__pingsellNoTrack) TRACK.on = false;
+  // <script … data-pingsell-notrack>: the page loads the script for its forms only (e.g. a shop module
+  // with tracking switched off), so no site tracking whatever the account setting says.
+  var ME = document.currentScript;
+  if ((ME && ME.hasAttribute && ME.hasAttribute('data-pingsell-notrack')) ||
+      document.querySelector('script[data-pingsell-notrack]')) TRACK.on = false;
   var HIT = ENDPOINT + '/t';
   var store = {
     get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },

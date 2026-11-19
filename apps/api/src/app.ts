@@ -26,6 +26,7 @@ import { trackingRoutes } from './routes/tracking.js';
 import { libraryRoutes, publicUploadRoutes } from './routes/library.js';
 import { pushAppRoutes, pushRoutes } from './routes/push.js';
 import { inboundRoutes, inboundSettingsRoutes } from './routes/inbound.js';
+import { connectRoutes, publicConnectRoutes } from './routes/connect.js';
 
 export const API_PREFIX = '/api/v1';
 
@@ -163,6 +164,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(async (scope) => publicUploadRoutes(scope));
   // No-code sites: universal webhook + paste-in form (full /api/v1/public/... paths, any origin).
   await app.register(async (scope) => inboundRoutes(scope, deps));
+  // « Connecter à Pingsell » : échange du code à usage unique contre une clé API (plugins WordPress, PrestaShop).
+  await app.register(async (scope) => publicConnectRoutes(scope, deps));
   // Bounces and complaints forwarded by our own MTA (self-hosted sending).
   await app.register(async (scope) => mtaRoutes(scope, deps));
 
@@ -190,6 +193,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         await accountDeletionRoutes(priv, deps);
         await pushRoutes(priv, deps);
         await inboundSettingsRoutes(priv, deps);
+        await connectRoutes(priv, deps);
       });
     },
     { prefix: API_PREFIX },

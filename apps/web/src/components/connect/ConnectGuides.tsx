@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import {
   CheckCircle2,
+  Clock,
   Code2,
   FileSpreadsheet,
   KeyRound,
-  Link2,
   Loader2,
   RefreshCw,
   ShoppingBag,
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { API_URL, api } from "../../lib/api";
 import { cx, formatDateTime } from "../../lib/format";
-import { Button, Field, Input } from "../ui/primitives";
+import { Button } from "../ui/primitives";
 import { ConfirmModal } from "../ui/Overlay";
 import { CopyButton } from "../CopyButton";
 import { useToast } from "../ui/Toast";
@@ -161,10 +161,7 @@ export interface GuideProps {
 
 export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo?: "onboarding" }) {
   const toast = useToast();
-  const [status, setStatus] = useState<{ connected: boolean; error: boolean; shop: string | null; lastSync: string | null; oauth: boolean } | null>(null);
-  const [shop, setShop] = useState("");
-  const [token, setToken] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ connected: boolean; error: boolean; shop: string | null; lastSync: string | null; installUrl: string | null } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -178,7 +175,7 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
         error: r.integration?.status === "error",
         shop: r.integration?.shop_domain ?? null,
         lastSync: r.integration?.last_sync_at ?? null,
-        oauth: r.oauth_available,
+        installUrl: r.app_install_url ?? null,
       });
       if (connected) onDone(
           t(
@@ -187,7 +184,7 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
           ),
         );
     } catch {
-      setStatus({ connected: false, error: false, shop: null, lastSync: null, oauth: false });
+      setStatus({ connected: false, error: false, shop: null, lastSync: null, installUrl: null });
     }
   }
   useEffect(() => {
@@ -195,25 +192,14 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const domain = () => (shop.trim().includes(".") ? shop.trim() : `${shop.trim()}.myshopify.com`);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
+  /** The install starts on Shopify (App Store rule): OAuth there, then back to Pingsell. */
+  function install(url: string) {
     try {
-      if (status?.oauth) {
-        if (returnTo === "onboarding") sessionStorage.setItem("missive_onboarding_return", "1");
-        window.location.href = await api.integrations.shopify.installUrl(domain());
-        return;
-      }
-      await api.integrations.shopify.connect({ shop_domain: domain(), access_token: token.trim() });
-      setToken("");
-      await load();
-    } catch (err) {
-      toast.error(err);
-    } finally {
-      setBusy(false);
+      if (returnTo === "onboarding") sessionStorage.setItem("missive_onboarding_return", "1");
+    } catch {
+      /* private mode */
     }
+    window.location.href = url;
   }
 
   async function sync() {
@@ -297,93 +283,54 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
             </Button>
           </div>
         </div>
-      ) : (
-        <form onSubmit={(e) => void submit(e)}>
+      ) : status.installUrl ? (
+        <div className="space-y-6">
+          <Button size="lg" variant="accent" icon={ShoppingBag} onClick={() => install(status.installUrl!)}>
+            {t("Installer Pingsell sur Shopify", "Install Pingsell on Shopify")}
+          </Button>
           <Steps>
-            <Step n={1} title={t("Indiquez l'adresse de votre boutique", "Enter your store address")} last={status.oauth}>
-              <p>{t("C'est l'adresse qui finit par .myshopify.com, visible dans Shopify en haut à gauche ou dans Paramètres › Domaines.", "It's the address ending in .myshopify.com, shown at the top left in Shopify or under Settings › Domains.")}</p>
-              <Field label={t("Adresse de la boutique", "Store address")} htmlFor="cg-shop">
-                <div className="flex items-center rounded-xl bg-white ring-1 ring-slate-900/15 focus-within:ring-2 focus-within:ring-brand-500 dark:bg-slate-950 dark:ring-white/15">
-                  <input
-                    id="cg-shop"
-                    required
-                    value={shop}
-                    onChange={(e) => setShop(e.target.value.replace(/^https?:\/\//, "").replace(/\/.*$/, ""))}
-                    placeholder={t("ma-boutique", "my-store")}
-                    className="h-11 min-w-0 flex-1 bg-transparent px-4 text-sm outline-none dark:text-white"
-                    autoComplete="off"
-                  />
-                  {!shop.includes(".") && <span className="pr-4 text-sm text-slate-400">.myshopify.com</span>}
-                </div>
-              </Field>
-              {status.oauth && (
-                <>
-                  <p>{t("Shopify vous demandera d'autoriser Pingsell à lire vos clients et vos commandes, puis vous ramènera ici.", "Shopify will ask you to allow Pingsell to read your customers and orders, then bring you back here.")}</p>
-                  <Button type="submit" size="lg" icon={Link2} loading={busy}>
-                    {t("Connecter en 1 clic", "Connect in 1 click")}
-                  </Button>
-                </>
-              )}
-            </Step>
-            {!status.oauth && (
-              <>
-                <Step n={2} title={t("Ouvrez votre application personnalisée dans Shopify", "Open your custom app in Shopify")}>
-                  <ol className="list-decimal space-y-1.5 pl-5">
-                    <li>
-                      {t(
-                        <>
-                          Dans l'admin Shopify, ouvrez <Kbd>Paramètres › Applications et canaux de vente</Kbd>, puis <Kbd>Développer des applications</Kbd>.
-                        </>,
-                        <>
-                          In the Shopify admin, open <Kbd>Settings › Apps and sales channels</Kbd>, then <Kbd>Develop apps</Kbd>.
-                        </>,
-                      )}
-                    </li>
-                    <li>{t("Ouvrez l'application personnalisée de votre boutique (ou celle créée pour Pingsell).", "Open your store's custom app (or the one created for Pingsell).")}</li>
-                    <li>
-                      {t(
-                        <>
-                          Dans <Kbd>Configuration › Admin API</Kbd>, vérifiez que <code>read_customers</code>, <code>read_orders</code> et <code>read_checkouts</code> sont cochés, puis
-                          enregistrez.
-                        </>,
-                        <>
-                          In <Kbd>Configuration › Admin API</Kbd>, make sure <code>read_customers</code>, <code>read_orders</code> and <code>read_checkouts</code> are checked, then save.
-                        </>,
-                      )}
-                    </li>
-                  </ol>
-                  <Hint>
-                    {t(
-                      "Pingsell ne demande que la lecture : rien n'est modifié dans votre boutique. Depuis 2026, Shopify ne permet plus de créer de nouvelles applications depuis l'admin : si vous n'en avez pas, la connexion en 1 clic s'en charge à votre place.",
-                      "Pingsell only asks for read access: nothing in your store is changed. Since 2026, Shopify no longer lets you create new apps from the admin. If you don't have one, 1-click connect handles it for you.",
-                    )}
-                  </Hint>
-                </Step>
-                <Step n={3} title={t("Collez le jeton d'accès", "Paste the access token")} last>
-                  <p>
-                    {t(
-                      <>
-                        Toujours dans l'application, onglet <Kbd>Identifiants API</Kbd> : affichez le <Kbd>jeton d'accès Admin API</Kbd> (il commence par shpat_) et collez-le ici. Shopify ne le montre qu'une fois : s'il a déjà été révélé, désinstallez puis réinstallez
-                        l'application pour en obtenir un nouveau.
-                      </>,
-                      <>
-                        Still in the app, on the <Kbd>API credentials</Kbd> tab, reveal the <Kbd>Admin API access token</Kbd> (it starts with shpat_) and paste it here. Shopify only shows it once: if it was already revealed, uninstall and reinstall the app
-                        to get a new one.
-                      </>,
-                    )}
-                  </p>
-                  <Field label={t("Jeton d'accès Admin API", "Admin API access token")} htmlFor="cg-token">
-                    <Input id="cg-token" type="password" required value={token} onChange={(e) => setToken(e.target.value)} placeholder="shpat_…" autoComplete="off" />
-                  </Field>
-                  <Button type="submit" size="lg" icon={Link2} loading={busy}>
-                    {t("Connecter la boutique", "Connect store")}
-                  </Button>
-                  <p className="text-xs text-slate-500">{t("La première synchronisation démarre aussitôt : vos clients et vos commandes passées sont importés.", "The first sync starts right away: your customers and past orders are imported.")}</p>
-                </Step>
-              </>
-            )}
+            <Step n={1} title={t("Cliquez sur le bouton, Shopify s'ouvre.", "Click the button, Shopify opens.")} />
+            <Step n={2} title={t("Choisissez votre boutique et acceptez.", "Pick your store and approve.")} />
+            <Step n={3} title={t("Vous revenez ici, vos clients et commandes arrivent tout seuls.", "You come back here, and your customers and orders flow in on their own.")} last />
           </Steps>
-        </form>
+          <Hint>
+            {t(
+              <>
+                Synchronisés en continu : vos <Kbd>clients</Kbd>, leurs <Kbd>commandes</Kbd> et les <Kbd>paniers abandonnés</Kbd>. Pingsell ne fait que lire : rien n'est modifié dans votre boutique.
+              </>,
+              <>
+                Kept in sync: your <Kbd>customers</Kbd>, their <Kbd>orders</Kbd> and <Kbd>abandoned carts</Kbd>. Pingsell only reads: nothing in your store is changed.
+              </>,
+            )}
+          </Hint>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-slate-50 px-5 py-4 dark:bg-slate-800/60">
+            <p className="flex items-center gap-2 font-display text-[15px] font-bold text-slate-900 dark:text-white">
+              <Clock className="size-4 text-brand-500" /> {t("Connexion Shopify en 1 clic : bientôt disponible", "1-click Shopify connection: coming soon")}
+            </p>
+            <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-300">
+              {t(
+                "L'application Pingsell arrive sur le Shopify App Store. Vous pourrez alors l'installer depuis Shopify, sans rien copier.",
+                "The Pingsell app is coming to the Shopify App Store. You'll then install it from Shopify, nothing to copy.",
+              )}
+            </p>
+          </div>
+          <Hint>
+            {t(
+              <>
+                En attendant, la ligne Pingsell de <Kbd>Vos sites</Kbd> fonctionne déjà sur Shopify : collez-la dans votre thème, elle repère les inscriptions et les pages vues.{" "}
+              </>,
+              <>
+                Meanwhile, the Pingsell line from <Kbd>Your sites</Kbd> already works on Shopify: paste it in your theme and it picks up sign-ups and page views.{" "}
+              </>,
+            )}
+            <Link to="/integrations?outil=suivi" className="font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300">
+              {t("Ouvrir Vos sites", "Open Your sites")} →
+            </Link>
+          </Hint>
+        </div>
       )}
 
       <ConfirmModal

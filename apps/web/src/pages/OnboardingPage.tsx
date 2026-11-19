@@ -25,6 +25,8 @@ import { PingsellLogo } from "../components/brand/PingsellLogo";
 import { DEFAULT_EMAIL_HTML } from "./campaigns/defaultTemplate";
 import { BrandLogoStep, brandEmailHeader } from "../components/BrandLogoStep";
 import { t } from "../lib/i18n";
+import { pendingClaimPath } from "../lib/shopifyClaim";
+import { pendingStoreConnectPath } from "../lib/storeConnect";
 
 /* -------------------------------------------------------------------------- */
 /* Sources                                                                    */
@@ -81,6 +83,11 @@ export function OnboardingPage() {
   const [done, setDone] = useState<Partial<Record<SourceId, string>>>({});
 
   useEffect(() => save({ selected, step, index }), [selected, step, index]);
+  // A Shopify install is waiting for this new account: attach the shop first.
+  useEffect(() => {
+    const claim = pendingClaimPath() ?? pendingStoreConnectPath();
+    if (claim) navigate(claim, { replace: true });
+  }, [navigate]);
   // Back from Shopify's OAuth page.
   useEffect(() => {
     if (params.get("shopify") === "connected") setDone((d) => ({ ...d, shopify: t("Boutique connectée", "Store connected") }));

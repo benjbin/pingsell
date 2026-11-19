@@ -79,6 +79,7 @@ function useNewCall(settings: InboundSettings | null, pick: (s: InboundSettings)
 const PLUGINS = {
   wordpress: {
     title: "WordPress & WooCommerce",
+    platform: "WordPress",
     zip: "/downloads/pingsell-wordpress.zip",
     intro: t(
       "L'extension Pingsell envoie toute seule les nouveaux comptes, les paniers abandonnés (même ceux des visiteurs non connectés), les commandes, les expéditions avec leur numéro de suivi et vos formulaires (Contact Form 7, WPForms, Gravity Forms, Elementor, Fluent Forms).",
@@ -88,7 +89,11 @@ const PLUGINS = {
       <>Dans WordPress : <Kbd>Extensions › Ajouter une extension › Téléverser une extension</Kbd>, choisissez le fichier, puis <Kbd>Installer maintenant</Kbd> et <Kbd>Activer l’extension</Kbd>.</>,
       <>In WordPress: <Kbd>Plugins › Add New Plugin › Upload Plugin</Kbd>, choose the file, then <Kbd>Install Now</Kbd> and <Kbd>Activate Plugin</Kbd>.</>,
     ),
-    settings: t(<>Ouvrez <Kbd>Réglages › Pingsell</Kbd> et collez ces deux valeurs, puis <Kbd>Enregistrer</Kbd> et <Kbd>Tester la connexion</Kbd>.</>, <>Open <Kbd>Settings › Pingsell</Kbd>, paste these two values, then <Kbd>Save</Kbd> and <Kbd>Test connection</Kbd>.</>),
+    connect: t(
+      <>Ouvrez <Kbd>Réglages › Pingsell</Kbd> et cliquez sur <Kbd>« Connecter à Pingsell »</Kbd>. Validez sur la page qui s'ouvre : vous revenez dans WordPress, connecté.</>,
+      <>Open <Kbd>Settings › Pingsell</Kbd> and click <Kbd>“Connect to Pingsell”</Kbd>. Confirm on the page that opens: you're sent back to WordPress, connected.</>,
+    ),
+    manual: t(<>Dans <Kbd>Réglages › Pingsell</Kbd>, ouvrez <Kbd>Connexion manuelle</Kbd>, collez ces deux valeurs, puis <Kbd>Enregistrer</Kbd> et <Kbd>Tester la connexion</Kbd>.</>, <>In <Kbd>Settings › Pingsell</Kbd>, open <Kbd>Manual connection</Kbd>, paste these two values, then <Kbd>Save</Kbd> and <Kbd>Test connection</Kbd>.</>),
     extra: t(
       <>Formulaire d'inscription : ajoutez le code court <code>[pingsell_form]</code> dans n'importe quelle page (options <code>title</code>, <code>button</code>, <code>tags</code>, <code>fields="first_name,email"</code>).</>,
       <>Sign-up form: add the <code>[pingsell_form]</code> shortcode to any page (options <code>title</code>, <code>button</code>, <code>tags</code>, <code>fields="first_name,email"</code>).</>,
@@ -96,6 +101,7 @@ const PLUGINS = {
   },
   prestashop: {
     title: "PrestaShop",
+    platform: "PrestaShop",
     zip: "/downloads/pingsell-prestashop.zip",
     intro: t(
       "Le module Pingsell (PrestaShop 1.7, 8 et 9) envoie tout seul les nouveaux comptes, les inscriptions à la newsletter, les paniers abandonnés, les commandes et les expéditions avec le lien de suivi du transporteur.",
@@ -105,7 +111,11 @@ const PLUGINS = {
       <>Dans PrestaShop : <Kbd>Modules › Gestionnaire de modules › Installer un module</Kbd>, déposez le fichier, puis <Kbd>Configurer</Kbd>.</>,
       <>In PrestaShop: <Kbd>Modules › Module Manager › Upload a module</Kbd>, drop the file, then <Kbd>Configure</Kbd>.</>,
     ),
-    settings: t(<>Collez ces deux valeurs dans la page du module, puis <Kbd>Enregistrer et tester</Kbd>.</>, <>Paste these two values on the module's page, then <Kbd>Save and test</Kbd>.</>),
+    connect: t(
+      <>Sur la page du module, cliquez sur <Kbd>« Connecter à Pingsell »</Kbd>. Validez sur la page qui s'ouvre : vous revenez dans PrestaShop, connecté.</>,
+      <>On the module's page, click <Kbd>“Connect to Pingsell”</Kbd>. Confirm on the page that opens: you're sent back to PrestaShop, connected.</>,
+    ),
+    manual: t(<>Sur la page du module, ouvrez <Kbd>Connexion manuelle</Kbd>, collez ces deux valeurs, puis <Kbd>Enregistrer et tester</Kbd>.</>, <>On the module's page, open <Kbd>Manual connection</Kbd>, paste these two values, then <Kbd>Save and test</Kbd>.</>),
     extra: t(
       <>Formulaire d'inscription : activez « Formulaire d'inscription Pingsell au-dessus du pied de page » dans le module.</>,
       <>Sign-up form: turn on “Pingsell sign-up form above the footer” in the module.</>,
@@ -127,11 +137,26 @@ export function PluginGuide({ platform, done, onDone, onNoPlugin }: GuideProps &
       return null;
     }
   });
+  const [manual, setManual] = useState(!!key);
   const [busy, setBusy] = useState(false);
+  // Keys that existed when the guide opened: a new "WordPress · shop.com" key means the button worked.
+  const known = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    api.apiKeys
+      .list()
+      .then((keys) => {
+        known.current = new Set(keys.map((k) => k.id));
+      })
+      .catch(() => {
+        known.current = new Set();
+      });
+  }, []);
 
-  const received = usePoll(!!key && !done, async () => {
+  const received = usePoll(!done, async () => {
+    if (!known.current) return false;
     const keys = await api.apiKeys.list();
-    return !!keys.find((k) => k.id === key?.id)?.last_used_at;
+    if (key && keys.find((k) => k.id === key.id)?.last_used_at) return true;
+    return keys.some((k) => !known.current!.has(k.id) && k.label.startsWith(`${meta.platform} · `));
   });
   useEffect(() => {
     if (received) onDone(t(`${meta.title} est relié à Pingsell. Les prochains clients arriveront dans Contacts.`, `${meta.title} is connected to Pingsell. New customers will show up in Contacts.`));
@@ -162,7 +187,7 @@ export function PluginGuide({ platform, done, onDone, onNoPlugin }: GuideProps &
     <>
       <GuideHead icon={Blocks} title={meta.title} text={meta.intro} done={done || undefined} />
       <Steps>
-        <Step n={1} title={t("Téléchargez l'extension", "Download the plugin")}>
+        <Step n={1} title={t("Téléchargez et installez l'extension", "Download and install the plugin")}>
           <a
             href={meta.zip}
             download
@@ -170,39 +195,43 @@ export function PluginGuide({ platform, done, onDone, onNoPlugin }: GuideProps &
           >
             <Download className="size-4" /> {meta.zip.split("/").pop()}
           </a>
-        </Step>
-        <Step n={2} title={t("Installez-la", "Install it")}>
           <p>{meta.install}</p>
         </Step>
-        <Step n={3} title={t("Reliez-la à votre compte", "Link it to your account")} done={!!key}>
-          <p>{meta.settings}</p>
-          <Field label={t("Adresse de l'API", "API address")}>
-            <CopyLine value={API_URL} />
-          </Field>
-          <Field label={t("Clé API", "API key")}>
-            {key ? (
-              <CopyLine value={key.key} />
-            ) : (
-              <Button icon={KeyRound} loading={busy} onClick={() => void generate()}>
-                {t("Générer ma clé API", "Generate my API key")}
-              </Button>
-            )}
-          </Field>
-          {key && <p className="text-xs text-slate-500">{t("Copiez-la maintenant : elle ne sera plus affichée en entier.", "Copy it now: it won't be shown in full again.")}</p>}
-        </Step>
-        <Step n={4} title={t("Testez la connexion", "Test the connection")} done={!!done} last>
+        <Step n={2} title={t("Cliquez sur « Connecter à Pingsell »", "Click “Connect to Pingsell”")} done={!!done} last>
+          <p>{meta.connect}</p>
           {done ? (
             <p>{meta.extra}</p>
-          ) : key ? (
-            <Waiting>{t("Cliquez sur « Tester la connexion » dans l'extension : on vous confirme ici dès que Pingsell reçoit l'appel.", "Click “Test connection” in the plugin and we'll confirm here as soon as Pingsell receives the call.")}</Waiting>
           ) : (
-            <p>{t("Générez la clé à l'étape 3 : on détectera la connexion en direct, ici.", "Generate the key in step 3 and we'll detect the connection live, right here.")}</p>
+            <Waiting>{t("On vous confirme ici dès que votre boutique est reliée.", "We'll confirm here as soon as your store is linked.")}</Waiting>
           )}
         </Step>
       </Steps>
+      <div className="mt-7 border-t border-slate-900/10 pt-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+        <button type="button" onClick={() => setManual((m) => !m)} aria-expanded={manual} className="font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+          {t("Connexion manuelle", "Manual connection")} {manual ? "▴" : "▾"}
+        </button>
+        {manual && (
+          <div className="mt-4 space-y-4 text-slate-600 dark:text-slate-300">
+            <p>{meta.manual}</p>
+            <Field label={t("Adresse de l'API", "API address")}>
+              <CopyLine value={API_URL} />
+            </Field>
+            <Field label={t("Clé API", "API key")}>
+              {key ? (
+                <CopyLine value={key.key} />
+              ) : (
+                <Button variant="secondary" icon={KeyRound} loading={busy} onClick={() => void generate()}>
+                  {t("Générer ma clé API", "Generate my API key")}
+                </Button>
+              )}
+            </Field>
+            {key && <p className="text-xs text-slate-500">{t("Copiez-la maintenant : elle ne sera plus affichée en entier.", "Copy it now: it won't be shown in full again.")}</p>}
+          </div>
+        )}
+      </div>
       {platform === "wordpress" && onNoPlugin && (
-        <p className="mt-7 border-t border-slate-900/10 pt-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
-          {t("Vous ne pouvez pas installer d'extension (hébergement géré, WordPress.com) ? ", "Can't install plugins (managed hosting, WordPress.com)? ")}
+        <p className="mt-5 text-sm text-slate-500 dark:text-slate-400">
+          {t("Vous ne pouvez pas installer d'extension (hébergement géré, WordPress.com) ? ", "Can't install plugins (managed hosting, WordPress.com)? ")}
           <button type="button" onClick={onNoPlugin} className="font-semibold text-brand-500 hover:text-brand-600">
             {t("Utilisez les webhooks WooCommerce", "Use WooCommerce webhooks")}
           </button>
@@ -677,7 +706,7 @@ export function TrackingGuide({ done, onDone }: GuideProps) {
     squarespace: t("Paramètres › Avancé › Injection de code › En-tête : collez la ligne (offre Core ou supérieure).", "Settings › Advanced › Code injection › Header: paste the line (Core plan or above)."),
     framer: t("Paramètres du site › Général › Code personnalisé › « Start of <head> tag » : collez la ligne, puis publiez.", "Site settings › General › Custom code › “Start of <head> tag”: paste the line, then publish."),
     webflow: t("Paramètres du site › Code personnalisé › Head code : collez la ligne, puis publiez.", "Site settings › Custom code › Head code: paste the line, then publish."),
-    wordpress: t("Avec l'extension Pingsell (1.2 ou plus), rien à faire : le suivi est déjà actif. Sinon, collez la ligne dans l'en-tête du thème.", "With the Pingsell plugin (1.2 or later), nothing to do: tracking is already on. Otherwise, paste the line in the theme header."),
+    wordpress: t("Avec l'extension Pingsell (1.3 ou plus), activez le suivi des visiteurs dans ses réglages. Sinon, collez la ligne dans l'en-tête du thème.", "With the Pingsell plugin (1.3 or later), turn on visitor tracking in its settings. Otherwise, paste the line in the theme header."),
     shopify: t("Boutique en ligne › Thèmes › … › Modifier le code › theme.liquid : collez la ligne juste avant </head>.", "Online Store › Themes › … › Edit code › theme.liquid: paste the line just before </head>."),
     other: t("Dans l'en-tête commun à toutes les pages (balise <head>), ou via Google Tag Manager (balise HTML personnalisée, toutes les pages).", "In the header shared by every page (<head> tag), or through Google Tag Manager (custom HTML tag, all pages)."),
   };

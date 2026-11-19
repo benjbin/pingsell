@@ -2,26 +2,53 @@
 /**
  * Plugin Name:       Pingsell
  * Plugin URI:        https://pingsell.neokrome.tech
- * Description:       Connecte WordPress et WooCommerce à Pingsell : inscriptions, paniers abandonnés, commandes, expéditions, formulaires et suivi des visites, sans code.
- * Version:           1.2.0
+ * Description:       Connects WordPress and WooCommerce to Pingsell: sign-ups, abandoned carts, orders, shipments, forms and visit tracking, with no code.
+ * Version:           1.3.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Pingsell
+ * Author URI:        https://pingsell.neokrome.tech
  * License:           GPL-2.0-or-later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       pingsell
+ * Domain Path:       /languages
  * WC requires at least: 6.0
- * WC tested up to:   9.4
+ * WC tested up to:   10.3
+ *
+ * @package Pingsell
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-define('PINGSELL_VERSION', '1.2.0');
+define('PINGSELL_VERSION', '1.3.0');
+
+// Both addresses can be overridden in wp-config.php (define() before the plugins load).
+if (!defined('PINGSELL_APP_URL')) {
+    define('PINGSELL_APP_URL', 'https://app.pingsell.neokrome.tech');
+}
+if (!defined('PINGSELL_API_URL')) {
+    define('PINGSELL_API_URL', PINGSELL_APP_URL);
+}
 
 final class Pingsell_Plugin
 {
     const OPTION = 'pingsell_settings';
+    const STATE_OPTION = 'pingsell_connect_state';
+    const VERSION_OPTION = 'pingsell_version';
+    /** A connection started from the admin must come back within 15 minutes. */
+    const STATE_TTL = 900;
+    /** Checkout email capture: at most 10 calls per visitor (IP + WooCommerce session) every 10 minutes. */
+    const CAPTURE_LIMIT = 10;
+    /**
+     * And at most 300 calls per IP every 10 minutes: behind a CDN or a reverse proxy all visitors
+     * share one IP, so this ceiling only stops a flood, not the shop's customers.
+     */
+    const CAPTURE_IP_LIMIT = 300;
+
+    // TODO: the terms page https://app.pingsell.neokrome.tech/conditions (linked from readme.txt,
+    // « External services ») does not exist yet in apps/web: create it before submitting to wordpress.org.
 
     /** @var Pingsell_Plugin|null */
     private static $instance = null;
@@ -36,10 +63,19 @@ final class Pingsell_Plugin
 
     private function __construct()
     {
+        add_action('init', array($this, 'load_textdomain'));
+        add_action('plugins_loaded', array($this, 'maybe_upgrade'));
         add_action('admin_menu', array($this, 'admin_menu'));
         add_action('admin_init', array($this, 'register_settings'));
+        add_action('admin_init', array($this, 'handle_connect_return'));
+        add_action('admin_enqueue_scripts', array($this, 'admin_scripts'));
+        add_action('admin_post_pingsell_connect', array($this, 'handle_connect'));
+        add_action('admin_post_pingsell_disconnect', array($this, 'handle_disconnect'));
+        add_action('admin_post_pingsell_manual', array($this, 'handle_manual'));
         add_action('admin_post_pingsell_test', array($this, 'handle_test'));
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), array($this, 'action_links'));
+        // WP Consent API: this plugin checks consent itself before tracking.
+        add_filter('wp_consent_api_registered_' . plugin_basename(__FILE__), '__return_true');
 
         // WordPress accounts.
         add_action('user_register', array($this, 'on_user_register'), 20, 2);
@@ -53,7 +89,7 @@ final class Pingsell_Plugin
         add_action('woocommerce_store_api_checkout_order_processed', array($this, 'on_checkout_processed'), 20, 1);
         add_action('woocommerce_cart_updated', array($this, 'on_cart_updated'), 20);
         add_action('wp_enqueue_scripts', array($this, 'checkout_capture_script'));
-        // Site tracking: the Pingsell script on every page (pages and products seen, customers recognised).
+        // Site tracking (off unless the merchant enables it): pages and products seen, customers recognised.
         add_action('wp_enqueue_scripts', array($this, 'tracking_script'));
         add_action('wp_ajax_pingsell_capture', array($this, 'ajax_capture'));
         add_action('wp_ajax_nopriv_pingsell_capture', array($this, 'ajax_capture'));
@@ -66,8 +102,43 @@ final class Pingsell_Plugin
         add_action('elementor_pro/forms/new_record', array($this, 'on_elementor'), 20, 2);
         add_action('fluentform/submission_inserted', array($this, 'on_fluent'), 20, 3);
 
-        // Signup form anywhere: [pingsell_form title="…" tags="…"] or the « Pingsell » widget.
+        // Signup form anywhere: [pingsell_form title="…" tags="…"].
         add_shortcode('pingsell_form', array($this, 'shortcode'));
+    }
+
+    public function load_textdomain()
+    {
+        // The plugin is also distributed outside WordPress.org: its French translation ships in /languages.
+        // phpcs:ignore PluginCheck.CodeAnalysis.DiscouragedFunctions.load_plugin_textdomainFound -- bundled translations for the direct download.
+        load_plugin_textdomain('pingsell', false, dirname(plugin_basename(__FILE__)) . '/languages');
+    }
+
+    // ─── Install / upgrade ────────────────────────────────────────────────────
+
+    /** Fresh install: everything off that needs the merchant's explicit choice (visit tracking). */
+    public static function activate()
+    {
+        if (get_option(self::OPTION, false) === false) {
+            add_option(self::OPTION, self::defaults());
+        }
+        self::instance()->maybe_upgrade();
+    }
+
+    /**
+     * Before 1.3.0 visit tracking was on by default. A merchant who already uses it keeps it:
+     * settings saved without the « tracking » key were tracking, so it is written as « on ».
+     */
+    public function maybe_upgrade()
+    {
+        if (get_option(self::VERSION_OPTION) === PINGSELL_VERSION) {
+            return;
+        }
+        $saved = get_option(self::OPTION, false);
+        if (is_array($saved) && !array_key_exists('tracking', $saved)) {
+            $saved['tracking'] = '1';
+            update_option(self::OPTION, $saved);
+        }
+        update_option(self::VERSION_OPTION, PINGSELL_VERSION);
     }
 
     // ─── Settings ─────────────────────────────────────────────────────────────
@@ -75,16 +146,23 @@ final class Pingsell_Plugin
     public static function defaults()
     {
         return array(
-            'api_url'    => '',
-            'api_key'    => '',
-            'signups'    => '1',
-            'carts'      => '1',
-            'orders'     => '1',
-            'shipments'  => '1',
-            'forms'      => '0',
-            'tracking'   => '1',
-            'form_tags'  => 'formulaire',
+            'api_url'      => '',
+            'api_key'      => '',
+            'account_name' => '',
+            'manual'       => '0',
+            'signups'      => '1',
+            'carts'        => '1',
+            'orders'       => '1',
+            'shipments'    => '1',
+            'forms'        => '0',
+            'tracking'     => '0',
+            'form_tags'    => 'formulaire',
         );
+    }
+
+    private static function checkboxes()
+    {
+        return array('signups', 'carts', 'orders', 'shipments', 'forms', 'tracking');
     }
 
     public function settings()
@@ -93,10 +171,82 @@ final class Pingsell_Plugin
         return wp_parse_args(is_array($saved) ? $saved : array(), self::defaults());
     }
 
+    /** Base address of the API (without /api/v1): the one received at connection, else PINGSELL_API_URL. */
+    private function api_url()
+    {
+        $s = $this->settings();
+        return untrailingslashit($s['api_url'] !== '' ? $s['api_url'] : PINGSELL_API_URL);
+    }
+
+    private function connected()
+    {
+        $s = $this->settings();
+        return $s['api_key'] !== '';
+    }
+
     private function enabled($key)
     {
         $s = $this->settings();
-        return !empty($s['api_key']) && !empty($s['api_url']) && $s[$key] === '1';
+        return $this->connected() && $s[$key] === '1';
+    }
+
+    private static function is_local_host($host)
+    {
+        $host = strtolower(trim((string) $host, '[]'));
+        return in_array($host, array('localhost', '127.0.0.1', '::1'), true) || (bool) preg_match('/\.(localhost|test)$/', $host);
+    }
+
+    /** https, or http on a local address (development). */
+    private static function valid_api_url($url)
+    {
+        $parts = wp_parse_url((string) $url);
+        if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+            return false;
+        }
+        $scheme = strtolower($parts['scheme']);
+        return $scheme === 'https' || ($scheme === 'http' && self::is_local_host($parts['host']));
+    }
+
+    /** Hosts the plugin accepts scripts and webhooks from: PINGSELL_API_URL and the API it is connected to. */
+    private function allowed_hosts()
+    {
+        $hosts = array();
+        foreach (array(PINGSELL_API_URL, $this->api_url()) as $url) {
+            $host = wp_parse_url($url, PHP_URL_HOST);
+            if ($host) {
+                $hosts[] = strtolower($host);
+            }
+        }
+        return array_unique($hosts);
+    }
+
+    private function on_allowed_host($url)
+    {
+        $host = wp_parse_url((string) $url, PHP_URL_HOST);
+        return $host && self::valid_api_url($url) && in_array(strtolower($host), $this->allowed_hosts(), true);
+    }
+
+    /** « msv_AbCd…wxyz »: the key is never shown again in full. */
+    public static function mask_key($key)
+    {
+        $key = (string) $key;
+        if ($key === '') {
+            return '';
+        }
+        if (strlen($key) <= 12) {
+            return substr($key, 0, 4) . '…';
+        }
+        return substr($key, 0, 8) . '…' . substr($key, -4);
+    }
+
+    private static function lang()
+    {
+        return strpos(function_exists('determine_locale') ? determine_locale() : get_locale(), 'fr') === 0 ? 'fr' : 'en';
+    }
+
+    private function page_url()
+    {
+        return admin_url('options-general.php?page=pingsell');
     }
 
     public function admin_menu()
@@ -106,7 +256,7 @@ final class Pingsell_Plugin
 
     public function action_links($links)
     {
-        array_unshift($links, '<a href="' . esc_url(admin_url('options-general.php?page=pingsell')) . '">' . esc_html__('Réglages', 'pingsell') . '</a>');
+        array_unshift($links, '<a href="' . esc_url($this->page_url()) . '">' . esc_html__('Settings', 'pingsell') . '</a>');
         return $links;
     }
 
@@ -115,20 +265,241 @@ final class Pingsell_Plugin
         register_setting('pingsell', self::OPTION, array('sanitize_callback' => array($this, 'sanitize')));
     }
 
+    /**
+     * Runs on every save of the option (settings form and the plugin's own updates).
+     * Only the keys present are changed: the settings form never touches the connection.
+     */
     public function sanitize($input)
     {
-        $out = self::defaults();
+        $out = $this->settings();
         $input = is_array($input) ? $input : array();
-        $out['api_url'] = esc_url_raw(untrailingslashit(trim(isset($input['api_url']) ? $input['api_url'] : '')));
-        // Accept the address with or without /api/v1.
-        $out['api_url'] = preg_replace('#/api/v1/?$#', '', $out['api_url']);
-        $out['api_key'] = sanitize_text_field(isset($input['api_key']) ? trim($input['api_key']) : '');
-        foreach (array('signups', 'carts', 'orders', 'shipments', 'forms', 'tracking') as $k) {
-            $out[$k] = !empty($input[$k]) ? '1' : '0';
+        if (array_key_exists('api_url', $input)) {
+            $url = preg_replace('#/api/v1/?$#', '', untrailingslashit(esc_url_raw(trim((string) $input['api_url']))));
+            $out['api_url'] = $url !== '' && self::valid_api_url($url) ? $url : '';
         }
-        $out['form_tags'] = sanitize_text_field(isset($input['form_tags']) ? $input['form_tags'] : '');
+        if (array_key_exists('api_key', $input)) {
+            $out['api_key'] = sanitize_text_field(trim((string) $input['api_key']));
+        }
+        if (array_key_exists('account_name', $input)) {
+            $out['account_name'] = sanitize_text_field((string) $input['account_name']);
+        }
+        if (array_key_exists('manual', $input)) {
+            $out['manual'] = $input['manual'] === '1' ? '1' : '0';
+        }
+        foreach (self::checkboxes() as $k) {
+            if (array_key_exists($k, $input)) {
+                $out[$k] = (string) $input[$k] === '1' ? '1' : '0';
+            }
+        }
+        if (array_key_exists('form_tags', $input)) {
+            $out['form_tags'] = sanitize_text_field((string) $input['form_tags']);
+        }
         delete_transient('pingsell_inbound');
+        delete_transient('pingsell_inbound_failed');
         return $out;
+    }
+
+    private function save(array $changes)
+    {
+        update_option(self::OPTION, array_merge($this->settings(), $changes));
+    }
+
+    /** One message shown once on the settings page, for the current user. */
+    private function notice($type, $message, $retry = false)
+    {
+        set_transient('pingsell_notice_' . get_current_user_id(), array('type' => $type, 'message' => $message, 'retry' => $retry), 5 * MINUTE_IN_SECONDS);
+    }
+
+    private function back_to_page()
+    {
+        wp_safe_redirect($this->page_url());
+        exit;
+    }
+
+    private function check_admin_action($action)
+    {
+        if (!current_user_can('manage_options') || !check_admin_referer($action)) {
+            wp_die(esc_html__('Action not allowed.', 'pingsell'));
+        }
+    }
+
+    public function admin_scripts($hook)
+    {
+        if ($hook !== 'settings_page_pingsell') {
+            return;
+        }
+        wp_enqueue_script('pingsell-admin', plugins_url('assets/pingsell-admin.js', __FILE__), array(), PINGSELL_VERSION, true);
+    }
+
+    // ─── « Connect to Pingsell » ──────────────────────────────────────────────
+
+    /** Step 1: a fresh state, then the Pingsell page where the merchant signs in and approves. */
+    public function handle_connect()
+    {
+        $this->check_admin_action('pingsell_connect');
+        $state = bin2hex(random_bytes(32));
+        update_option(self::STATE_OPTION, array('state' => $state, 'time' => time()), false);
+        $url = untrailingslashit(PINGSELL_APP_URL) . '/connecter/boutique?' . http_build_query(array(
+            'platform'   => 'wordpress',
+            'site'       => home_url('/'),
+            'return_url' => $this->page_url(),
+            'state'      => $state,
+        ), '', '&', PHP_QUERY_RFC3986);
+        add_filter('allowed_redirect_hosts', array($this, 'allow_app_host'));
+        wp_safe_redirect($url);
+        exit;
+    }
+
+    public function allow_app_host($hosts)
+    {
+        $host = wp_parse_url(PINGSELL_APP_URL, PHP_URL_HOST);
+        if ($host) {
+            $hosts[] = $host;
+        }
+        return $hosts;
+    }
+
+    /** Step 2: back from Pingsell with ?pingsell_code=…&state=… (or ?pingsell_error=access_denied). */
+    public function handle_connect_return()
+    {
+        // phpcs:disable WordPress.Security.NonceVerification.Recommended -- coming back from Pingsell: protected by the single-use state (hash_equals) instead of a nonce.
+        if (!isset($_GET['page']) || sanitize_key(wp_unslash($_GET['page'])) !== 'pingsell') {
+            return;
+        }
+        if (!isset($_GET['pingsell_code']) && !isset($_GET['pingsell_error'])) {
+            return;
+        }
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        $code = isset($_GET['pingsell_code']) ? sanitize_text_field(wp_unslash($_GET['pingsell_code'])) : '';
+        $state = isset($_GET['state']) ? sanitize_text_field(wp_unslash($_GET['state'])) : '';
+        $error = isset($_GET['pingsell_error']) ? sanitize_key(wp_unslash($_GET['pingsell_error'])) : '';
+        // phpcs:enable WordPress.Security.NonceVerification.Recommended
+        $result = $this->complete_connection($code, $state, $error);
+        $this->notice($result['type'], $result['message'], $result['type'] === 'error');
+        $this->back_to_page();
+    }
+
+    /** @return array{type:string,message:string} */
+    public function complete_connection($code, $state, $error = '')
+    {
+        $pending = get_option(self::STATE_OPTION, false);
+        $valid = is_array($pending) && !empty($pending['state']) && is_string($pending['state']) && $state !== ''
+            && hash_equals($pending['state'], (string) $state)
+            && isset($pending['time']) && time() - (int) $pending['time'] >= 0 && time() - (int) $pending['time'] <= self::STATE_TTL;
+        if ($valid || $error !== '') {
+            delete_option(self::STATE_OPTION);
+        }
+        if ($error === 'access_denied') {
+            return array('type' => 'warning', 'message' => __('Connection cancelled.', 'pingsell'));
+        }
+        if ($error !== '' || !$valid || !preg_match('/^[A-Za-z0-9_-]{16,200}$/', (string) $code)) {
+            return array('type' => 'error', 'message' => __('This connection link is no longer valid. Start again from this page.', 'pingsell'));
+        }
+
+        $res = wp_remote_post(untrailingslashit(PINGSELL_API_URL) . '/api/v1/public/connect/exchange', array(
+            'timeout' => 15,
+            'headers' => array(
+                'Content-Type'    => 'application/json',
+                'Accept-Language' => self::lang(),
+                'User-Agent'      => 'Pingsell-WordPress/' . PINGSELL_VERSION,
+            ),
+            'body'    => wp_json_encode(array('code' => $code, 'platform' => 'wordpress', 'site' => home_url('/'))),
+        ));
+        if (is_wp_error($res)) {
+            return array('type' => 'error', 'message' => __('Pingsell could not be reached. Try again in a moment.', 'pingsell'));
+        }
+        $json = json_decode((string) wp_remote_retrieve_body($res), true);
+        if (wp_remote_retrieve_response_code($res) !== 200) {
+            $detail = is_array($json) && isset($json['error']) && is_string($json['error']) ? $json['error'] : __('Pingsell returned an unexpected response.', 'pingsell');
+            /* translators: %s: error message returned by Pingsell. */
+            return array('type' => 'error', 'message' => sprintf(__('The connection failed: %s', 'pingsell'), sanitize_text_field($detail)));
+        }
+        if (!is_array($json) || empty($json['api_key']) || !is_string($json['api_key']) || !preg_match('/^msv_[A-Za-z0-9_-]{8,}$/', $json['api_key'])) {
+            /* translators: %s: error message returned by Pingsell. */
+            return array('type' => 'error', 'message' => sprintf(__('The connection failed: %s', 'pingsell'), __('Pingsell returned an unexpected response.', 'pingsell')));
+        }
+        $api_url = isset($json['api_url']) && is_string($json['api_url']) ? untrailingslashit($json['api_url']) : '';
+        $name = isset($json['account_name']) && is_string($json['account_name']) ? sanitize_text_field($json['account_name']) : '';
+        $this->save(array(
+            'api_key'      => $json['api_key'],
+            // Only a secure address (or a local one in development); otherwise the default one.
+            'api_url'      => self::valid_api_url($api_url) ? $api_url : '',
+            'account_name' => $name,
+            'manual'       => '0',
+        ));
+        delete_transient('pingsell_inbound');
+        delete_transient('pingsell_inbound_failed');
+        return array('type' => 'success', 'message' => $this->connected_message());
+    }
+
+    private function connected_message()
+    {
+        $s = $this->settings();
+        if ($s['account_name'] !== '') {
+            /* translators: %s: name of the Pingsell account. */
+            return sprintf(__('Connected to the Pingsell account “%s”.', 'pingsell'), $s['account_name']);
+        }
+        return __('Connected to Pingsell.', 'pingsell');
+    }
+
+    public function handle_disconnect()
+    {
+        $this->check_admin_action('pingsell_disconnect');
+        $this->save(array('api_key' => '', 'api_url' => '', 'account_name' => '', 'manual' => '0'));
+        delete_option(self::STATE_OPTION);
+        $this->notice('success', __('Disconnected from Pingsell.', 'pingsell'));
+        $this->back_to_page();
+    }
+
+    /** Fallback: address + key pasted by hand. An empty key field keeps the current key. */
+    public function handle_manual()
+    {
+        $this->check_admin_action('pingsell_manual');
+        $url = isset($_POST['api_url']) ? esc_url_raw(trim(sanitize_text_field(wp_unslash($_POST['api_url'])))) : '';
+        $url = preg_replace('#/api/v1/?$#', '', untrailingslashit($url));
+        $key = isset($_POST['api_key']) ? trim(sanitize_text_field(wp_unslash($_POST['api_key']))) : '';
+        if ($url !== '' && !self::valid_api_url($url)) {
+            $this->notice('error', __('The API address must start with https:// (http:// is only accepted for a local address).', 'pingsell'));
+            $this->back_to_page();
+        }
+        $changes = array('api_url' => $url, 'manual' => '1', 'account_name' => '');
+        if ($key !== '') {
+            $changes['api_key'] = $key;
+        }
+        $this->save($changes);
+        $this->notice('success', __('Manual connection saved.', 'pingsell'));
+        $this->back_to_page();
+    }
+
+    public function handle_test()
+    {
+        $this->check_admin_action('pingsell_test');
+        $res = $this->request('GET', '/me', null, true);
+        if (!is_wp_error($res) && wp_remote_retrieve_response_code($res) === 200) {
+            $this->notice('success', __('Connection successful: your site is linked to Pingsell.', 'pingsell'));
+        } else {
+            $json = is_wp_error($res) ? null : json_decode((string) wp_remote_retrieve_body($res), true);
+            $msg = is_array($json) && isset($json['error']) && is_string($json['error'])
+                ? sanitize_text_field($json['error'])
+                : (is_wp_error($res) ? $res->get_error_message() : __('Connection failed: check the address and the key.', 'pingsell'));
+            $this->notice('error', $msg);
+        }
+        $this->back_to_page();
+    }
+
+    // ─── Settings page ────────────────────────────────────────────────────────
+
+    private function admin_button_form($action, $label, $class = 'primary', $confirm = '')
+    {
+        ?>
+        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:inline-block;margin:0 8px 0 0"<?php echo $confirm !== '' ? ' data-pingsell-confirm="' . esc_attr($confirm) . '"' : ''; ?>>
+            <input type="hidden" name="action" value="<?php echo esc_attr($action); ?>">
+            <?php wp_nonce_field($action); ?>
+            <?php submit_button($label, $class, 'submit', false); ?>
+        </form>
+        <?php
     }
 
     public function settings_page()
@@ -138,87 +509,125 @@ final class Pingsell_Plugin
         }
         $s = $this->settings();
         $woo = class_exists('WooCommerce');
-        $status = isset($_GET['pingsell_test']) ? sanitize_key(wp_unslash($_GET['pingsell_test'])) : '';
+        $connected = $this->connected();
+        $notice_key = 'pingsell_notice_' . get_current_user_id();
+        $notice = get_transient($notice_key);
+        if ($notice !== false) {
+            delete_transient($notice_key);
+        }
         ?>
         <div class="wrap">
             <h1>Pingsell</h1>
-            <p><?php echo esc_html__('Collez l’adresse de l’API et votre clé API (Pingsell › Intégrations › WordPress). Tout le reste est automatique.', 'pingsell'); ?></p>
-            <?php if ($status === 'ok') : ?>
-                <div class="notice notice-success"><p><?php echo esc_html__('Connexion réussie : votre site est relié à Pingsell.', 'pingsell'); ?></p></div>
-            <?php elseif ($status !== '') : ?>
-                <div class="notice notice-error"><p><?php echo esc_html(get_transient('pingsell_test_error') ?: __('Connexion impossible : vérifiez l’adresse et la clé.', 'pingsell')); ?></p></div>
+            <?php if (is_array($notice) && !empty($notice['message'])) : ?>
+                <div class="notice notice-<?php echo esc_attr(in_array($notice['type'], array('success', 'warning', 'error'), true) ? $notice['type'] : 'info'); ?>">
+                    <p><?php echo esc_html($notice['message']); ?></p>
+                    <?php if (!empty($notice['retry']) && !$connected) : ?>
+                        <p><?php $this->admin_button_form('pingsell_connect', __('Try again', 'pingsell'), 'secondary'); ?></p>
+                    <?php endif; ?>
+                </div>
             <?php endif; ?>
+
+            <h2><?php echo esc_html__('Connection', 'pingsell'); ?></h2>
+            <?php if ($connected) : ?>
+                <p><strong><?php echo esc_html($this->connected_message()); ?></strong></p>
+                <p class="description">
+                    <?php
+                    /* translators: %s: masked API key, e.g. msv_AbCd…wxyz. */
+                    echo esc_html(sprintf(__('API key: %s', 'pingsell'), self::mask_key($s['api_key'])));
+                    ?>
+                </p>
+                <p>
+                    <?php $this->admin_button_form('pingsell_test', __('Test the connection', 'pingsell'), 'secondary'); ?>
+                    <?php $this->admin_button_form('pingsell_disconnect', __('Disconnect', 'pingsell'), 'secondary', __('Disconnect this site from Pingsell? Events will no longer be sent.', 'pingsell')); ?>
+                </p>
+            <?php else : ?>
+                <p><?php echo esc_html__('Connect your site to Pingsell in one click: sign-ups, carts, orders and shipments then arrive in Pingsell automatically.', 'pingsell'); ?></p>
+                <p><?php $this->admin_button_form('pingsell_connect', __('Connect to Pingsell', 'pingsell')); ?></p>
+            <?php endif; ?>
+
+            <details style="margin:12px 0 24px">
+                <summary style="cursor:pointer"><?php echo esc_html__('Manual connection', 'pingsell'); ?></summary>
+                <p><?php echo esc_html__('Only if the button does not work: paste the API address and an API key (Pingsell › Integrations › WordPress).', 'pingsell'); ?></p>
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                    <input type="hidden" name="action" value="pingsell_manual">
+                    <?php wp_nonce_field('pingsell_manual'); ?>
+                    <table class="form-table" role="presentation">
+                        <tr>
+                            <th scope="row"><label for="pingsell_api_url"><?php echo esc_html__('API address', 'pingsell'); ?></label></th>
+                            <td><input id="pingsell_api_url" class="regular-text" type="url" name="api_url" value="<?php echo esc_attr($s['api_url']); ?>" placeholder="<?php echo esc_attr(PINGSELL_API_URL); ?>"></td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="pingsell_api_key"><?php echo esc_html__('API key', 'pingsell'); ?></label></th>
+                            <td><input id="pingsell_api_key" class="regular-text code" type="password" autocomplete="off" name="api_key" value="" placeholder="<?php echo esc_attr($connected ? self::mask_key($s['api_key']) : 'msv_…'); ?>">
+                                <?php if ($connected) : ?>
+                                    <p class="description">
+                                        <?php
+                                        /* translators: %s: masked API key. */
+                                        echo esc_html(sprintf(__('Leave empty to keep the current key (%s).', 'pingsell'), self::mask_key($s['api_key'])));
+                                        ?>
+                                    </p>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    </table>
+                    <?php submit_button(__('Save', 'pingsell'), 'secondary', 'submit', false); ?>
+                </form>
+                <?php if ($connected) : ?>
+                    <p><?php $this->admin_button_form('pingsell_test', __('Test the connection', 'pingsell'), 'secondary'); ?></p>
+                <?php endif; ?>
+            </details>
+
             <form method="post" action="options.php">
                 <?php settings_fields('pingsell'); ?>
                 <table class="form-table" role="presentation">
                     <tr>
-                        <th scope="row"><label for="pingsell_api_url"><?php echo esc_html__('Adresse de l’API', 'pingsell'); ?></label></th>
-                        <td><input id="pingsell_api_url" class="regular-text" type="url" name="<?php echo esc_attr(self::OPTION); ?>[api_url]" value="<?php echo esc_attr($s['api_url']); ?>" placeholder="https://app.pingsell.neokrome.tech"></td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><label for="pingsell_api_key"><?php echo esc_html__('Clé API', 'pingsell'); ?></label></th>
-                        <td><input id="pingsell_api_key" class="regular-text code" type="password" autocomplete="off" name="<?php echo esc_attr(self::OPTION); ?>[api_key]" value="<?php echo esc_attr($s['api_key']); ?>" placeholder="msv_…"></td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><?php echo esc_html__('Envoyer à Pingsell', 'pingsell'); ?></th>
+                        <th scope="row"><?php echo esc_html__('Send to Pingsell', 'pingsell'); ?></th>
                         <td>
                             <?php
                             $boxes = array(
-                                'signups'   => __('Nouveaux comptes clients (inscription)', 'pingsell'),
-                                'carts'     => __('Paniers abandonnés WooCommerce', 'pingsell'),
-                                'orders'    => __('Commandes WooCommerce', 'pingsell'),
-                                'shipments' => __('Commandes expédiées (statut « Terminée »)', 'pingsell'),
-                                'forms'     => __('Formulaires du site (Contact Form 7, WPForms, Gravity Forms, Elementor, Fluent Forms)', 'pingsell'),
-                                'tracking'  => __('Suivi des visites : pages et produits vus, clients reconnus (pour « Produit consulté sans achat »)', 'pingsell'),
+                                'signups'   => __('New customer accounts (sign-up)', 'pingsell'),
+                                'carts'     => __('WooCommerce abandoned carts', 'pingsell'),
+                                'orders'    => __('WooCommerce orders', 'pingsell'),
+                                'shipments' => __('Shipped orders (“Completed” status)', 'pingsell'),
+                                'forms'     => __('Site forms (Contact Form 7, WPForms, Gravity Forms, Elementor, Fluent Forms)', 'pingsell'),
+                                'tracking'  => __('Visit tracking: pages and products viewed, customers recognised (for “Product viewed without purchase”)', 'pingsell'),
                             );
                             foreach ($boxes as $key => $label) {
                                 $disabled = !$woo && in_array($key, array('carts', 'orders', 'shipments'), true);
                                 printf(
-                                    '<label style="display:block;margin:0 0 8px"><input type="checkbox" name="%1$s[%2$s]" value="1" %3$s %4$s> %5$s%6$s</label>',
+                                    '<input type="hidden" name="%1$s[%2$s]" value="0"><label style="display:block;margin:0 0 8px"><input type="checkbox" name="%1$s[%2$s]" value="1" %3$s %4$s> %5$s',
                                     esc_attr(self::OPTION),
                                     esc_attr($key),
                                     checked($s[$key], '1', false),
                                     disabled($disabled, true, false),
-                                    esc_html($label),
-                                    $disabled ? ' <em>(' . esc_html__('WooCommerce non installé', 'pingsell') . ')</em>' : ''
+                                    esc_html($label)
                                 );
+                                if ($disabled) {
+                                    echo ' <em>(' . esc_html__('WooCommerce not installed', 'pingsell') . ')</em>';
+                                }
+                                echo '</label>';
+                                if ($key === 'carts') {
+                                    echo '<p class="description" style="margin:-4px 0 8px 24px">' . esc_html__('Logged-in customers: always. Guests: the email typed at checkout is only captured when visit tracking (below) is enabled.', 'pingsell') . '</p>';
+                                }
+                                if ($key === 'tracking') {
+                                    echo '<p class="description" style="margin:-4px 0 8px 24px">' . esc_html__('Off by default. Before enabling it, make sure your cookie banner asks for visitors’ consent (the WP Consent API is supported).', 'pingsell') . '</p>';
+                                }
                             }
                             ?>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row"><label for="pingsell_form_tags"><?php echo esc_html__('Tags des formulaires', 'pingsell'); ?></label></th>
+                        <th scope="row"><label for="pingsell_form_tags"><?php echo esc_html__('Form tags', 'pingsell'); ?></label></th>
                         <td><input id="pingsell_form_tags" class="regular-text" type="text" name="<?php echo esc_attr(self::OPTION); ?>[form_tags]" value="<?php echo esc_attr($s['form_tags']); ?>">
-                            <p class="description"><?php echo esc_html__('Séparés par des virgules. Le nom du formulaire est ajouté automatiquement.', 'pingsell'); ?></p></td>
+                            <p class="description"><?php echo esc_html__('Comma-separated. The form name is added automatically.', 'pingsell'); ?></p></td>
                     </tr>
                 </table>
-                <?php submit_button(__('Enregistrer', 'pingsell')); ?>
+                <?php submit_button(__('Save', 'pingsell')); ?>
             </form>
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="pingsell_test">
-                <?php wp_nonce_field('pingsell_test'); ?>
-                <?php submit_button(__('Tester la connexion', 'pingsell'), 'secondary', 'submit', false); ?>
-            </form>
-            <h2><?php echo esc_html__('Formulaire d’inscription', 'pingsell'); ?></h2>
-            <p><?php echo wp_kses_post(__('Ajoutez <code>[pingsell_form]</code> dans une page, un article ou un bloc « Code court ». Options : <code>title</code>, <code>text</code>, <code>button</code>, <code>tags</code>, <code>fields="first_name,email"</code>, <code>color="#145CFF"</code>.', 'pingsell')); ?></p>
+            <h2><?php echo esc_html__('Signup form', 'pingsell'); ?></h2>
+            <p><?php echo wp_kses_post(__('Add <code>[pingsell_form]</code> to a page, a post or a “Shortcode” block. Options: <code>title</code>, <code>text</code>, <code>button</code>, <code>tags</code>, <code>fields="first_name,email"</code>, <code>color="#145CFF"</code>.', 'pingsell')); ?></p>
         </div>
         <?php
-    }
-
-    public function handle_test()
-    {
-        if (!current_user_can('manage_options') || !check_admin_referer('pingsell_test')) {
-            wp_die(esc_html__('Action non autorisée.', 'pingsell'));
-        }
-        $res = $this->request('GET', '/me', null, true);
-        $ok = !is_wp_error($res) && wp_remote_retrieve_response_code($res) === 200;
-        if (!$ok) {
-            $msg = is_wp_error($res) ? $res->get_error_message() : wp_remote_retrieve_body($res);
-            $json = json_decode((string) $msg, true);
-            set_transient('pingsell_test_error', is_array($json) && isset($json['error']) ? $json['error'] : (string) $msg, 60);
-        }
-        wp_safe_redirect(admin_url('options-general.php?page=pingsell&pingsell_test=' . ($ok ? 'ok' : 'error')));
-        exit;
     }
 
     // ─── Transport ────────────────────────────────────────────────────────────
@@ -232,8 +641,8 @@ final class Pingsell_Plugin
     private function request($method, $path, $body = null, $blocking = false)
     {
         $s = $this->settings();
-        if (empty($s['api_url']) || empty($s['api_key'])) {
-            return new WP_Error('pingsell_not_configured', __('Pingsell n’est pas configuré.', 'pingsell'));
+        if ($s['api_key'] === '') {
+            return new WP_Error('pingsell_not_configured', __('Pingsell is not configured.', 'pingsell'));
         }
         $args = array(
             'method'   => $method,
@@ -242,7 +651,7 @@ final class Pingsell_Plugin
             'headers'  => array(
                 'Authorization'     => 'Bearer ' . $s['api_key'],
                 'Content-Type'      => 'application/json',
-                'Accept-Language'   => 'fr',
+                'Accept-Language'   => self::lang(),
                 'X-Pingsell-Source' => 'wordpress',
                 'User-Agent'        => 'Pingsell-WordPress/' . PINGSELL_VERSION,
             ),
@@ -250,7 +659,7 @@ final class Pingsell_Plugin
         if ($body !== null) {
             $args['body'] = wp_json_encode($body);
         }
-        return wp_remote_request($s['api_url'] . '/api/v1' . $path, $args);
+        return wp_remote_request($this->api_url() . '/api/v1' . $path, $args);
     }
 
     /** One event: see « Un seul appel » in Pingsell › Intégrations. */
@@ -292,12 +701,14 @@ final class Pingsell_Plugin
         $first = !empty($userdata['first_name']) ? $userdata['first_name'] : get_user_meta($user_id, 'first_name', true);
         $last = !empty($userdata['last_name']) ? $userdata['last_name'] : get_user_meta($user_id, 'last_name', true);
         // WooCommerce checkout registers the account before filling the names: read them from the form.
+        // phpcs:disable WordPress.Security.NonceVerification.Missing -- read only, during a registration WooCommerce already verified.
         if (!$first && isset($_POST['billing_first_name'])) {
             $first = sanitize_text_field(wp_unslash($_POST['billing_first_name']));
         }
         if (!$last && isset($_POST['billing_last_name'])) {
             $last = sanitize_text_field(wp_unslash($_POST['billing_last_name']));
         }
+        // phpcs:enable WordPress.Security.NonceVerification.Missing
         $this->send_event('inscription', array(
             'email'      => $user->user_email,
             'first_name' => $first,
@@ -466,28 +877,52 @@ final class Pingsell_Plugin
         }
         $done = true;
         $user = wp_get_current_user();
+        // After the page is sent: the cart never waits for Pingsell.
         add_action('shutdown', function () use ($user) {
             $this->send_cart($user->user_email, $user->first_name, $user->last_name);
         });
     }
 
+    /** WP Consent API, when installed: nothing is tracked without the visitor's consent. */
+    private static function has_consent($category)
+    {
+        return !function_exists('wp_has_consent') || wp_has_consent($category);
+    }
+
+    /** The Pingsell tracking script (always on the API host, never an address taken as is from a response). */
+    private function script_url($inbound)
+    {
+        $key = is_array($inbound) && isset($inbound['form']['key']) ? (string) $inbound['form']['key'] : '';
+        if (!preg_match('/^[A-Za-z0-9_-]{6,128}$/', $key)) {
+            return '';
+        }
+        $url = $this->api_url() . '/api/v1/public/forms/' . rawurlencode($key) . '/embed.js';
+        return $this->on_allowed_host($url) ? $url : '';
+    }
+
     /** The Pingsell script on every page; logged-in customers and the buyer on « Commande reçue » are recognised. */
     public function tracking_script()
     {
-        if (!$this->enabled('tracking') || is_admin()) {
+        if (is_admin() || !$this->may_track()) {
             return;
         }
-        $inbound = $this->webhook_url();
-        if (!$inbound || empty($inbound['form']['script_url'])) {
+        // Cached only: the address is fetched after the page is sent, never while the visitor waits.
+        $inbound = $this->webhook_url(false);
+        $src = $this->script_url($inbound);
+        if ($src === '') {
             return;
         }
-        wp_enqueue_script('pingsell-form', $inbound['form']['script_url'], array(), null, array('strategy' => 'async', 'in_footer' => false));
+        wp_enqueue_script('pingsell-form', $src, array(), PINGSELL_VERSION, array('strategy' => 'async', 'in_footer' => false));
+        if (!self::has_consent('marketing')) {
+            return;
+        }
         $email = '';
         if (is_user_logged_in()) {
             $email = wp_get_current_user()->user_email;
         } elseif (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-received') && function_exists('wc_get_order')) {
             global $wp;
             $order = wc_get_order(absint(isset($wp->query_vars['order-received']) ? $wp->query_vars['order-received'] : 0));
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read only, checked against the order key with hash_equals.
             $key = isset($_GET['key']) ? sanitize_text_field(wp_unslash($_GET['key'])) : '';
             if ($order && $key !== '' && hash_equals((string) $order->get_order_key(), $key)) {
                 $email = $order->get_billing_email();
@@ -498,63 +933,112 @@ final class Pingsell_Plugin
         }
     }
 
+    /** Visit tracking is allowed on this page: the merchant enabled it and, with the WP Consent API, the visitor agreed. */
+    private function may_track()
+    {
+        return $this->enabled('tracking') && self::has_consent('statistics');
+    }
+
     /** Guests: the email typed at checkout is captured as soon as it is filled in (classic and block checkout). */
     public function checkout_capture_script()
     {
-        if (!$this->enabled('carts') || !function_exists('is_checkout') || !is_checkout() || is_wc_endpoint_url('order-received')) {
+        if (!$this->enabled('carts') || !$this->enabled('tracking') || !self::has_consent('marketing')) {
             return;
         }
-        wp_register_script('pingsell-capture', '', array(), PINGSELL_VERSION, true);
-        wp_enqueue_script('pingsell-capture');
-        wp_add_inline_script('pingsell-capture', sprintf(
-            '(function(){var u=%s,n=%s,last="";function v(id){var e=document.getElementById(id);return e?e.value:""}' .
-            'function go(){var m=v("billing_email")||v("email"),f=v("billing_first_name")||v("billing-first_name")||v("shipping-first_name"),l=v("billing_last_name")||v("billing-last_name")||v("shipping-last_name"),k=m+"|"+f+"|"+l;' .
-            'if(!m||k===last||!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(m))return;last=k;' .
-            'var b=new URLSearchParams({action:"pingsell_capture",nonce:n,email:m,first_name:f,last_name:l});' .
-            'fetch(u,{method:"POST",credentials:"same-origin",body:b})}' .
-            'document.addEventListener("change",function(e){var id=e.target&&e.target.id;if(/email|first|last/.test(id||""))go()},true);setTimeout(go,1500)})();',
-            wp_json_encode(admin_url('admin-ajax.php')),
-            wp_json_encode(wp_create_nonce('pingsell_capture'))
-        ));
+        if (!function_exists('is_checkout') || !is_checkout() || (function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-received'))) {
+            return;
+        }
+        wp_enqueue_script('pingsell-capture', plugins_url('assets/pingsell-capture.js', __FILE__), array(), PINGSELL_VERSION, true);
+        wp_localize_script('pingsell-capture', 'pingsellCapture', array('url' => admin_url('admin-ajax.php')));
     }
 
+    /** The request comes from a page of this site (a nonce would break behind a page cache). */
+    private function same_origin()
+    {
+        $source = isset($_SERVER['HTTP_ORIGIN']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_ORIGIN'])) : '';
+        if ($source === '' || $source === 'null') {
+            $source = isset($_SERVER['HTTP_REFERER']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_REFERER'])) : '';
+        }
+        $host = $source !== '' ? wp_parse_url($source, PHP_URL_HOST) : '';
+        $site = wp_parse_url(home_url('/'), PHP_URL_HOST);
+        return $host && $site && strtolower($host) === strtolower($site);
+    }
+
+    /** Public endpoint (also for visitors): tracking on, same origin, consent, 10 calls / 10 min per visitor. */
     public function ajax_capture()
     {
-        check_ajax_referer('pingsell_capture', 'nonce');
-        $email = isset($_POST['email']) ? sanitize_email(wp_unslash($_POST['email'])) : '';
-        if ($email && is_email($email) && $this->enabled('carts')) {
-            $this->send_cart(
-                $email,
-                isset($_POST['first_name']) ? sanitize_text_field(wp_unslash($_POST['first_name'])) : '',
-                isset($_POST['last_name']) ? sanitize_text_field(wp_unslash($_POST['last_name'])) : ''
-            );
+        if (!$this->enabled('carts') || !$this->enabled('tracking')) {
+            wp_send_json_error(null, 403);
         }
+        if (!$this->same_origin() || !self::has_consent('marketing')) {
+            wp_send_json_error(null, 403);
+        }
+        // Per visitor (IP + WooCommerce session, so customers behind one proxy IP don't share it) and a
+        // higher ceiling per IP. REMOTE_ADDR only: forwarded headers can be forged by anyone.
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
+        $session = function_exists('WC') && WC()->session ? (string) WC()->session->get_customer_id() : '';
+        $bucket = 'pingsell_cap_' . md5($ip . '|' . $session);
+        $ip_bucket = 'pingsell_capip_' . md5($ip);
+        $hits = (int) get_transient($bucket);
+        $ip_hits = (int) get_transient($ip_bucket);
+        if ($hits >= self::CAPTURE_LIMIT || $ip_hits >= self::CAPTURE_IP_LIMIT) {
+            wp_send_json_error(null, 429);
+        }
+        set_transient($bucket, $hits + 1, 10 * MINUTE_IN_SECONDS);
+        set_transient($ip_bucket, $ip_hits + 1, 10 * MINUTE_IN_SECONDS);
+        // phpcs:disable WordPress.Security.NonceVerification.Missing -- public endpoint behind page caches: protected by the origin check and the per-IP limit above.
+        $email = isset($_POST['email']) ? sanitize_email(wp_unslash($_POST['email'])) : '';
+        if (!$email || !is_email($email)) {
+            wp_send_json_error(null, 400);
+        }
+        $first = isset($_POST['first_name']) ? mb_substr(sanitize_text_field(wp_unslash($_POST['first_name'])), 0, 100) : '';
+        $last = isset($_POST['last_name']) ? mb_substr(sanitize_text_field(wp_unslash($_POST['last_name'])), 0, 100) : '';
+        // phpcs:enable WordPress.Security.NonceVerification.Missing
+        $this->send_cart($email, $first, $last);
         wp_send_json_success();
     }
 
     // ─── Form plugins → universal webhook (field names detected by Pingsell) ───
 
-    private function webhook_url()
+    /**
+     * The account's webhook and form keys (cached one day; a failure is cached 10 minutes).
+     *
+     * @param bool $fetch_now false = during a shop page: no call now, it is made after the page is sent.
+     */
+    private function webhook_url($fetch_now = true)
     {
         $cached = get_transient('pingsell_inbound');
         if (is_array($cached)) {
             return $cached;
         }
-        // A recent failure: don't make every form submission wait for Pingsell again.
-        if (get_transient('pingsell_inbound_failed')) {
+        // A recent failure: don't make every page or form submission wait for Pingsell again.
+        if (get_transient('pingsell_inbound_failed') || !$this->connected()) {
             return null;
         }
+        if (!$fetch_now) {
+            static $queued = false;
+            if (!$queued) {
+                $queued = true;
+                add_action('shutdown', array($this, 'fetch_inbound'));
+            }
+            return null;
+        }
+        return $this->fetch_inbound();
+    }
+
+    public function fetch_inbound()
+    {
         $s = $this->settings();
-        $res = empty($s['api_url']) || empty($s['api_key']) ? null : wp_remote_get($s['api_url'] . '/api/v1/inbound', array(
-            'timeout' => 3,
-            'headers' => array('Authorization' => 'Bearer ' . $s['api_key'], 'Accept-Language' => 'fr', 'User-Agent' => 'Pingsell-WordPress/' . PINGSELL_VERSION),
-        ));
-        if (!$res || is_wp_error($res) || wp_remote_retrieve_response_code($res) !== 200) {
-            set_transient('pingsell_inbound_failed', 1, 10 * MINUTE_IN_SECONDS);
+        if ($s['api_key'] === '' || get_transient('pingsell_inbound_failed')) {
             return null;
         }
-        $json = json_decode(wp_remote_retrieve_body($res), true);
+        $res = wp_remote_get($this->api_url() . '/api/v1/inbound', array(
+            'timeout' => 2,
+            'headers' => array('Authorization' => 'Bearer ' . $s['api_key'], 'Accept-Language' => self::lang(), 'User-Agent' => 'Pingsell-WordPress/' . PINGSELL_VERSION),
+        ));
+        $json = is_wp_error($res) || wp_remote_retrieve_response_code($res) !== 200 ? null : json_decode(wp_remote_retrieve_body($res), true);
         if (!is_array($json)) {
+            set_transient('pingsell_inbound_failed', 1, 10 * MINUTE_IN_SECONDS);
             return null;
         }
         set_transient('pingsell_inbound', $json, DAY_IN_SECONDS);
@@ -567,7 +1051,7 @@ final class Pingsell_Plugin
             return;
         }
         $inbound = $this->webhook_url();
-        if (!$inbound || empty($inbound['webhook']['url'])) {
+        if (!$inbound || empty($inbound['webhook']['url']) || !$this->on_allowed_host($inbound['webhook']['url'])) {
             return;
         }
         $s = $this->settings();
@@ -593,7 +1077,7 @@ final class Pingsell_Plugin
                 }
             }
         }
-        $url = add_query_arg(array('tags' => implode(',', $tags)), $inbound['webhook']['url']);
+        $url = add_query_arg(array('tags' => rawurlencode(implode(',', $tags))), $inbound['webhook']['url']);
         if (function_exists('as_enqueue_async_action')) {
             as_enqueue_async_action('pingsell_send_form', array($url, $clean), 'pingsell');
             return;
@@ -609,6 +1093,9 @@ final class Pingsell_Plugin
     /** Action Scheduler job for a form: a 404 means the webhook address was rotated, fetch it again next time. */
     public function deliver_form($url, $fields)
     {
+        if (!$this->on_allowed_host($url)) {
+            return;
+        }
         $res = wp_remote_post($url, array(
             'timeout' => 10,
             'headers' => array('Content-Type' => 'application/json', 'X-Pingsell-Source' => 'wordpress-form'),
@@ -712,13 +1199,20 @@ final class Pingsell_Plugin
             'consent'  => '',
             'redirect' => '',
         ), $atts, 'pingsell_form');
-        $inbound = $this->webhook_url();
-        if (!$inbound || empty($inbound['form']['script_url'])) {
+        $src = $this->script_url($this->webhook_url());
+        if ($src === '') {
             return current_user_can('manage_options')
-                ? '<p><em>' . esc_html__('Pingsell : renseignez votre clé API dans Réglages › Pingsell pour afficher ce formulaire.', 'pingsell') . '</em></p>'
+                ? '<p><em>' . esc_html__('Pingsell: connect your site in Settings › Pingsell to display this form.', 'pingsell') . '</em></p>'
                 : '';
         }
-        wp_enqueue_script('pingsell-form', $inbound['form']['script_url'], array(), null, true);
+        wp_enqueue_script('pingsell-form', $src, array(), PINGSELL_VERSION, true);
+        // The script that draws the form also tracks visits when the account enables it: without the
+        // merchant's choice here (or without the visitor's consent), it is told to draw the form only.
+        static $notrack = false;
+        if (!$notrack && !$this->may_track()) {
+            $notrack = true;
+            wp_add_inline_script('pingsell-form', 'window.__pingsellNoTrack=true;', 'before');
+        }
         $data = '';
         foreach ($atts as $k => $v) {
             if ($v !== '') {
@@ -729,4 +1223,5 @@ final class Pingsell_Plugin
     }
 }
 
+register_activation_hook(__FILE__, array('Pingsell_Plugin', 'activate'));
 Pingsell_Plugin::instance();

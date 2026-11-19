@@ -27,7 +27,7 @@ import { findContactByEmail, isValidEmail, normalizeEmail } from '../services/co
 const PREFIX = '/api/v1';
 
 /** Small in-memory limiter: enough to stop a bot hammering a public form (one API process). */
-function limiter(max: number, windowMs: number, cap = 50_000) {
+export function limiter(max: number, windowMs: number, cap = 50_000) {
   const hits = new Map<string, { n: number; reset: number }>();
   return (key: string, nowMs = Date.now()) => {
     if (hits.size >= cap) {

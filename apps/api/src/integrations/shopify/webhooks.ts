@@ -3,7 +3,7 @@ import type { IntegrationContext } from '../context.js';
 import { ShopifyError, type ShopifyClient } from './client.js';
 import { handleCheckoutPayload, markCheckoutsCompleted, summarizeLineItems } from './checkouts.js';
 import { cleanEmail, customerFromRest, marketingStateFromRest, toNumber, upsertShopifyContact } from './contacts.js';
-import { findContactByEmail, orderAlreadyRecorded, updateIntegration } from './store.js';
+import { findContactByEmail, forgetTokens, orderAlreadyRecorded, updateIntegration } from './store.js';
 import { WEBHOOK_TOPICS } from './types.js';
 import { t } from '../../i18n.js';
 
@@ -206,6 +206,7 @@ export function handleAppUninstalled(ctx: IntegrationContext, accountId: string)
     { error: t('Application désinstallée depuis Shopify : reconnectez la boutique.', 'App uninstalled from Shopify: reconnect the store.'), uninstalled_at: new Date().toISOString(), webhooks: [] },
     { status: 'error', access_token: '' },
   );
+  forgetTokens(ctx.db, accountId);
 }
 
 /** Dispatches a verified webhook to its handler. */

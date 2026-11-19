@@ -1,7 +1,7 @@
 // Shared types for the Shopify integration module.
 
-/** Admin API version used for every call (SPEC: GET /admin/api/2025-10/shop.json). */
-export const SHOPIFY_API_VERSION = '2025-10';
+/** Admin API version used for every call (supported until July 2027; bump yearly, Shopify refuses apps on versions deprecated within 90 days). */
+export const SHOPIFY_API_VERSION = '2026-07';
 
 /** Access scopes requested by the OAuth flow (and required for a custom / Dev Dashboard app). */
 export const SHOPIFY_SCOPES = ['read_customers', 'read_orders'] as const;

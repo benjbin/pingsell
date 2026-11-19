@@ -26,6 +26,9 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { InvitationPage } from "./pages/InvitationPage";
+import { ShopifyConnectPage } from "./pages/ShopifyConnectPage";
+import { StoreConnectPage } from "./pages/StoreConnectPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
 import { t } from "./lib/i18n";
 
 function FullScreenLoader() {
@@ -84,6 +87,11 @@ export function App() {
               <Route path="/mot-de-passe-oublie" element={<GuestOnly><ForgotPasswordPage /></GuestOnly>} />
               <Route path="/reinitialiser-mot-de-passe/:token" element={<ResetPasswordPage />} />
               <Route path="/invitation/:token" element={<InvitationPage />} />
+              {/* Public: works signed in or not (a Shopify install waiting for its Pingsell account). */}
+              <Route path="/shopify/connecter" element={<ShopifyConnectPage />} />
+              {/* Public: "Connect to Pingsell" from the WordPress / PrestaShop plugin. */}
+              <Route path="/connecter/boutique" element={<StoreConnectPage />} />
+              <Route path="/confidentialite" element={<PrivacyPage />} />
               <Route path="/bienvenue" element={<RequireAuth><OnboardingPage /></RequireAuth>} />
               <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
                 <Route index element={<DashboardPage />} />

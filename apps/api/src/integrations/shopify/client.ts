@@ -170,7 +170,7 @@ function describeHttpError(status: number, body: unknown): string {
 export async function requestAccessToken(
   shop: string,
   params: Record<string, string>,
-): Promise<{ access_token: string; scope?: string; expires_in?: number }> {
+): Promise<TokenResponse> {
   let res: Response;
   try {
     res = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -183,7 +183,7 @@ export async function requestAccessToken(
     throw new ShopifyError(t(`Impossible de joindre ${shop} : ${(err as Error).message}`, `Can’t reach ${shop}: ${(err as Error).message}`), 502);
   }
   const text = await res.text();
-  const body = safeJson(text) as { access_token?: string; scope?: string; expires_in?: number; error_description?: string };
+  const body = safeJson(text) as Partial<TokenResponse> & { error_description?: string };
   if (!res.ok || !body?.access_token) {
     const detail = typeof body === 'object' && body?.error_description ? body.error_description : '';
     throw new ShopifyError(
@@ -191,8 +191,28 @@ export async function requestAccessToken(
         `Échec de l’obtention du jeton Shopify (HTTP ${res.status})${detail ? ` : ${detail}` : ''}`,
         `Couldn’t get the Shopify token (HTTP ${res.status})${detail ? `: ${detail}` : ''}`,
       ),
-      res.status === 200 ? 502 : 400,
+      res.status === 200 || res.status >= 500 || res.status === 429 ? 502 : 400,
     );
   }
-  return { access_token: body.access_token, scope: body.scope, expires_in: body.expires_in };
+  return {
+    access_token: body.access_token,
+    scope: body.scope,
+    expires_in: body.expires_in,
+    refresh_token: body.refresh_token,
+    refresh_token_expires_in: body.refresh_token_expires_in,
+  };
+}
+
+/** Token endpoint answer. Expiring offline tokens (expiring=1) also carry a rotating refresh token. */
+export interface TokenResponse {
+  access_token: string;
+  scope?: string;
+  expires_in?: number;
+  refresh_token?: string;
+  refresh_token_expires_in?: number;
+}
+
+/** Thrown when Shopify answers 400/401 to a refresh: the refresh token is dead, the merchant must reinstall. */
+export function isTerminalTokenError(err: unknown): boolean {
+  return err instanceof ShopifyError && err.status === 400;
 }

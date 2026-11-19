@@ -616,6 +616,20 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   -- « Repérer les actions automatiquement » (réglable par compte, activé par défaut).
   ALTER TABLE web_tracking ADD COLUMN capture_actions INTEGER NOT NULL DEFAULT 1;
   `,
+  // « Connecter à Pingsell » (WordPress, PrestaShop) : codes à usage unique, stockés hachés (sha256).
+  `
+  CREATE TABLE connect_codes (
+    code_hash TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    platform TEXT NOT NULL,
+    site_host TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT
+  );
+  CREATE INDEX idx_connect_codes_expires ON connect_codes(expires_at);
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

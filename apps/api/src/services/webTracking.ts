@@ -605,6 +605,8 @@ export function purgeTracking(db: DatabaseSync, nowMs = Date.now()): void {
   run(db, 'DELETE FROM web_visitors WHERE contact_id IS NULL AND last_seen < ?', anonymousBefore);
   run(db, 'DELETE FROM web_pageviews WHERE created_at < ?', new Date(nowMs - 395 * 86_400_000).toISOString());
   run(db, 'DELETE FROM web_actions WHERE created_at < ?', new Date(nowMs - 395 * 86_400_000).toISOString());
+  // Codes « Connecter à Pingsell » expirés (10 min).
+  run(db, 'DELETE FROM connect_codes WHERE expires_at < ?', new Date(nowMs).toISOString());
 }
 
 let lastTrackingRun = 0;

@@ -1,7 +1,7 @@
 # Intégration Shopify — Pingsell
 
 Module monté par l'API (`registerShopify(app, ctx)`), sans dépendance npm : `fetch` global + `node:crypto`.
-Version d'API Shopify : **2025-10** (constante `SHOPIFY_API_VERSION` dans `types.ts`).
+Version d'API Shopify : **2026-07** (constante `SHOPIFY_API_VERSION` dans `types.ts`).
 
 ## Autorisations (scopes) nécessaires
 
@@ -43,20 +43,42 @@ Celles qui existent déjà marchent toujours (elles s'affichent comme « legacy 
    Pingsell obtient le jeton avec le *client credentials grant*. Ce jeton expire au bout de 24 h, et Pingsell
    le renouvelle tout seul. Le client secret sert aussi à vérifier la signature des webhooks.
 
-### 3. App publique (OAuth)
+### 3. App publique (méthode principale, Shopify App Store)
 
-Définissez `SHOPIFY_API_KEY` et `SHOPIFY_API_SECRET`. Déclarez ensuite l'URL de redirection
-`{PUBLIC_URL}/api/v1/integrations/shopify/callback` dans l'app.
+Variables d'environnement : `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET` (identifiants de l'app du Dev Dashboard) et
+`SHOPIFY_APP_INSTALL_URL` (fiche App Store, ex. `https://apps.shopify.com/pingsell`, une fois l'app publiée : c'est le lien
+du bouton « Installer Pingsell sur Shopify »). La configuration Shopify de l'app est dans
+`integrations/shopify-app/shopify.app.toml`.
 
-- `GET /api/v1/integrations/shopify/install?shop=ma-boutique` (authentifié). Le jeton peut passer en `Authorization`
-  ou en `?token=` pour une redirection navigateur. Avec `?format=json`, la route renvoie `{ url }` au lieu d'une redirection 302.
-- `GET /api/v1/integrations/shopify/callback` (public) vérifie le `state` (nonce à usage unique valable 10 min) et le HMAC,
-  puis échange le code contre un jeton offline. Il redirige ensuite vers `{WEB_URL}/integrations?shopify=connected`
-  (ou `?shopify=error&message=…`).
+Parcours conforme aux règles de l'App Store (installation lancée depuis Shopify, OAuth immédiat, jamais de domaine à taper) :
+
+1. Shopify ouvre `GET /api/v1/integrations/shopify/app?shop=…&hmac=…` (application_url). La route vérifie le HMAC.
+   Si la boutique est déjà connectée, elle redirige vers l'app (`/integrations?outil=shopify`), sinon directement vers
+   l'écran d'autorisation Shopify.
+2. `GET /api/v1/integrations/shopify/callback` vérifie le HMAC et le `state` (usage unique, 10 min), puis échange le code avec
+   `expiring=1` : jeton offline d'1 h + jeton de renouvellement de 90 jours, qui change à chaque renouvellement
+   (obligatoire pour les apps publiques). Le jeton est renouvelé tout seul 5 min avant expiration. Si Shopify refuse le
+   renouvellement, l'intégration passe en erreur et le marchand doit rouvrir Pingsell depuis son admin Shopify.
+3. Rattachement au compte :
+   - installation lancée depuis Pingsell (`/install?shop=`, utile pour les boutiques de test) → le compte connecté ;
+   - boutique déjà connue d'un seul compte (réinstallation) → ce compte, redirection vers `/integrations?shopify=connected` ;
+   - sinon → le jeton est gardé 24 h dans `shopify_pending_installs` et le navigateur part sur `/shopify/connecter?claim=…`.
+     Le marchand se connecte ou crée son compte, puis `GET /integrations/shopify/pending?claim=` et
+     `POST /integrations/shopify/claim { claim }` rattachent la boutique (lien à usage unique).
+
+### Confidentialité (webhooks obligatoires)
+
+Déclarés dans `shopify.app.toml` (`compliance_topics`), signés avec `SHOPIFY_API_SECRET` :
+
+| Sujet | Ce que fait Pingsell |
+|---|---|
+| `customers/data_request` | enregistre la demande dans `shopify_data_requests` (client, commandes demandées, contact Pingsell lié) |
+| `customers/redact` | contact venu de Shopify : supprimé avec ses événements. Contact ajouté autrement : on lui retire tout ce qui vient de Shopify (identifiant, commandes, total dépensé, paniers) |
+| `shop/redact` | 48 h après la désinstallation : supprime la connexion, les secrets, les paniers, les demandes en attente. Les contacts restent dans le compte Pingsell du marchand, qui peut les supprimer. Ne fait rien si la boutique a été réinstallée entre-temps |
 
 ## Ce qui se passe à la connexion
 
-1. Le module valide le jeton avec `GET /admin/api/2025-10/shop.json` et vérifie les scopes avec `/admin/oauth/access_scopes.json`.
+1. Le module valide le jeton et vérifie les scopes avec une requête GraphQL (`shop` + `currentAppInstallation.accessScopes`). Les apps publiques n'ont plus le droit d'utiliser l'API REST.
 2. Il enregistre l'intégration dans la table `integrations`. Les secrets vont dans `shopify_credentials`, jamais dans `config`.
 3. Il crée les webhooks GraphQL (`webhookSubscriptionCreate`) vers `{PUBLIC_URL}/api/v1/webhooks/shopify`.
    Shopify n'envoie des webhooks qu'à une URL **HTTPS publique**. En local, utilisez un tunnel (cloudflared, ngrok) ou

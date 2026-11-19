@@ -1,0 +1,153 @@
+# French translation of the Pingsell plugin.
+# This file is distributed under the same license as the Pingsell plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: Pingsell 1.3.0\n"
+"PO-Revision-Date: 2026-11-19 12:00+0100\n"
+"Last-Translator: Pingsell\n"
+"Language-Team: French\n"
+"Language: fr_FR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Domain: pingsell\n"
+
+msgid "Connects WordPress and WooCommerce to Pingsell: sign-ups, abandoned carts, orders, shipments, forms and visit tracking, with no code."
+msgstr "Connecte WordPress et WooCommerce à Pingsell : inscriptions, paniers abandonnés, commandes, expéditions, formulaires et suivi des visites, sans code."
+
+msgid "Settings"
+msgstr "Réglages"
+
+msgid "Connection successful: your site is linked to Pingsell."
+msgstr "Connexion réussie : votre site est relié à Pingsell."
+
+msgid "Connection failed: check the address and the key."
+msgstr "Connexion impossible : vérifiez l’adresse et la clé."
+
+msgid "API address"
+msgstr "Adresse de l’API"
+
+msgid "API key"
+msgstr "Clé API"
+
+msgid "Send to Pingsell"
+msgstr "Envoyer à Pingsell"
+
+msgid "New customer accounts (sign-up)"
+msgstr "Nouveaux comptes clients (inscription)"
+
+msgid "WooCommerce abandoned carts"
+msgstr "Paniers abandonnés WooCommerce"
+
+msgid "WooCommerce orders"
+msgstr "Commandes WooCommerce"
+
+msgid "Shipped orders (“Completed” status)"
+msgstr "Commandes expédiées (statut « Terminée »)"
+
+msgid "Site forms (Contact Form 7, WPForms, Gravity Forms, Elementor, Fluent Forms)"
+msgstr "Formulaires du site (Contact Form 7, WPForms, Gravity Forms, Elementor, Fluent Forms)"
+
+msgid "Visit tracking: pages and products viewed, customers recognised (for “Product viewed without purchase”)"
+msgstr "Suivi des visites : pages et produits vus, clients reconnus (pour « Produit consulté sans achat »)"
+
+msgid "WooCommerce not installed"
+msgstr "WooCommerce non installé"
+
+msgid "Form tags"
+msgstr "Tags des formulaires"
+
+msgid "Comma-separated. The form name is added automatically."
+msgstr "Séparés par des virgules. Le nom du formulaire est ajouté automatiquement."
+
+msgid "Save"
+msgstr "Enregistrer"
+
+msgid "Test the connection"
+msgstr "Tester la connexion"
+
+msgid "Signup form"
+msgstr "Formulaire d’inscription"
+
+msgid "Add <code>[pingsell_form]</code> to a page, a post or a “Shortcode” block. Options: <code>title</code>, <code>text</code>, <code>button</code>, <code>tags</code>, <code>fields=\"first_name,email\"</code>, <code>color=\"#145CFF\"</code>."
+msgstr "Ajoutez <code>[pingsell_form]</code> dans une page, un article ou un bloc « Code court ». Options : <code>title</code>, <code>text</code>, <code>button</code>, <code>tags</code>, <code>fields=\"first_name,email\"</code>, <code>color=\"#145CFF\"</code>."
+
+msgid "Action not allowed."
+msgstr "Action non autorisée."
+
+msgid "Pingsell is not configured."
+msgstr "Pingsell n’est pas configuré."
+
+msgid "Pingsell: connect your site in Settings › Pingsell to display this form."
+msgstr "Pingsell : connectez votre site dans Réglages › Pingsell pour afficher ce formulaire."
+
+msgid "Connection"
+msgstr "Connexion"
+
+msgid "Connect to Pingsell"
+msgstr "Connecter à Pingsell"
+
+msgid "Connect your site to Pingsell in one click: sign-ups, carts, orders and shipments then arrive in Pingsell automatically."
+msgstr "Reliez votre site à Pingsell en un clic : inscriptions, paniers, commandes et expéditions arrivent ensuite automatiquement dans Pingsell."
+
+msgid "Connected to Pingsell."
+msgstr "Connecté à Pingsell."
+
+#, php-format
+msgid "Connected to the Pingsell account “%s”."
+msgstr "Connecté au compte Pingsell « %s »."
+
+#, php-format
+msgid "API key: %s"
+msgstr "Clé API : %s"
+
+msgid "Disconnect"
+msgstr "Déconnecter"
+
+msgid "Disconnect this site from Pingsell? Events will no longer be sent."
+msgstr "Déconnecter ce site de Pingsell ? Les événements ne seront plus envoyés."
+
+msgid "Disconnected from Pingsell."
+msgstr "Déconnecté de Pingsell."
+
+msgid "Connection cancelled."
+msgstr "Connexion annulée."
+
+msgid "This connection link is no longer valid. Start again from this page."
+msgstr "Ce lien de connexion n’est plus valable. Recommencez depuis cette page."
+
+#, php-format
+msgid "The connection failed: %s"
+msgstr "La connexion a échoué : %s"
+
+msgid "Pingsell could not be reached. Try again in a moment."
+msgstr "Pingsell est injoignable. Réessayez dans un instant."
+
+msgid "Pingsell returned an unexpected response."
+msgstr "Pingsell a renvoyé une réponse inattendue."
+
+msgid "Try again"
+msgstr "Recommencer"
+
+msgid "Manual connection"
+msgstr "Connexion manuelle"
+
+msgid "Only if the button does not work: paste the API address and an API key (Pingsell › Integrations › WordPress)."
+msgstr "Seulement si le bouton ne fonctionne pas : collez l’adresse de l’API et une clé API (Pingsell › Intégrations › WordPress)."
+
+#, php-format
+msgid "Leave empty to keep the current key (%s)."
+msgstr "Laissez vide pour garder la clé actuelle (%s)."
+
+msgid "Manual connection saved."
+msgstr "Connexion manuelle enregistrée."
+
+msgid "The API address must start with https:// (http:// is only accepted for a local address)."
+msgstr "L’adresse de l’API doit commencer par https:// (http:// n’est accepté que pour une adresse locale)."
+
+msgid "Off by default. Before enabling it, make sure your cookie banner asks for visitors’ consent (the WP Consent API is supported)."
+msgstr "Désactivé par défaut. Avant de l’activer, assurez-vous que votre bandeau cookies recueille le consentement des visiteurs (WP Consent API prise en charge)."
+
+msgid "Logged-in customers: always. Guests: the email typed at checkout is only captured when visit tracking (below) is enabled."
+msgstr "Clients connectés : toujours. Visiteurs sans compte : l’email saisi au paiement n’est capté que si le suivi des visites (ci-dessous) est activé."

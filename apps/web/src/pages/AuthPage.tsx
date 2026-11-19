@@ -9,6 +9,8 @@ import { Logo, ThemeToggle } from "../components/layout/AppLayout";
 import { PingsellMark } from "../components/brand/PingsellLogo";
 import { LanguageToggle } from "../components/layout/LanguageToggle";
 import { t } from "../lib/i18n";
+import { pendingClaimPath, safeReturnPath } from "../lib/shopifyClaim";
+import { pendingStoreConnectPath } from "../lib/storeConnect";
 
 /** Public marketing site, for the "back to site" link. */
 const SITE_URL = (import.meta.env.VITE_SITE_URL ?? "http://localhost:5191").replace(/\/+$/, "");
@@ -32,8 +34,11 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
     try {
       if (isLogin) await login(email.trim(), password);
       else await register(name.trim(), email.trim(), password);
-      const from = (location.state as { from?: string } | null)?.from;
-      navigate(mode === "register" ? "/bienvenue" : from && from !== "/connexion" ? from : "/", { replace: true });
+      // A Shopify install or a WordPress / PrestaShop plugin waiting for an account comes first
+      // (it also survives the sign-up).
+      const claim = pendingClaimPath() ?? pendingStoreConnectPath();
+      const from = safeReturnPath((location.state as { from?: unknown } | null)?.from);
+      navigate(claim ?? (mode === "register" ? "/bienvenue" : from && from !== "/connexion" ? from : "/"), { replace: true });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -216,8 +221,13 @@ export function AuthShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         {children}
-        <p className="font-display text-[10px] tracking-[0.2em] text-slate-400 uppercase">
-          © {new Date().getFullYear()} Pingsell — {t("Chaque notif, une vente.", "Every ping, a sale.")}
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1 font-display text-[10px] tracking-[0.2em] text-slate-400 uppercase">
+          <span>
+            © {new Date().getFullYear()} Pingsell — {t("Chaque notif, une vente.", "Every ping, a sale.")}
+          </span>
+          <Link to="/confidentialite" className="transition hover:text-slate-900 dark:hover:text-white">
+            {t("Confidentialité", "Privacy")}
+          </Link>
         </p>
       </div>
       <StoryPanel />
