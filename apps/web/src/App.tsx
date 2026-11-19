@@ -29,6 +29,7 @@ import { InvitationPage } from "./pages/InvitationPage";
 import { ShopifyConnectPage } from "./pages/ShopifyConnectPage";
 import { StoreConnectPage } from "./pages/StoreConnectPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
+import { AdminRoute } from "./pages/admin/AdminPage";
 import { t } from "./lib/i18n";
 
 function FullScreenLoader() {
@@ -112,6 +113,7 @@ export function App() {
                 <Route path="boite-envoi" element={<OutboxPage />} />
                 <Route path="parametres" element={<SettingsPage />} />
                 <Route path="profil" element={<ProfilePage />} />
+                <Route path="admin" element={<AdminRoute />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
             </Routes>

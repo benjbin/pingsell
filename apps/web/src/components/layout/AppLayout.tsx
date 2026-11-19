@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
-import { LogOut, Menu, Moon, Sun, X } from "lucide-react";
+import { LogOut, Menu, Moon, ShieldCheck, Sun, X, type LucideIcon } from "lucide-react";
 import { useAuth } from "../../lib/auth";
 import { useTheme } from "../../lib/theme";
 import { cx, formatNumber } from "../../lib/format";
@@ -8,11 +8,12 @@ import { PingsellLogo } from "../brand/PingsellLogo";
 import { NavIcon, type NavIconName } from "../brand/NavIcons";
 import { LanguageToggle } from "./LanguageToggle";
 import { t, LOCALE } from "../../lib/i18n";
+import { useAdminAccess } from "../../lib/useAdminAccess";
 
 interface NavItem {
   to: string;
   label: string;
-  icon: NavIconName;
+  icon: NavIconName | LucideIcon;
   end?: boolean;
 }
 
@@ -50,6 +51,12 @@ const NAV: Array<{ section: string; items: NavItem[] }> = [
   },
 ];
 
+/** Platform owner only (shown when /admin/access says so). */
+const ADMIN_GROUP: { section: string; items: NavItem[] } = {
+  section: t("Plateforme", "Platform"),
+  items: [{ to: "/admin", label: t("Administration", "Administration"), icon: ShieldCheck }],
+};
+
 /** Pingsell lockup. `tone="light"` is for navy surfaces (sidebar); `auto` follows the theme. */
 export function Logo({ className, tone = "auto" }: { className?: string; tone?: "auto" | "light" }) {
   return <PingsellLogo tone={tone} className={cx("h-8 w-auto", className)} />;
@@ -57,6 +64,8 @@ export function Logo({ className, tone = "auto" }: { className?: string; tone?: 
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { account, user, usage, logout } = useAuth();
+  const admin = useAdminAccess();
+  const groups = admin ? [...NAV, ADMIN_GROUP] : NAV;
   // Visual quota: a soft monthly reference so the bar means something at a glance.
   const quota = 10000;
   const pct = usage ? Math.min(100, (usage.emails_sent_month / quota) * 100) : 0;
@@ -68,7 +77,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-4 pt-2 pb-6">
-        {NAV.map((group, gi) => (
+        {groups.map((group, gi) => (
           <div key={group.section}>
             <p className="mb-2 px-4 font-display text-[10.5px] font-semibold tracking-[0.2em] text-white/40 uppercase">
               {String(gi + 1).padStart(2, "0")} — {group.section}
@@ -89,10 +98,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                       )
                     }
                   >
-                    <NavIcon
-                      name={item.icon}
-                      className="size-[19px] shrink-0 [&_.ping-dot]:origin-[19px_5px] [&_.ping-dot]:transition-all [&_.ping-dot]:duration-300 group-hover:[&_.ping-dot]:scale-125"
-                    />
+                    {typeof item.icon === "string" ? (
+                      <NavIcon
+                        name={item.icon}
+                        className="size-[19px] shrink-0 [&_.ping-dot]:origin-[19px_5px] [&_.ping-dot]:transition-all [&_.ping-dot]:duration-300 group-hover:[&_.ping-dot]:scale-125"
+                      />
+                    ) : (
+                      <item.icon className="size-[19px] shrink-0" strokeWidth={1.75} />
+                    )}
                     {item.label}
                   </NavLink>
                 </li>

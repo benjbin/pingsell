@@ -48,7 +48,15 @@ import type {
   PushContent,
   PushDevice,
   PushAudience,
-  PushChannel, AutomationSources } from "./types";
+  PushChannel, AutomationSources,
+  AdminAccess,
+  AdminOverview,
+  AdminDay,
+  AdminAccountList,
+  AdminAccountSort,
+  AdminAccountDetail,
+  AdminActivityItem,
+  AdminDeliverability } from "./types";
 
 // Set: that API origin. Otherwise local dev talks to the API on :4000, and a production build
 // uses its own origin (the app's nginx proxies /api to the API container).
@@ -350,6 +358,18 @@ export const api = {
       simulate: (input: { type: "order" | "order_fulfilled" | "cart_abandoned"; email: string }) =>
         post<unknown>("/integrations/shopify/simulate", input),
     },
+  },
+
+  /** Platform administration (read-only, cross-account). Every route but /access answers 404 to non-admins. */
+  admin: {
+    access: () => get<AdminAccess>("/admin/access"),
+    overview: (days = 30) => get<AdminOverview>("/admin/overview", { days }),
+    timeseries: (days = 90) => get<{ days: AdminDay[] }>("/admin/timeseries", { days }).then((r) => r.days),
+    accounts: (q: { search?: string; sort?: AdminAccountSort; order?: "asc" | "desc"; limit?: number; offset?: number } = {}) =>
+      get<AdminAccountList>("/admin/accounts", q),
+    account: (id: string) => get<AdminAccountDetail>(`/admin/accounts/${encodeURIComponent(id)}`),
+    activity: (limit = 50) => get<{ data: AdminActivityItem[] }>("/admin/activity", { limit }).then((r) => r.data),
+    deliverability: (days = 30) => get<AdminDeliverability>("/admin/deliverability", { days }),
   },
 };
 

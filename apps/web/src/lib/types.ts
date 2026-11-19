@@ -737,3 +737,167 @@ export interface AutomationSources {
   segments: number;
   emails_sent: number;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Administration de la plateforme (lecture seule, comptes croisés)           */
+/* -------------------------------------------------------------------------- */
+
+export interface AdminAccess {
+  admin: boolean;
+}
+
+export interface AdminTotals {
+  accounts: number;
+  users: number;
+  contacts: number;
+  contacts_subscribed: number;
+  campaigns: number;
+  campaigns_sent: number;
+  automations: number;
+  automations_active: number;
+  api_keys: number;
+  sites: number;
+  sending_domains: number;
+  sending_domains_verified: number;
+  push_devices: number;
+  email_templates: number;
+  emails_sent: number;
+}
+
+export interface AdminPeriod {
+  new_accounts: number;
+  active_accounts: number;
+  contacts_added: number;
+  emails_sent: number;
+  emails_failed: number;
+  bounces: number;
+  complaints: number;
+  opens: number;
+  clicks: number;
+  unsubscribes: number;
+  push_sent: number;
+  pageviews: number;
+  site_actions: number;
+  automation_runs: number;
+  campaigns_sent: number;
+}
+
+export interface AdminRates {
+  delivery: number | null;
+  bounce: number | null;
+  complaint: number | null;
+  open: number | null;
+  click: number | null;
+  unsubscribe: number | null;
+}
+
+export type AdminIntegration = "shopify" | "wordpress" | "prestashop" | "api" | "tracking" | "push";
+
+export interface AdminQueue {
+  queued: number;
+  queued_oldest_at: string | null;
+  runs_pending: number;
+  runs_overdue: number;
+  failed_24h: number;
+}
+
+export interface AdminSystem {
+  db_size_bytes: number;
+  uptime_s: number;
+  node: string;
+  commit: string | null;
+  email_provider: string;
+  warmup_start: string | null;
+}
+
+export interface AdminOverview {
+  generated_at: string;
+  days: number;
+  totals: AdminTotals;
+  period: AdminPeriod;
+  previous: AdminPeriod;
+  rates: AdminRates;
+  integrations: Record<AdminIntegration, number>;
+  queue: AdminQueue;
+  system: AdminSystem;
+}
+
+export interface AdminDay {
+  date: string;
+  accounts: number;
+  contacts: number;
+  emails_sent: number;
+  opens: number;
+  clicks: number;
+  bounces: number;
+  pageviews: number;
+  site_actions: number;
+  push_sent: number;
+}
+
+export type AdminHealth = "ok" | "warning" | "risk";
+
+export interface AdminAccountRow {
+  id: string;
+  name: string;
+  email: string;
+  created_at: string;
+  last_seen_at: string | null;
+  language: string | null;
+  users: number;
+  contacts: number;
+  contacts_subscribed: number;
+  emails_total: number;
+  emails_30d: number;
+  bounce_rate_30d: number | null;
+  complaints_30d: number;
+  campaigns: number;
+  automations_active: number;
+  sites: number;
+  pageviews_30d: number;
+  integrations: AdminIntegration[];
+  sending_domain: { domain: string; verified: boolean } | null;
+  health: AdminHealth;
+}
+
+export type AdminAccountSort = "created_at" | "last_seen" | "contacts" | "emails_30d" | "bounce_rate";
+
+export interface AdminAccountList {
+  data: AdminAccountRow[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminAccountDetail {
+  account: AdminAccountRow;
+  users: Array<{ email: string; name: string | null; role: string; created_at: string; last_seen_at: string | null }>;
+  campaigns: Array<{ id: string; name: string; status: string; sent_at: string | null; recipients: number }>;
+  automations: Array<{ id: string; name: string; trigger: string; status: string; runs: number }>;
+  sites: Array<{ host: string; pageviews: number; last_seen: string | null }>;
+  failures: Array<{ at: string; to: string; error: string | null }>;
+  timeseries: AdminDay[];
+}
+
+export type AdminActivityType =
+  | "account_created"
+  | "user_joined"
+  | "campaign_sent"
+  | "automation_created"
+  | "integration_connected"
+  | "domain_verified"
+  | "site_detected";
+
+export interface AdminActivityItem {
+  at: string;
+  type: AdminActivityType;
+  account_id: string;
+  account_name: string;
+  detail: string | null;
+}
+
+export interface AdminDeliverability {
+  by_domain: Array<{ domain: string; sent: number; bounced: number; opened: number }>;
+  errors: Array<{ error: string; count: number; last_at: string | null }>;
+  risky_accounts: AdminAccountRow[];
+}

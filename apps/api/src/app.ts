@@ -27,6 +27,7 @@ import { libraryRoutes, publicUploadRoutes } from './routes/library.js';
 import { pushAppRoutes, pushRoutes } from './routes/push.js';
 import { inboundRoutes, inboundSettingsRoutes } from './routes/inbound.js';
 import { connectRoutes, publicConnectRoutes } from './routes/connect.js';
+import { adminRoutes } from './routes/admin.js';
 
 export const API_PREFIX = '/api/v1';
 
@@ -194,6 +195,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         await pushRoutes(priv, deps);
         await inboundSettingsRoutes(priv, deps);
         await connectRoutes(priv, deps);
+        // « Administration » de la plateforme (PLATFORM_ADMIN_EMAILS) : invisible (404) pour les autres.
+        await adminRoutes(priv, deps);
       });
     },
     { prefix: API_PREFIX },

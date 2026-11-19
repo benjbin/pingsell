@@ -28,6 +28,7 @@ Deux domaines publics, quatre conteneurs :
 | `PUBLIC_URL` / `WEB_URL` | `https://app.pingsell.com` | Forcer l'adresse de l'app (sinon : domaine du service `web`) |
 | `SITE_URL` | `https://pingsell.com` | Forcer l'adresse du site (sinon : domaine du service `site`) |
 | `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | — | Seulement pour l'app publique Shopify (OAuth) |
+| `PLATFORM_ADMIN_EMAILS` | `vous@exemple.fr` | Emails (séparés par des virgules) qui voient la page Administration de la plateforme |
 
 Les adresses sont intégrées au build de l'app et du site : après un changement de domaine, **Redeploy**.
 
