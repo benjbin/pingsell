@@ -720,3 +720,20 @@ export interface InboundSettings {
   tracking: TrackingSettings;
   form: InboundLastCall & { key: string; script_url: string; action_url: string; allowed_origins: string[] };
 }
+
+/** Ce qui est branché sur le compte : dit quels déclencheurs d'automatisation peuvent vraiment partir. */
+export interface AutomationSources {
+  shopify: boolean;
+  /** Extensions connectées, ex. « WordPress · boutique.fr ». */
+  plugins: string[];
+  api_keys_used: number;
+  orders: number;
+  fulfilled: number;
+  carts: number;
+  products_seen: number;
+  app_users: number;
+  push_devices: number;
+  contacts: number;
+  segments: number;
+  emails_sent: number;
+}

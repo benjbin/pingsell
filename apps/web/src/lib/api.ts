@@ -48,8 +48,7 @@ import type {
   PushContent,
   PushDevice,
   PushAudience,
-  PushChannel,
-} from "./types";
+  PushChannel, AutomationSources } from "./types";
 
 // Set: that API origin. Otherwise local dev talks to the API on :4000, and a production build
 // uses its own origin (the app's nginx proxies /api to the API container).
@@ -283,6 +282,7 @@ export const api = {
     activate: (id: string) => post<unknown>(`/automations/${id}/activate`),
     pause: (id: string) => post<unknown>(`/automations/${id}/pause`),
     eventNames: () => get<{ data: Array<{ name: string; count: number; last_at: string }> }>("/automations/event-names").then((r) => r.data),
+    sources: () => get<AutomationSources>("/automations/sources"),
   },
 
   push: {

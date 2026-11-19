@@ -24,6 +24,34 @@ const patchSchema = createSchema.partial();
 type Params = { Params: { id: string } };
 
 export async function automationRoutes(app: FastifyInstance, { db }: Deps) {
+  /**
+   * Ce qui est branché sur le compte, pour dire dans l'éditeur quels déclencheurs peuvent vraiment partir :
+   * boutique (Shopify, extension WordPress / PrestaShop), commandes, paniers, app mobile, produits vus…
+   */
+  app.get('/automations/sources', async (request) => {
+    const id = request.accountId;
+    const n = (sql: string, ...args: SQLInputValue[]) => Number(scalar(db, sql, id, ...args) ?? 0);
+    const plugins = all<{ label: string; last_used_at: string | null }>(
+      db,
+      "SELECT label, last_used_at FROM api_keys WHERE account_id = ? AND (label LIKE 'WordPress · %' OR label LIKE 'PrestaShop · %') ORDER BY created_at",
+      id,
+    ).map((k) => k.label);
+    return {
+      shopify: n("SELECT COUNT(*) FROM integrations WHERE account_id = ? AND provider = 'shopify' AND status = 'connected' AND access_token IS NOT NULL") > 0,
+      plugins,
+      api_keys_used: n('SELECT COUNT(*) FROM api_keys WHERE account_id = ? AND last_used_at IS NOT NULL'),
+      orders: n("SELECT COUNT(*) FROM events WHERE account_id = ? AND type = 'order'"),
+      fulfilled: n("SELECT COUNT(*) FROM events WHERE account_id = ? AND type = 'order_fulfilled'"),
+      carts: n('SELECT COUNT(*) FROM api_carts WHERE account_id = ?') + n("SELECT COUNT(*) FROM events WHERE account_id = ? AND type = 'cart_abandoned'"),
+      products_seen: n('SELECT COUNT(*) FROM web_pageviews WHERE account_id = ? AND product IS NOT NULL'),
+      app_users: n('SELECT COUNT(*) FROM app_users WHERE account_id = ?'),
+      push_devices: n('SELECT COUNT(*) FROM push_devices WHERE account_id = ?'),
+      contacts: n('SELECT COUNT(*) FROM contacts WHERE account_id = ?'),
+      segments: n('SELECT COUNT(*) FROM segments WHERE account_id = ?'),
+      emails_sent: n("SELECT COUNT(*) FROM messages WHERE account_id = ? AND status = 'sent'"),
+    };
+  });
+
   /** Event names the site already sent (suggestions for the « Événement » trigger). */
   app.get('/automations/event-names', async (request) => {
     const rows = all<{ name: string; n: number; last_at: string }>(

@@ -43,7 +43,7 @@ import {
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useAsync } from "../../lib/useAsync";
-import { EXIT_CONDITIONS, SITE_ACTIONS, SITE_ACTION_KINDS, TRIGGERS, siteLabel } from "../../lib/constants";
+import { EXIT_CONDITIONS, SITE_ACTIONS, SITE_ACTION_KINDS, siteLabel } from "../../lib/constants";
 import { cx } from "../../lib/format";
 import type { AutomationStep, AutomationTrigger, BranchCondition, ExitCondition, Segment, SiteActionKind, WebSite, WebSiteAction } from "../../lib/types";
 import { Badge, Button, Card, ErrorState, Field, Input, PageHeader, Select, Skeleton, Textarea } from "../../components/ui/primitives";
@@ -57,6 +57,7 @@ import { ConfirmModal } from "../../components/ui/Overlay";
 import { DEFAULT_EMAIL_HTML } from "../campaigns/defaultTemplate";
 import { t, LOCALE } from "../../lib/i18n";
 import { RECIPES } from "./recipes";
+import { NotReadyNotice, TriggerPicker, TriggerSentence, readinessOf, triggerSentence } from "./TriggerPicker";
 import { EventNeverSent, eventSlug } from "../../components/connect/SiteEvents";
 import { SITE_ACTION_ICONS, timesSeen, useSites } from "../../components/connect/Sites";
 
@@ -843,6 +844,7 @@ export function AutomationEditorPage() {
   const eventNames = useAsync(() => api.automations.eventNames().catch(() => null), []);
   const segments = useAsync(() => api.segments.list().catch(() => [] as Segment[]), []);
   const sites = useSites();
+  const sources = useAsync(() => api.automations.sources().catch(() => null), []);
   const [eventName, setEventName] = useState(typeof recipe?.trigger_config?.event === "string" ? recipe.trigger_config.event : presetEvent);
   const [cfg, setCfg] = useState<Record<string, unknown>>(recipe?.trigger_config ?? presetSite ?? {});
 
@@ -1030,34 +1032,19 @@ export function AutomationEditorPage() {
             </span>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("Déclencheur", "Trigger")}</h3>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {(Object.keys(TRIGGERS) as AutomationTrigger[]).map((tr) => {
-              const Icon = TRIGGER_ICONS[tr];
-              const active = tr === trigger;
-              return (
-                <button
-                  key={tr}
-                  type="button"
-                  onClick={() => {
-                    setTrigger(tr);
-                    if (tr === "site_action" && !cfg.action) setCfg({ ...cfg, action: "signup" });
-                  }}
-                  className={cx(
-                    "flex items-start gap-3 rounded-xl p-3 text-left ring-1 transition",
-                    active
-                      ? "bg-brand-50 ring-2 ring-brand-600 dark:bg-brand-900/30"
-                      : "ring-slate-200 hover:bg-slate-50 dark:ring-slate-700 dark:hover:bg-slate-800/50",
-                  )}
-                >
-                  <Icon className={cx("mt-0.5 size-5 shrink-0", active ? "text-brand-600 dark:text-brand-300" : "text-slate-400")} />
-                  <span>
-                    <span className="block text-sm font-medium text-slate-900 dark:text-white">{TRIGGERS[tr].label}</span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400">{TRIGGERS[tr].description}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <TriggerSentence text={triggerSentence(trigger, cfg, { tag, eventName, sources: sources.data, sites: sites.data, segments: segments.data ?? [] })} />
+          <TriggerPicker
+            value={trigger}
+            icons={TRIGGER_ICONS}
+            sources={sources.data}
+            sites={sites.data}
+            eventNames={eventNames.data}
+            onPick={(tr) => {
+              setTrigger(tr);
+              if (tr === "site_action" && !cfg.action) setCfg({ ...cfg, action: "contact" });
+            }}
+          />
+          <NotReadyNotice readiness={readinessOf(trigger, { sources: sources.data, sites: sites.data, eventNames: eventNames.data })} />
           {trigger === "event" && (
             <div className="mt-4 space-y-3">
               <Field
@@ -1316,35 +1303,10 @@ function SiteActionEditor({ cfg, setCfg, sites }: { cfg: Record<string, unknown>
       )}
       <SiteSelect sites={sites} value={host} onChange={changeSite} />
 
-      <div>
-        <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">{t("Quelle action ?", "Which action?")}</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {SITE_ACTION_KINDS.map((kind) => {
-            const Icon = SITE_ACTION_ICONS[kind];
-            const on = action === kind && !form;
-            const n = detected.filter((a) => a.kind === kind).reduce((sum, a) => sum + a.count, 0);
-            const fem = kind === "signup" || kind === "login" || kind === "newsletter";
-            return (
-              <button key={kind} type="button" className={option(on)} onClick={() => setCfg({ ...cfg, action: kind, form: "", form_label: "" })}>
-                <Icon className={cx("mt-0.5 size-4 shrink-0", on ? "text-brand-600 dark:text-brand-300" : "text-slate-400")} />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium text-slate-900 dark:text-white">{SITE_ACTIONS[kind].any}</span>
-                  <span className="block text-xs text-slate-500 dark:text-slate-400">
-                    {n > 0
-                      ? t(`Repéré${fem ? "e" : ""} ${n.toLocaleString(LOCALE)} fois`, `Spotted ${n.toLocaleString(LOCALE)} time${n === 1 ? "" : "s"}`)
-                      : t(`Pas encore repéré${fem ? "e" : ""}`, "Not spotted yet")}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {detected.length > 0 && (
         <div>
           <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
-            {host ? t("Ou un formulaire précis repéré sur ce site :", "Or a precise form spotted on this site:") : t("Ou un formulaire précis repéré sur vos sites :", "Or a precise form spotted on your sites:")}
+            {host ? t("Quel formulaire de ce site\u00a0?", "Which form on this site?") : t("Quel formulaire\u00a0? (repérés sur vos sites)", "Which form? (spotted on your sites)")}
           </p>
           <div className="space-y-2">
             {detected.map((a) => {
@@ -1376,6 +1338,31 @@ function SiteActionEditor({ cfg, setCfg, sites }: { cfg: Record<string, unknown>
           </div>
         </div>
       )}
+
+      <div>
+        <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">{detected.length > 0 ? t("Ou n'importe quel formulaire d'un type\u00a0:", "Or any form of a type:") : t("Quelle action\u00a0?", "Which action?")}</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {SITE_ACTION_KINDS.map((kind) => {
+            const Icon = SITE_ACTION_ICONS[kind];
+            const on = action === kind && !form;
+            const n = detected.filter((a) => a.kind === kind).reduce((sum, a) => sum + a.count, 0);
+            const fem = kind === "signup" || kind === "login" || kind === "newsletter";
+            return (
+              <button key={kind} type="button" className={option(on)} onClick={() => setCfg({ ...cfg, action: kind, form: "", form_label: "" })}>
+                <Icon className={cx("mt-0.5 size-4 shrink-0", on ? "text-brand-600 dark:text-brand-300" : "text-slate-400")} />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-slate-900 dark:text-white">{SITE_ACTIONS[kind].any}</span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    {n > 0
+                      ? t(`Repéré${fem ? "e" : ""} ${n.toLocaleString(LOCALE)} fois`, `Spotted ${n.toLocaleString(LOCALE)} time${n === 1 ? "" : "s"}`)
+                      : t(`Pas encore repéré${fem ? "e" : ""}`, "Not spotted yet")}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {sites && (nothingAnywhere || detected.length === 0) && (
         <NothingSpotted>
