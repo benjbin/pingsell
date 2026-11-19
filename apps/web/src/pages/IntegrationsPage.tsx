@@ -31,7 +31,7 @@ import { ApiGuide, AppGuide, FileGuide, ShopifyGuide, type ApiKind } from "../co
 import { SiteEventsPanel } from "../components/connect/SiteEvents";
 import { FormGuide, NoCodeGuide, PluginGuide, TrackingGuide, type NoCodeTab } from "../components/connect/NoCodeGuides";
 
-type ToolId = "shopify" | "wordpress" | "prestashop" | "nocode" | "form" | "suivi" | "site" | "crm" | "pos" | "backoffice" | "app" | "file" | "other";
+type ToolId = "boutique" | "shopify" | "wordpress" | "prestashop" | "nocode" | "form" | "suivi" | "site" | "crm" | "pos" | "backoffice" | "app" | "file" | "other";
 
 const TOOLS: Array<{ id: ToolId; icon: LucideIcon; title: string; text: string; how: string; api?: ApiKind }> = [
   { id: "shopify", icon: ShoppingBag, title: "Shopify", text: t("Clients, commandes, expéditions et paniers abandonnés.", "Customers, orders, shipments and abandoned carts."), how: t("1 clic", "1 click") },
@@ -49,7 +49,17 @@ const TOOLS: Array<{ id: ToolId; icon: LucideIcon; title: string; text: string; 
   { id: "other", icon: Wrench, title: t("Un autre outil", "Another tool"), text: t("Tout ce qui sait faire un appel web.", "Anything that can make a web request."), how: "API", api: "other" },
 ];
 
-const IDS = TOOLS.map((it) => it.id);
+/** The 4 no-code platforms share one card: « Site ou boutique no-code », then the merchant picks theirs. */
+const SHOP_IDS: ToolId[] = ["shopify", "wordpress", "prestashop", "nocode"];
+const SHOP_CARD: (typeof TOOLS)[number] = {
+  id: "boutique",
+  icon: Store,
+  title: t("Site ou boutique no-code", "No-code site or shop"),
+  text: t("Shopify, WordPress & WooCommerce, PrestaShop, Framer, Webflow, Wix…", "Shopify, WordPress & WooCommerce, PrestaShop, Framer, Webflow, Wix…"),
+  how: t("1 clic à 2 min", "1 click to 2 min"),
+};
+const GRID = [SHOP_CARD, ...TOOLS.filter((it) => !SHOP_IDS.includes(it.id))];
+const IDS: ToolId[] = ["boutique", ...TOOLS.map((it) => it.id)];
 
 export function IntegrationsPage() {
   const navigate = useNavigate();
@@ -72,7 +82,8 @@ export function IntegrationsPage() {
 
   const outil = params.get("outil") as ToolId | null;
   const selected = outil && IDS.includes(outil) ? outil : params.get("shopify") ? "shopify" : null;
-  const tool = TOOLS.find((it) => it.id === selected);
+  const tool = selected === "boutique" ? SHOP_CARD : TOOLS.find((it) => it.id === selected);
+  const shopSelected = !!selected && (selected === "boutique" || SHOP_IDS.includes(selected));
 
   const [done, setDone] = useState<Partial<Record<ToolId, string>>>({});
   const [nocodeTab, setNocodeTab] = useState<NoCodeTab>("framer");
@@ -97,8 +108,13 @@ export function IntegrationsPage() {
     };
   }, [done]);
 
-  function badge(it: (typeof TOOLS)[number]): string | null {
+  function badge(it: { id: ToolId }): string | null {
     const s = status.data;
+    if (it.id === "boutique") {
+      const doneShop = SHOP_IDS.find((id) => done[id]);
+      if (doneShop) return t("Connectée", "Connected");
+      return s?.shopify ? t("Shopify connectée", "Shopify connected") : null;
+    }
     if (done[it.id]) return it.id === "file" ? t("Importé", "Imported") : t("Connecté", "Connected");
     if (!s) return null;
     if (it.id === "shopify") return s.shopify ? t("Connectée", "Connected") : null;
@@ -152,8 +168,8 @@ export function IntegrationsPage() {
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {TOOLS.map((it) => {
-          const on = selected === it.id;
+        {GRID.map((it) => {
+          const on = it.id === "boutique" ? shopSelected : selected === it.id;
           const b = badge(it);
           return (
             <button
@@ -200,6 +216,7 @@ export function IntegrationsPage() {
               <X className="size-5" />
             </button>
             <div className="max-w-3xl">
+              {shopSelected && <ShopPicker selected={selected === "boutique" ? null : selected} onPick={(id) => open(id)} />}
               {tool.id === "shopify" && <ShopifyGuide done={done.shopify} onDone={mark("shopify")} />}
               {(tool.id === "wordpress" || tool.id === "prestashop") && (
                 <PluginGuide
@@ -310,5 +327,72 @@ function Simulator({ onDone }: { onDone: () => void }) {
         </Button>
       </div>
     </Card>
+  );
+}
+
+/** Step 0 of « Site ou boutique no-code »: pick the platform, then its own guide opens right below. */
+function ShopPicker({ selected, onPick }: { selected: ToolId | null; onPick: (id: ToolId) => void }) {
+  const shops = TOOLS.filter((it) => SHOP_IDS.includes(it.id));
+  if (selected) {
+    return (
+      <div className="mb-8 flex flex-wrap items-center gap-2 border-b border-slate-900/10 pb-6 pr-10 dark:border-white/10">
+        <span className="mr-1 text-sm text-slate-500 dark:text-slate-400">{t("Votre plateforme\u00a0:", "Your platform:")}</span>
+        {shops.map((it) => {
+          const on = it.id === selected;
+          return (
+            <button
+              key={it.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onPick(it.id)}
+              className={cx(
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition",
+                on
+                  ? "bg-brand-500 text-white"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700",
+              )}
+            >
+              <it.icon className="size-3.5" strokeWidth={2} />
+              {it.title}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+  return (
+    <div className="pr-8">
+      <div className="flex items-center gap-3">
+        <span className="flex size-11 items-center justify-center rounded-xl bg-brand-50 text-brand-500 dark:bg-brand-900/30">
+          <Store className="size-5" strokeWidth={1.75} />
+        </span>
+        <h2 className="font-display text-2xl font-bold text-slate-900 dark:text-white">{t("Avec quoi est fait votre site ou votre boutique\u00a0?", "What is your site or shop built with?")}</h2>
+      </div>
+      <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+        {t("Choisissez la plateforme sur laquelle vous l'avez créé, sans coder\u00a0: le guide adapté s'ouvre juste en dessous.", "Pick the platform you built it on, without code: the matching guide opens right below.")}
+      </p>
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {shops.map((it) => (
+          <button
+            key={it.id}
+            type="button"
+            onClick={() => onPick(it.id)}
+            className="group flex items-start gap-3 rounded-2xl p-4 text-left ring-1 ring-slate-900/10 transition hover:ring-2 hover:ring-brand-500 dark:ring-white/10"
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-500 transition group-hover:bg-brand-500 group-hover:text-white dark:bg-brand-900/30">
+              <it.icon className="size-5" strokeWidth={1.75} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center justify-between gap-2">
+                <span className="font-display text-[15px] font-bold text-slate-900 dark:text-white">{it.title}</span>
+                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{it.how}</span>
+              </span>
+              <span className="mt-0.5 block text-[13px] text-slate-500 dark:text-slate-400">{it.text}</span>
+            </span>
+            <ArrowRight className="mt-3 size-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-500" />
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
