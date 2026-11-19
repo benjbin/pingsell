@@ -217,6 +217,9 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
     let created = 0;
     let updated = 0;
     const errorDetails: { row: number; email: string | null; error: string }[] = [];
+    // Same address twice in the file (case and spaces ignored): only the first row is kept, the others are reported.
+    const firstRow = new Map<string, number>();
+    const duplicateDetails: { row: number; email: string; first_row: number }[] = [];
 
     transaction(db, () => {
       for (const { row, data } of inputs) {
@@ -229,6 +232,13 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
           });
           continue;
         }
+        const key = normalizeEmail(parsed.data.email);
+        const first = firstRow.get(key);
+        if (first !== undefined) {
+          duplicateDetails.push({ row, email: key, first_row: first });
+          continue;
+        }
+        firstRow.set(key, row);
         try {
           const r = upsertContact(db, request.accountId, { ...parsed.data, source: 'import' });
           if (r.created) {
@@ -242,7 +252,14 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       }
     });
 
-    return { created, updated, errors: errorDetails.length, error_details: errorDetails.slice(0, 100) };
+    return {
+      created,
+      updated,
+      duplicates: duplicateDetails.length,
+      duplicate_details: duplicateDetails.slice(0, 100),
+      errors: errorDetails.length,
+      error_details: errorDetails.slice(0, 100),
+    };
   });
 
   app.get('/tags', async (request) => {

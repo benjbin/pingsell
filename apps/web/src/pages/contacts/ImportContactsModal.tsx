@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { CheckCircle2, FileUp } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileUp } from "lucide-react";
 import { api } from "../../lib/api";
 import type { ImportErrorDetail, ImportResult } from "../../lib/types";
 import { Button, Textarea } from "../../components/ui/primitives";
@@ -42,6 +42,20 @@ function previewRows(csv: string, max = 5): string[][] {
   });
 }
 
+const EMAIL_HEADERS = new Set(["email", "e-mail", "mail", "courriel", "adresse email"]);
+
+/** Emails present more than once in the file (case and spaces ignored), with how many times. */
+function duplicateEmails(rows: string[][]): Array<{ email: string; count: number }> {
+  const col = (rows[0] ?? []).findIndex((h) => EMAIL_HEADERS.has(h.toLowerCase()));
+  if (col < 0) return [];
+  const counts = new Map<string, number>();
+  for (const r of rows.slice(1)) {
+    const email = (r[col] ?? "").trim().toLowerCase();
+    if (email) counts.set(email, (counts.get(email) ?? 0) + 1);
+  }
+  return [...counts].filter(([, n]) => n > 1).map(([email, count]) => ({ email, count }));
+}
+
 function errorCount(errors: ImportResult["errors"]): number {
   return Array.isArray(errors) ? errors.length : errors;
 }
@@ -58,6 +72,8 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const rows = useMemo(() => (csv ? previewRows(csv) : []), [csv]);
+  const dupes = useMemo(() => (csv ? duplicateEmails(previewRows(csv, Infinity)) : []), [csv]);
+  const extraRows = dupes.reduce((n, d) => n + d.count - 1, 0);
   const totalLines = useMemo(() => Math.max(0, csv.split(/\r?\n/).filter((l) => l.trim()).length - 1), [csv]);
 
   function close() {
@@ -79,7 +95,14 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
       const res = await api.contacts.importContacts({ csv });
       setResult(res);
       onImported(res);
-      toast.success(t("Import terminé", "Import complete"), t(`${res.created} créés, ${res.updated} mis à jour`, `${res.created} created, ${res.updated} updated`));
+      const dup = res.duplicates ?? 0;
+      toast.success(
+        t("Import terminé", "Import complete"),
+        t(
+          `${res.created} créés, ${res.updated} mis à jour${dup ? `, ${dup} doublon${dup > 1 ? "s" : ""} ignoré${dup > 1 ? "s" : ""}` : ""}`,
+          `${res.created} created, ${res.updated} updated${dup ? `, ${dup} duplicate${dup > 1 ? "s" : ""} skipped` : ""}`,
+        ),
+      );
     } catch (err) {
       toast.error(err);
     } finally {
@@ -113,10 +136,11 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
         <div className="flex flex-col items-center py-6 text-center">
           <CheckCircle2 className="size-12 text-emerald-500" />
           <p className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">{t("Import terminé", "Import complete")}</p>
-          <div className="mt-4 grid w-full max-w-sm grid-cols-3 gap-3">
+          <div className="mt-4 grid w-full max-w-md grid-cols-2 gap-3 sm:grid-cols-4">
             {[
               { label: t("Créés", "Created"), value: result.created },
               { label: t("Mis à jour", "Updated"), value: result.updated },
+              { label: t("Doublons ignorés", "Duplicates skipped"), value: result.duplicates ?? 0 },
               { label: t("Erreurs", "Errors"), value: errorCount(result.errors) },
             ].map((s) => (
               <div key={s.label} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
@@ -125,6 +149,24 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
               </div>
             ))}
           </div>
+          {(result.duplicate_details?.length ?? 0) > 0 && (
+            <div className="mt-4 w-full rounded-lg bg-amber-50 p-3 text-left text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <p className="font-semibold">
+                {t(
+                  "Ces adresses étaient en double dans le fichier : seule la première ligne a été importée.",
+                  "These addresses appeared more than once in the file: only the first row was imported.",
+                )}
+              </p>
+              <ul className="mt-1.5 max-h-40 overflow-y-auto">
+                {result.duplicate_details!.slice(0, 50).map((d) => (
+                  <li key={d.row}>
+                    {t(`Ligne ${d.row} — ${d.email} : déjà à la ligne ${d.first_row}`, `Row ${d.row} — ${d.email}: already on row ${d.first_row}`)}
+                  </li>
+                ))}
+              </ul>
+              {(result.duplicates ?? 0) > 50 && <p className="mt-1">{t(`… et ${(result.duplicates ?? 0) - 50} autres.`, `… and ${(result.duplicates ?? 0) - 50} more.`)}</p>}
+            </div>
+          )}
           {errorList(result).length > 0 && (
             <ul className="mt-4 max-h-40 w-full overflow-y-auto rounded-lg bg-red-50 p-3 text-left text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
               {errorList(result).slice(0, 50).map((e, i) => (
@@ -160,6 +202,32 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
             placeholder={EXAMPLE}
             className="font-mono text-xs"
           />
+          {dupes.length > 0 && (
+            <div className="flex gap-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-800 ring-1 ring-amber-600/20 dark:bg-amber-900/20 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <div className="min-w-0">
+                <p className="font-semibold">
+                  {t(
+                    `${dupes.length} adresse${dupes.length > 1 ? "s" : ""} en double dans ce fichier (${extraRows} ligne${extraRows > 1 ? "s" : ""} en trop)`,
+                    `${dupes.length} duplicate address${dupes.length > 1 ? "es" : ""} in this file (${extraRows} extra row${extraRows > 1 ? "s" : ""})`,
+                  )}
+                </p>
+                <p className="mt-0.5">
+                  {t(
+                    "Pas d'inquiétude : chaque personne ne sera importée qu'une fois, avec sa première ligne. Les suivantes seront ignorées.",
+                    "No worries: each person is imported only once, from their first row. The following ones are skipped.",
+                  )}
+                </p>
+                <p className="mt-1 truncate text-xs opacity-80">
+                  {dupes
+                    .slice(0, 5)
+                    .map((d) => `${d.email} (×${d.count})`)
+                    .join(", ")}
+                  {dupes.length > 5 ? t(` et ${dupes.length - 5} autres`, ` and ${dupes.length - 5} more`) : ""}
+                </p>
+              </div>
+            </div>
+          )}
           {rows.length > 1 && (
             <div className="overflow-x-auto rounded-lg ring-1 ring-slate-200 dark:ring-slate-700">
               <table className="w-full text-left text-xs">

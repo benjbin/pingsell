@@ -202,9 +202,19 @@ export interface ImportErrorDetail {
   error: string;
 }
 
+export interface ImportDuplicate {
+  row: number;
+  email: string;
+  /** The row that was kept. */
+  first_row: number;
+}
+
 export interface ImportResult {
   created: number;
   updated: number;
+  /** Rows skipped because the same email already appears earlier in the file. */
+  duplicates?: number;
+  duplicate_details?: ImportDuplicate[];
   /** Number of rejected rows (some servers return the detailed list here instead). */
   errors: number | Array<string | ImportErrorDetail>;
   error_details?: ImportErrorDetail[];
