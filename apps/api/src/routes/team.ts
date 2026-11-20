@@ -5,7 +5,8 @@ import { all, get, newId, now, run, transaction } from '../db.js';
 import type { Deps } from '../deps.js';
 import { badRequest, conflict, forbidden, notFound, parse, zmsg } from '../lib/http.js';
 import { t } from '../i18n.js';
-import { createSession, hashPassword, publicUser, verifyPassword, type Role, type UserRow } from '../services/auth.js';
+import { createSession, hashPassword, publicAccount, publicUser, verifyPassword, type Role, type UserRow } from '../services/auth.js';
+import { assetUrl } from './library.js';
 import { normalizeEmail } from '../services/contacts.js';
 import { renderSystemEmail } from '../services/systemEmail.js';
 
@@ -203,13 +204,28 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
     return reply.code(204).send();
   });
 
-  /** Shop / company name shown in emails and in the app. */
+  /** Shop / company name shown in emails and in the app, and its logo (an image of the media library, or null). */
   app.patch('/account', async (request) => {
     requireManager(request);
-    const body = parse(z.object({ name: z.string().trim().min(1, zmsg('Le nom est requis', 'Name is required')).max(120) }), request.body);
-    run(db, 'UPDATE accounts SET name = ? WHERE id = ?', body.name, request.accountId);
-    const row = get<{ id: string; name: string; email: string; created_at: string }>(db, 'SELECT id, name, email, created_at FROM accounts WHERE id = ?', request.accountId)!;
-    return { account: row };
+    const body = parse(
+      z.object({
+        name: z.string().trim().min(1, zmsg('Le nom est requis', 'Name is required')).max(120).optional(),
+        logo_asset_id: z.string().max(64).nullable().optional(),
+      }),
+      request.body,
+    );
+    if (body.name !== undefined) run(db, 'UPDATE accounts SET name = ? WHERE id = ?', body.name, request.accountId);
+    if (body.logo_asset_id !== undefined) {
+      let url: string | null = null;
+      if (body.logo_asset_id) {
+        const asset = get<{ stored_name: string; mime: string }>(db, 'SELECT stored_name, mime FROM assets WHERE id = ? AND account_id = ?', body.logo_asset_id, request.accountId);
+        if (!asset || !asset.mime.startsWith('image/')) throw badRequest(t('Image introuvable', 'Image not found'));
+        url = assetUrl(config.publicUrl, asset.stored_name);
+      }
+      run(db, 'UPDATE accounts SET logo_url = ? WHERE id = ?', url, request.accountId);
+    }
+    const row = get<{ id: string; name: string; email: string; created_at: string; logo_url: string | null }>(db, 'SELECT id, name, email, created_at, logo_url FROM accounts WHERE id = ?', request.accountId)!;
+    return { account: publicAccount(row) };
   });
 }
 

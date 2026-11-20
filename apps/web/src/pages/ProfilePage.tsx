@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import { Clock, Crown, LogOut, Mail, PenLine, Shield, Trash2, UserPlus, Users } from "lucide-react";
+import { Clock, Crown, ImagePlus, LogOut, Mail, PenLine, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { api } from "../lib/api";
 import { t } from "../lib/i18n";
 import { useAuth } from "../lib/auth";
@@ -11,6 +11,8 @@ import { Badge, Button, Card, CardHeader, ErrorState, Field, Input, PageHeader, 
 import { ConfirmModal, Modal } from "../components/ui/Overlay";
 import { useToast } from "../components/ui/Toast";
 import { CopyButton } from "../components/CopyButton";
+import { uploadImage } from "../components/email-builder/media";
+import { AccountLogo } from "../components/brand/AccountLogo";
 
 export const ROLES: Record<Role, { label: string; description: string; icon: typeof Crown; tone: "brand" | "blue" | "slate" }> = {
   owner: { label: t("Propriétaire", "Owner"), description: t("Accès complet, ne peut pas être retiré.", "Full access; can't be removed."), icon: Crown, tone: "brand" },
@@ -174,8 +176,12 @@ function AccountCard() {
 
   return (
     <Card>
-      <CardHeader title={t("Boutique", "Store")} description={t("Le nom utilisé par défaut comme expéditeur et dans vos emails.", "The default sender name, also used in your emails.")} />
-      <form onSubmit={save} className="flex flex-wrap items-end gap-3 p-6">
+      <CardHeader
+        title={t("Boutique", "Store")}
+        description={t("Le nom utilisé par défaut comme expéditeur et dans vos emails, et le logo de votre marque.", "The default sender name, also used in your emails, and your brand's logo.")}
+      />
+      <LogoField />
+      <form onSubmit={save} className="flex flex-wrap items-end gap-3 border-t border-slate-100 p-6 dark:border-slate-800">
         <Field label={t("Nom de la boutique ou de l'entreprise", "Store or business name")} htmlFor="acc-name" className="min-w-[240px] flex-1">
           <Input id="acc-name" value={name} onChange={(e) => setName(e.target.value)} required disabled={!canManage} />
         </Field>
@@ -187,6 +193,79 @@ function AccountCard() {
         <p className="w-full text-xs text-slate-500 dark:text-slate-400">{t(`Compte créé le ${formatDate(account.created_at)}.`, `Account created ${formatDate(account.created_at)}.`)}</p>
       </form>
     </Card>
+  );
+}
+
+/** The store's logo: optional, shown in the app (sidebar, profile). */
+function LogoField() {
+  const toast = useToast();
+  const { account, canManage, setAccount } = useAuth();
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
+  if (!account) return null;
+  const logo = account.logo_url ?? null;
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    setBusy("upload");
+    try {
+      const asset = await uploadImage(file);
+      setAccount(await api.account.setLogo(asset.id));
+      toast.success(t("Logo enregistré", "Logo saved"));
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setBusy(null);
+      if (input.current) input.current.value = "";
+    }
+  }
+
+  async function remove() {
+    setBusy("remove");
+    try {
+      setAccount(await api.account.setLogo(null));
+      toast.success(t("Logo retiré", "Logo removed"));
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-5 px-6 pt-2 pb-6">
+      {logo ? (
+        <AccountLogo url={logo} square padding="p-3" className="size-24 ring-1 ring-slate-900/10 dark:ring-white/10" />
+      ) : (
+        <div className="flex size-24 shrink-0 items-center justify-center rounded-2xl bg-slate-50 ring-1 ring-slate-900/10 dark:bg-white/5 dark:ring-white/10">
+          <ImagePlus className="size-7 text-slate-300 dark:text-slate-600" strokeWidth={1.5} />
+        </div>
+      )}
+      <div className="min-w-0 flex-1 space-y-2">
+        <p className="text-sm font-medium text-slate-900 dark:text-white">{t("Logo", "Logo")}</p>
+        <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          {t(
+            "Facultatif. PNG, JPG, GIF ou WebP, 8 Mo maximum. Un logo carré ou sur fond transparent rend le mieux.",
+            "Optional. PNG, JPG, GIF or WebP, 8 MB max. A square logo or one on a transparent background looks best.",
+          )}
+        </p>
+        {canManage ? (
+          <div className="flex flex-wrap gap-2 pt-1">
+            <input ref={input} type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
+            <Button type="button" variant="secondary" size="sm" icon={ImagePlus} loading={busy === "upload"} disabled={!!busy} onClick={() => input.current?.click()}>
+              {logo ? t("Changer le logo", "Change logo") : t("Ajouter un logo", "Add a logo")}
+            </Button>
+            {logo && (
+              <Button type="button" variant="ghost" size="sm" icon={Trash2} loading={busy === "remove"} disabled={!!busy} onClick={() => void remove()}>
+                {t("Retirer", "Remove")}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("Seuls le propriétaire et les administrateurs peuvent le modifier.", "Only the owner and admins can change it.")}</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -562,7 +641,11 @@ export function ProfilePage() {
 
       {user ? (
         <div className="mb-6 flex flex-wrap items-center gap-4 rounded-[20px] bg-slate-900 p-6 text-white">
-          <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-brand-500 font-display text-xl font-extrabold">{initials(user.name)}</span>
+          {account?.logo_url ? (
+            <AccountLogo url={account.logo_url} padding="p-2.5" className="size-16" />
+          ) : (
+            <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-brand-500 font-display text-xl font-extrabold">{initials(user.name)}</span>
+          )}
           <div className="min-w-0 flex-1">
             <p className="font-display text-2xl leading-tight font-extrabold tracking-[-0.02em] uppercase">{user.name}</p>
             <p className="truncate text-sm text-white/60">

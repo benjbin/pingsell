@@ -5,6 +5,7 @@ import { useAuth } from "../../lib/auth";
 import { useTheme } from "../../lib/theme";
 import { cx, formatNumber } from "../../lib/format";
 import { PingsellLogo } from "../brand/PingsellLogo";
+import { AccountLogo } from "../brand/AccountLogo";
 import { NavIcon, type NavIconName } from "../brand/NavIcons";
 import { LanguageToggle } from "./LanguageToggle";
 import { t, LOCALE } from "../../lib/i18n";
@@ -147,9 +148,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="flex items-center gap-1 border-t border-white/10 py-3 pr-3 pl-3">
         <Link to="/profil" onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-3 rounded-full p-2 transition hover:bg-white/[0.06]" title={t("Profil & équipe", "Profile & team")}>
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white font-display text-base font-extrabold text-slate-900">
-            {(user?.name ?? account?.name ?? "M").slice(0, 1).toUpperCase()}
-          </span>
+          {account?.logo_url ? (
+            <AccountLogo url={account.logo_url} className="size-9" />
+          ) : (
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white font-display text-base font-extrabold text-slate-900">
+              {(user?.name ?? account?.name ?? "M").slice(0, 1).toUpperCase()}
+            </span>
+          )}
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold text-white">{user?.name ?? account?.name}</span>
             <span className="block truncate text-[11px] text-white/50">{user && user.name !== account?.name ? account?.name : (user?.email ?? account?.email)}</span>

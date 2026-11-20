@@ -208,6 +208,8 @@ export const api = {
   },
   account: {
     rename: (name: string) => patch<{ account: Account }>("/account", { name }).then((r) => r.account),
+    /** An image of the media library as the store's logo, or null to remove it. */
+    setLogo: (assetId: string | null) => patch<{ account: Account }>("/account", { logo_asset_id: assetId }).then((r) => r.account),
     /** Owner only, permanent: deletes the account and all its data. */
     remove: (password: string) => post<void>("/account/delete", { password }),
   },

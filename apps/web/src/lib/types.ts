@@ -5,6 +5,8 @@ export interface Account {
   name: string;
   email: string;
   created_at: string;
+  /** The store's logo (public image URL), or null. */
+  logo_url?: string | null;
 }
 
 export interface Usage {

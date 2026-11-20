@@ -632,6 +632,8 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   `,
   // Campagne envoyée à des contacts choisis un par un (tableau JSON d'ids) au lieu de tous ou d'un segment.
   `ALTER TABLE campaigns ADD COLUMN contact_ids TEXT;`,
+  // Logo de la boutique / entreprise (une image de la médiathèque), affiché dans l'application.
+  `ALTER TABLE accounts ADD COLUMN logo_url TEXT;`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

@@ -112,6 +112,6 @@ export function makeMarkApiKeyUsed(db: DatabaseSync) {
   };
 }
 
-export function publicAccount(row: { id: string; name: string; email: string; created_at: string }) {
-  return { id: row.id, name: row.name, email: row.email, created_at: row.created_at };
+export function publicAccount(row: { id: string; name: string; email: string; created_at: string; logo_url?: string | null }) {
+  return { id: row.id, name: row.name, email: row.email, created_at: row.created_at, logo_url: row.logo_url ?? null };
 }
