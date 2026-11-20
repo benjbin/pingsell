@@ -9,11 +9,11 @@ import { t } from "../../lib/i18n";
 
 const LIMIT = 50;
 
-function outcome(r: CampaignRecipient): { label: string; tone: "green" | "sky" | "slate" | "red" | "amber"; at: string | null } {
+function outcome(r: CampaignRecipient): { label: string; tone: "green" | "blue" | "slate" | "red" | "amber"; at: string | null } {
   if (r.status === "failed" || r.status === "bounced") return { label: r.status === "bounced" ? t("Rejeté", "Bounced") : t("Échec", "Failed"), tone: "red", at: r.sent_at };
   if (r.status === "queued") return { label: t("En attente", "Queued"), tone: "amber", at: null };
   if (r.clicked_at) return { label: t("A cliqué", "Clicked"), tone: "green", at: r.clicked_at };
-  if (r.opened_at) return { label: t("A ouvert", "Opened"), tone: "sky", at: r.opened_at };
+  if (r.opened_at) return { label: t("A ouvert", "Opened"), tone: "blue", at: r.opened_at };
   return { label: t("Reçu", "Delivered"), tone: "slate", at: r.sent_at };
 }
 
