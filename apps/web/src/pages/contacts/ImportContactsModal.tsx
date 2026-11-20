@@ -6,6 +6,7 @@ import { Button, Textarea } from "../../components/ui/primitives";
 import { Modal } from "../../components/ui/Overlay";
 import { useToast } from "../../components/ui/Toast";
 import { t } from "../../lib/i18n";
+import { detectColumns, isEmptyCell, type ContactField } from "../../lib/csvColumns";
 
 const EXAMPLE = t(
   `email,first_name,last_name,tags
@@ -42,16 +43,25 @@ function previewRows(csv: string, max = 5): string[][] {
   });
 }
 
-const EMAIL_HEADERS = new Set(["email", "e-mail", "mail", "courriel", "adresse email"]);
+const FIELD_LABEL: Record<ContactField, string> = {
+  email: "Email",
+  first_name: t("Prénom", "First name"),
+  last_name: t("Nom", "Last name"),
+  full_name: t("Prénom et nom", "Full name"),
+  phone: t("Téléphone", "Phone"),
+  tags: "Tags",
+  status: t("Statut", "Status"),
+};
 
 /** Emails present more than once in the file (case and spaces ignored), with how many times. */
-function duplicateEmails(rows: string[][]): Array<{ email: string; count: number }> {
-  const col = (rows[0] ?? []).findIndex((h) => EMAIL_HEADERS.has(h.toLowerCase()));
+function duplicateEmails(rows: string[][], col: number): Array<{ email: string; count: number }> {
   if (col < 0) return [];
   const counts = new Map<string, number>();
   for (const r of rows.slice(1)) {
-    const email = (r[col] ?? "").trim().toLowerCase();
-    if (email) counts.set(email, (counts.get(email) ?? 0) + 1);
+    const cell = r[col] ?? "";
+    if (isEmptyCell(cell)) continue;
+    const email = cell.trim().toLowerCase();
+    counts.set(email, (counts.get(email) ?? 0) + 1);
   }
   return [...counts].filter(([, n]) => n > 1).map(([email, count]) => ({ email, count }));
 }
@@ -72,7 +82,16 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const rows = useMemo(() => (csv ? previewRows(csv) : []), [csv]);
-  const dupes = useMemo(() => (csv ? duplicateEmails(previewRows(csv, Infinity)) : []), [csv]);
+  const analysis = useMemo(() => {
+    if (!csv) return null;
+    const all = previewRows(csv, Infinity);
+    const columns = detectColumns(all[0] ?? [], all.slice(1, 201));
+    const emailCol = columns.indexOf("email");
+    const noEmail = emailCol < 0 ? 0 : all.slice(1).filter((r) => isEmptyCell(r[emailCol] ?? "")).length;
+    return { columns, emailCol, noEmail, dupes: duplicateEmails(all, emailCol) };
+  }, [csv]);
+  const dupes = analysis?.dupes ?? [];
+  const missingEmailColumn = !!analysis && rows.length > 1 && analysis.emailCol < 0;
   const extraRows = dupes.reduce((n, d) => n + d.count - 1, 0);
   const totalLines = useMemo(() => Math.max(0, csv.split(/\r?\n/).filter((l) => l.trim()).length - 1), [csv]);
 
@@ -96,11 +115,12 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
       setResult(res);
       onImported(res);
       const dup = res.duplicates ?? 0;
+      const noMail = res.skipped_no_email ?? 0;
       toast.success(
         t("Import terminé", "Import complete"),
         t(
-          `${res.created} créés, ${res.updated} mis à jour${dup ? `, ${dup} doublon${dup > 1 ? "s" : ""} ignoré${dup > 1 ? "s" : ""}` : ""}`,
-          `${res.created} created, ${res.updated} updated${dup ? `, ${dup} duplicate${dup > 1 ? "s" : ""} skipped` : ""}`,
+          `${res.created} créés, ${res.updated} mis à jour${dup ? `, ${dup} doublon${dup > 1 ? "s" : ""} ignoré${dup > 1 ? "s" : ""}` : ""}${noMail ? `, ${noMail} sans email écartée${noMail > 1 ? "s" : ""}` : ""}`,
+          `${res.created} created, ${res.updated} updated${dup ? `, ${dup} duplicate${dup > 1 ? "s" : ""} skipped` : ""}${noMail ? `, ${noMail} without email set aside` : ""}`,
         ),
       );
     } catch (err) {
@@ -116,7 +136,7 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
       onClose={close}
       size="lg"
       title={t("Importer des contacts", "Import contacts")}
-      description={t("Fichier CSV avec une colonne email (obligatoire) et, au choix : first_name, last_name, phone, tags (séparés par ;), status.", "A CSV file with an email column (required) and, optionally: first_name, last_name, phone, tags (separated by ;), status.")}
+      description={t("Fichier CSV avec une colonne d'adresses email, quel que soit son nom. Prénom, nom, téléphone, tags et statut sont reconnus automatiquement ; les autres colonnes sont gardées comme champs personnalisés. Les lignes sans email sont écartées.", "A CSV file with an email address column, whatever it's called. First name, last name, phone, tags and status are recognised automatically; other columns are kept as custom fields. Rows without an email are set aside.")}
       footer={
         result ? (
           <Button onClick={close}>{t("Fermer", "Close")}</Button>
@@ -125,7 +145,7 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
             <Button variant="secondary" onClick={close}>
               {t("Annuler", "Cancel")}
             </Button>
-            <Button onClick={submit} loading={loading} disabled={!csv.trim()}>
+            <Button onClick={submit} loading={loading} disabled={!csv.trim() || missingEmailColumn}>
               {t("Importer", "Import")} {totalLines > 0 ? t(`${totalLines} ligne${totalLines > 1 ? "s" : ""}`, `${totalLines} row${totalLines === 1 ? "" : "s"}`) : ""}
             </Button>
           </>
@@ -136,11 +156,12 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
         <div className="flex flex-col items-center py-6 text-center">
           <CheckCircle2 className="size-12 text-emerald-500" />
           <p className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">{t("Import terminé", "Import complete")}</p>
-          <div className="mt-4 grid w-full max-w-md grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className={`mt-4 grid w-full grid-cols-2 gap-3 ${result.skipped_no_email ? "max-w-xl sm:grid-cols-5" : "max-w-md sm:grid-cols-4"}`}>
             {[
               { label: t("Créés", "Created"), value: result.created },
               { label: t("Mis à jour", "Updated"), value: result.updated },
               { label: t("Doublons ignorés", "Duplicates skipped"), value: result.duplicates ?? 0 },
+              ...(result.skipped_no_email ? [{ label: t("Sans email, écartés", "No email, set aside"), value: result.skipped_no_email }] : []),
               { label: t("Erreurs", "Errors"), value: errorCount(result.errors) },
             ].map((s) => (
               <div key={s.label} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
@@ -202,6 +223,25 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
             placeholder={EXAMPLE}
             className="font-mono text-xs"
           />
+          {missingEmailColumn && (
+            <div className="flex gap-3 rounded-xl bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-600/20 dark:bg-red-950/40 dark:text-red-300">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <p>
+                {t(
+                  "Aucune colonne de ce fichier ne contient d'adresses email. Un contact a besoin d'un email : ajoutez cette colonne puis réessayez.",
+                  "No column in this file holds email addresses. A contact needs an email: add that column and try again.",
+                )}
+              </p>
+            </div>
+          )}
+          {!!analysis?.noEmail && (
+            <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {t(
+                `${analysis.noEmail} ligne${analysis.noEmail > 1 ? "s" : ""} sans email ${analysis.noEmail > 1 ? "seront écartées" : "sera écartée"}.`,
+                `${analysis.noEmail} row${analysis.noEmail > 1 ? "s" : ""} without an email will be set aside.`,
+              )}
+            </p>
+          )}
           {dupes.length > 0 && (
             <div className="flex gap-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-800 ring-1 ring-amber-600/20 dark:bg-amber-900/20 dark:text-amber-200">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -233,11 +273,17 @@ export function ImportContactsModal({ open, onClose, onImported }: { open: boole
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                   <tr>
-                    {rows[0].map((h, i) => (
-                      <th key={i} className="px-3 py-2 font-medium">
-                        {h}
-                      </th>
-                    ))}
+                    {rows[0].map((h, i) => {
+                      const field = analysis?.columns[i];
+                      return (
+                        <th key={i} className="px-3 py-2 align-bottom font-medium">
+                          <span className="block">{h}</span>
+                          <span className={`block text-[10.5px] font-semibold ${field ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`}>
+                            {field ? `→ ${FIELD_LABEL[field]}` : t("→ champ personnalisé", "→ custom field")}
+                          </span>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

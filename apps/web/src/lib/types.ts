@@ -215,6 +215,8 @@ export interface ImportResult {
   /** Rows skipped because the same email already appears earlier in the file. */
   duplicates?: number;
   duplicate_details?: ImportDuplicate[];
+  /** Rows set aside because they have no email address. */
+  skipped_no_email?: number;
   /** Number of rejected rows (some servers return the detailed list here instead). */
   errors: number | Array<string | ImportErrorDetail>;
   error_details?: ImportErrorDetail[];

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { all, parseJson, run, scalar, transaction, type SQLInputValue } from '../db.js';
 import type { Deps } from '../deps.js';
-import { csvToContacts } from '../lib/csv.js';
+import { csvToContactsWithColumns } from '../lib/csv.js';
 import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString } from '../lib/http.js';
 import { cancelRunsForContact } from '../services/automations.js';
 import { contactVisits } from '../services/webTracking.js';
@@ -208,14 +208,23 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
   app.post('/contacts/import', async (request) => {
     const body = parse(importSchema, request.body);
     const triggers = body.trigger_automations === true;
-    const inputs: { row: number; data: Record<string, unknown> }[] =
-      'csv' in body
-        ? csvToContacts(body.csv).map(({ row, ...data }) => ({ row, data }))
-        : body.contacts.map((data, i) => ({ row: i + 1, data }));
+    let inputs: { row: number; data: Record<string, unknown> }[];
+    if ('csv' in body) {
+      const file = csvToContactsWithColumns(body.csv);
+      if (file.rows.length && !file.hasEmail)
+        throw badRequest(
+          t(
+            `Aucune colonne d'adresses email trouvée dans ce fichier (colonnes : ${file.headers.join(', ')}). Ajoutez une colonne « email ».`,
+            `No email address column found in this file (columns: ${file.headers.join(', ')}). Add an "email" column.`,
+          ),
+        );
+      inputs = file.rows.map(({ row, ...data }) => ({ row, data }));
+    } else inputs = body.contacts.map((data, i) => ({ row: i + 1, data }));
     if (inputs.length > 50_000) throw badRequest(t('Import limité à 50 000 contacts par requête', 'Imports are limited to 50,000 contacts per request'));
 
     let created = 0;
     let updated = 0;
+    let noEmail = 0;
     const errorDetails: { row: number; email: string | null; error: string }[] = [];
     // Same address twice in the file (case and spaces ignored): only the first row is kept, the others are reported.
     const firstRow = new Map<string, number>();
@@ -223,6 +232,11 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
 
     transaction(db, () => {
       for (const { row, data } of inputs) {
+        // No address: nothing to write to, the row is set aside (counted, not an error).
+        if (typeof data.email !== 'string' || data.email.trim() === '' || /^(null|n\/a|none|undefined|-)$/i.test(data.email.trim())) {
+          noEmail++;
+          continue;
+        }
         const parsed = contactInputSchema.safeParse(data);
         if (!parsed.success) {
           errorDetails.push({
@@ -257,6 +271,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       updated,
       duplicates: duplicateDetails.length,
       duplicate_details: duplicateDetails.slice(0, 100),
+      skipped_no_email: noEmail,
       errors: errorDetails.length,
       error_details: errorDetails.slice(0, 100),
     };

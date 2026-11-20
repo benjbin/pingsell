@@ -1,3 +1,5 @@
+import { detectColumns, isEmptyCell, splitFullName, type ContactField } from './csvColumns.js';
+
 /**
  * Minimal RFC 4180 CSV parser (quoted fields, escaped quotes, CRLF) with
  * delimiter auto-detection (`,` `;` or tab — French Excel exports use `;`).
@@ -48,35 +50,6 @@ export function parseCsv(input: string): string[][] {
   return rows.filter((r) => r.some((cell) => cell.trim() !== ''));
 }
 
-const HEADER_ALIASES: Record<string, string> = {
-  email: 'email',
-  'e-mail': 'email',
-  mail: 'email',
-  courriel: 'email',
-  'adresse email': 'email',
-  first_name: 'first_name',
-  firstname: 'first_name',
-  'first name': 'first_name',
-  prenom: 'first_name',
-  prénom: 'first_name',
-  last_name: 'last_name',
-  lastname: 'last_name',
-  'last name': 'last_name',
-  nom: 'last_name',
-  'nom de famille': 'last_name',
-  phone: 'phone',
-  telephone: 'phone',
-  téléphone: 'phone',
-  tel: 'phone',
-  mobile: 'phone',
-  tags: 'tags',
-  tag: 'tags',
-  étiquettes: 'tags',
-  etiquettes: 'tags',
-  status: 'status',
-  statut: 'status',
-};
-
 export interface CsvContactRow {
   row: number;
   email: string;
@@ -90,22 +63,32 @@ export interface CsvContactRow {
 
 /** Maps CSV rows (first row = header) to contact inputs. Unknown columns become attributes. */
 export function csvToContacts(csv: string): CsvContactRow[] {
+  const parsed = csvToContactsWithColumns(csv);
+  return parsed.rows;
+}
+
+/** Same, plus what each column was recognised as (`hasEmail` false = no column holds email addresses). */
+export function csvToContactsWithColumns(csv: string): { headers: string[]; columns: Array<ContactField | null>; hasEmail: boolean; rows: CsvContactRow[] } {
   const rows = parseCsv(csv);
-  if (rows.length < 2) return [];
+  if (rows.length < 2) return { headers: rows[0] ?? [], columns: [], hasEmail: false, rows: [] };
   const headers = rows[0].map((h) => h.trim());
-  const keys = headers.map((h) => HEADER_ALIASES[h.toLowerCase()] ?? null);
-  return rows.slice(1).map((cells, i) => {
+  const keys = detectColumns(headers, rows.slice(1, 201));
+  const out = rows.slice(1).map((cells, i) => {
     const out: CsvContactRow = { row: i + 2, email: '', attributes: {} };
+    let fullName = '';
     cells.forEach((raw, col) => {
       const value = raw.trim();
       const key = keys[col];
-      if (!value) return;
+      if (isEmptyCell(value)) return;
       switch (key) {
         case 'email':
           out.email = value;
           break;
         case 'tags':
           out.tags = value.split(/[|,;]/).map((t) => t.trim()).filter(Boolean);
+          break;
+        case 'full_name':
+          fullName = value;
           break;
         case 'first_name':
         case 'last_name':
@@ -117,6 +100,16 @@ export function csvToContacts(csv: string): CsvContactRow[] {
           if (headers[col]) out.attributes[headers[col]] = value;
       }
     });
+    if (fullName && !out.first_name && !out.last_name) Object.assign(out, splitFullName(fullName));
+    if (out.status) {
+      const s = out.status.toLowerCase();
+      // Unknown statuses ("active", "1"…) are kept as an attribute instead of rejecting the row.
+      if (!(['subscribed', 'unsubscribed', 'bounced', 'complained'] as string[]).includes(s)) {
+        out.attributes.status = out.status;
+        delete out.status;
+      } else out.status = s;
+    }
     return out;
   });
+  return { headers, columns: keys, hasEmail: keys.includes('email'), rows: out };
 }
