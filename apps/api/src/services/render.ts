@@ -4,6 +4,7 @@
  */
 
 import { currentLang, t } from '../i18n.js';
+import { guardDarkEmail, isDarkEmail } from './darkGuard.js';
 
 export interface MergeContact {
   email: string;
@@ -100,16 +101,17 @@ export function hasUnsubscribeTag(html: string): boolean {
   return /\{\{\s*unsubscribe_url\s*\}\}/i.test(html);
 }
 
-export function unsubscribeFooter(senderName: string): string {
+export function unsubscribeFooter(senderName: string, dark = false): string {
+  const [text, link] = dark ? ['#8a8580', '#e7e1d8'] : ['#64748b', '#0E0E0C'];
   return `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
   <tr>
-    <td align="center" style="padding:24px 16px 32px;font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#64748b;">
+    <td align="center" style="padding:24px 16px 32px;font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:${text};">
       ${t(
         `Vous recevez cet email car vous êtes inscrit(e) à la liste de ${escapeHtml(senderName)}.`,
         `You’re receiving this email because you subscribed to ${escapeHtml(senderName)}’s list.`,
       )}<br />
-      <a href="{{unsubscribe_url}}" style="color:#0E0E0C;text-decoration:underline;">${t('Se désinscrire', 'Unsubscribe')}</a>
+      <a href="{{unsubscribe_url}}" style="color:${link};text-decoration:underline;">${t('Se désinscrire', 'Unsubscribe')}</a>
     </td>
   </tr>
 </table>`;
@@ -182,7 +184,9 @@ export function renderEmail(input: RenderInput): RenderedEmail {
   const unsubscribeUrl = `${publicUrl}/u/${messageId}`;
 
   let html = ensureDocument(input.html || '');
-  if (!hasUnsubscribeTag(html)) html = insertBeforeBodyEnd(html, unsubscribeFooter(input.senderName));
+  if (!hasUnsubscribeTag(html)) html = insertBeforeBodyEnd(html, unsubscribeFooter(input.senderName, isDarkEmail(html)));
+  // Before the preheader and the tracking pixel, which need no protection.
+  html = guardDarkEmail(html);
   if (input.preheader) {
     const pre = escapeHtml(applyMergeTags(input.preheader, contact, unsubscribeUrl, 'text'));
     html = insertAfterBodyStart(

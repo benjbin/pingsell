@@ -637,6 +637,7 @@ export function CampaignEditorPage() {
                 className="font-mono text-xs leading-relaxed"
                 aria-label={t("Code HTML de l'email", "Email HTML code")}
               />
+              <GmailImageWarning html={form.html} />
             </div>
           </Card>
         </div>
@@ -747,5 +748,24 @@ export function CampaignEditorPage() {
         </div>
       </ConfirmModal>
     </>
+  );
+}
+
+/** Gmail drops SVG and does not show WebP pictures: say which ones before the email goes out. */
+function GmailImageWarning({ html }: { html: string }) {
+  const svg = (html.match(/<svg[\s>]/gi) ?? []).length + (html.match(/<img\b[^>]*src=["'][^"']*(?:\.svg(?:[?#][^"']*)?|data:image\/svg[^"']*)["']/gi) ?? []).length;
+  const webp = (html.match(/<img\b[^>]*src=["'][^"']*(?:\.webp(?:[?#][^"']*)?|data:image\/webp[^"']*)["']/gi) ?? []).length;
+  if (!svg && !webp) return null;
+  const parts = [
+    svg ? t(`${svg} image${svg > 1 ? "s" : ""} SVG`, `${svg} SVG image${svg > 1 ? "s" : ""}`) : "",
+    webp ? t(`${webp} image${webp > 1 ? "s" : ""} WebP`, `${webp} WebP image${webp > 1 ? "s" : ""}`) : "",
+  ].filter(Boolean);
+  return (
+    <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 ring-1 ring-amber-600/20 dark:bg-amber-900/20 dark:text-amber-200">
+      {t(
+        `Cet email contient ${parts.join(" et ")}. Gmail ne les affiche pas : vos destinataires sur Gmail verront un vide à leur place. Utilisez plutôt des images PNG ou JPG.`,
+        `This email contains ${parts.join(" and ")}. Gmail doesn't show them: your recipients on Gmail will see a gap instead. Use PNG or JPG images instead.`,
+      )}
+    </p>
   );
 }
