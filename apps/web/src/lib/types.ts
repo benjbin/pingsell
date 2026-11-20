@@ -62,6 +62,23 @@ export interface InvitationInfo {
   email_taken: boolean;
 }
 
+/** One person a campaign was sent to, with what happened. */
+export interface CampaignRecipient {
+  id: string;
+  contact_id: string | null;
+  to_email: string;
+  first_name: string | null;
+  last_name: string | null;
+  status: "queued" | "sent" | "failed" | "bounced";
+  error: string | null;
+  sent_at: string | null;
+  opened_at: string | null;
+  clicked_at: string | null;
+  unsubscribed: boolean;
+}
+
+export type RecipientFilter = "all" | "opened" | "clicked" | "not_opened" | "unsubscribed" | "failed" | "queued";
+
 export interface Paginated<T> {
   data: T[];
   total: number;

@@ -13,6 +13,8 @@ import type {
   Campaign,
   CampaignInput,
   CampaignStats,
+  CampaignRecipient,
+  RecipientFilter,
   CampaignStatus,
   Contact,
   ContactDetail,
@@ -281,6 +283,8 @@ export const api = {
     schedule: (id: string, scheduled_at: string) => post<unknown>(`/campaigns/${id}/schedule`, { scheduled_at }),
     unschedule: (id: string) => post<unknown>(`/campaigns/${id}/unschedule`),
     stats: (id: string) => get<CampaignStats>(`/campaigns/${id}/stats`),
+    recipients: (id: string, q: { filter?: RecipientFilter; search?: string; page?: number; limit?: number } = {}) =>
+      get<Paginated<CampaignRecipient>>(`/campaigns/${id}/recipients`, { ...q, filter: q.filter === "all" ? undefined : q.filter }),
   },
 
   automations: {

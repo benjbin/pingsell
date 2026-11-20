@@ -8,6 +8,7 @@ import { formatDateTime, formatNumber, formatPercent } from "../../lib/format";
 import { Badge, Card, CardHeader, EmptyState, ErrorState, PageHeader, Skeleton, StatCard } from "../../components/ui/primitives";
 import { SERIES_COLORS, TimeAreaChart } from "../../components/charts";
 import { EmailPreview } from "../../components/EmailPreview";
+import { CampaignRecipients } from "./CampaignRecipients";
 import { t, LOCALE } from "../../lib/i18n";
 
 const hourFmt = new Intl.DateTimeFormat(LOCALE, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -142,6 +143,8 @@ export function CampaignReportPage() {
           </div>
         </Card>
       </div>
+
+      {c && c.status !== "draft" && c.status !== "scheduled" && <CampaignRecipients campaignId={c.id} stats={s ?? undefined} live={inProgress} />}
 
       {c?.html && (
         <Card className="mt-6">

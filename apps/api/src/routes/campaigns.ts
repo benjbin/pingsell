@@ -276,4 +276,43 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     const campaign = load(request.accountId, request.params.id);
     return campaignStatsDetail(db, campaign.id);
   });
+
+  /** Who the campaign went to, with what happened for each person (sent, opened, clicked, failed, unsubscribed). */
+  app.get<Params>('/campaigns/:id/recipients', async (request) => {
+    const campaign = load(request.accountId, request.params.id);
+    const p = pagination(request.query);
+    const unsub = `EXISTS (SELECT 1 FROM events e WHERE e.account_id = m.account_id AND e.type = 'unsubscribe' AND json_extract(e.data, '$.message_id') = m.id)`;
+    const where = ['m.campaign_id = ?', 'm.account_id = ?'];
+    const params: SQLInputValue[] = [campaign.id, request.accountId];
+    const filter = queryString(request.query, 'filter');
+    if (filter === 'opened') where.push('m.opened_at IS NOT NULL');
+    else if (filter === 'clicked') where.push('m.clicked_at IS NOT NULL');
+    else if (filter === 'not_opened') where.push("m.status = 'sent' AND m.opened_at IS NULL");
+    else if (filter === 'failed') where.push("m.status IN ('failed', 'bounced')");
+    else if (filter === 'unsubscribed') where.push(unsub);
+    else if (filter === 'queued') where.push("m.status = 'queued'");
+    const search = queryString(request.query, 'search');
+    if (search) {
+      const like = `%${search.toLowerCase().replace(/[\\%_]/g, (x) => `\\${x}`)}%`;
+      where.push(`(LOWER(m.to_email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) LIKE ? ESCAPE '\\')`);
+      params.push(like, like);
+    }
+    const whereSql = where.join(' AND ');
+    const total = scalar(db, `SELECT COUNT(*) FROM messages m LEFT JOIN contacts c ON c.id = m.contact_id WHERE ${whereSql}`, ...params);
+    const rows = all<{
+      id: string; contact_id: string | null; to_email: string; first_name: string | null; last_name: string | null;
+      status: string; error: string | null; sent_at: string | null; opened_at: string | null; clicked_at: string | null; unsubscribed: number;
+    }>(
+      db,
+      `SELECT m.id, m.contact_id, m.to_email, c.first_name, c.last_name, m.status, m.error, m.sent_at, m.opened_at, m.clicked_at, ${unsub} AS unsubscribed
+         FROM messages m LEFT JOIN contacts c ON c.id = m.contact_id
+        WHERE ${whereSql}
+        ORDER BY COALESCE(m.clicked_at, m.opened_at, m.sent_at, m.created_at) DESC, m.id
+        LIMIT ? OFFSET ?`,
+      ...params,
+      p.limit,
+      p.offset,
+    );
+    return listResponse(rows.map((r) => ({ ...r, unsubscribed: !!r.unsubscribed })), total, p);
+  });
 }
