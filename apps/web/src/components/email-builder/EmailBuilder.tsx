@@ -5,6 +5,7 @@ import {
   ArrowUp,
   Bold,
   Check,
+  Code2,
   Copy,
   Eye,
   FlaskConical,
@@ -101,6 +102,8 @@ export interface EmailBuilderProps {
   /** Absent : pas de bouton « Tester ». */
   onTest?: () => void;
   onPreview: () => void;
+  /** Absent : pas de bouton « Code HTML » (passer tout l'email en code). */
+  onCodeMode?: () => void;
   /** Libellé du bouton d'enregistrement (ex. « Terminé » quand l'email fait partie d'une automatisation). */
   saveLabel?: string;
 }
@@ -462,6 +465,11 @@ export function EmailBuilder(props: EmailBuilderProps) {
         </div>
 
         <div className="ml-auto flex items-center gap-2 md:ml-0">
+          {props.onCodeMode && !disabled && (
+            <Button variant="ghost" size="sm" icon={Code2} onClick={props.onCodeMode} className="hidden sm:inline-flex" title={t("Écrire ou coller tout l'email en code HTML", "Write or paste the whole email as HTML code")}>
+              {t("Code HTML", "HTML code")}
+            </Button>
+          )}
           <Button variant="secondary" size="sm" icon={Eye} onClick={props.onPreview} className="hidden sm:inline-flex">
             {t("Aperçu", "Preview")}
           </Button>
@@ -742,7 +750,7 @@ export function EmailBuilder(props: EmailBuilderProps) {
 function Envelope(props: EmailBuilderProps & { width: number }) {
   const len = props.subject.length;
   return (
-    <div className="mb-5 overflow-hidden rounded-[20px] bg-white ring-1 ring-slate-900/10 dark:bg-slate-900 dark:ring-white/10">
+    <div className="mb-5 rounded-[20px] bg-white ring-1 ring-slate-900/10 dark:bg-slate-900 dark:ring-white/10">
       <div className="flex items-center gap-3 border-b border-slate-900/[0.07] px-4 py-3 dark:border-white/[0.07]">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-900 font-display text-sm font-extrabold text-white dark:bg-white dark:text-slate-900">
           {(props.fromName || props.brand || "M").slice(0, 1).toUpperCase()}
@@ -782,8 +790,23 @@ function Envelope(props: EmailBuilderProps & { width: number }) {
 
 function MergeTagMenu({ onPick, disabled }: { onPick: (tag: string) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  // Close when clicking anywhere else or pressing Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <button
         type="button"
         disabled={disabled}

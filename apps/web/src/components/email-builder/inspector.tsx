@@ -1037,7 +1037,7 @@ function BlockFields({ block, theme, set }: { block: Block; theme: Theme; set: S
           </Section>
           <Section title={t("Style", "Style")}>
             <AlignField value={block.align} onChange={(align) => set({ align })} />
-            <ColorField label={t("Couleur des badges", "Badge color")} value={block.color} inherit="#000000" onChange={(color) => set({ color })} />
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t("Badges officiels d'Apple et de Google, dans la langue de l'email.", "Official Apple and Google badges, in the email's language.")}</p>
           </Section>
         </>
       );

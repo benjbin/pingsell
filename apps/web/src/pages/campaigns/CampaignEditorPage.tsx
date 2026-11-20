@@ -460,6 +460,10 @@ export function CampaignEditorPage() {
               onSave={() => void persist()}
               onTest={() => setTestOpen(true)}
               onPreview={() => setPreviewOpen(true)}
+              onCodeMode={() => {
+                setEditorOpen(false);
+                switchMode("html");
+              }}
             />
           )}
         </div>

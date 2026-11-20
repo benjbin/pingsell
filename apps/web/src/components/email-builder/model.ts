@@ -1387,12 +1387,16 @@ ${buttonHtml(ctx, block.cta, block.href, false, "cta", { bg: block.accent })}
       );
     }
     case "apps": {
-      const bg = block.color || "#000000";
-      const badge = (url: string, small: string, big: string, icon: string) =>
+      // Official store badges (Apple and Google artwork, unaltered), hosted with the app so every inbox shows them.
+      const base = typeof window !== "undefined" ? window.location.origin : "";
+      const lang = LANG === "fr" ? "fr" : "en";
+      const badge = (url: string, file: string, width: number, alt: string) =>
         url.trim() && url.trim() !== "https://"
-          ? `<td style="padding:4px;"><a href="${safeHref(url)}" target="_blank" style="display:inline-block;background:${bg};border-radius:10px;padding:8px 16px 8px 14px;text-decoration:none;color:#FFFFFF;font-family:Helvetica,Arial,sans-serif;text-align:left;">${icon ? `<span style="font-size:20px;line-height:1;vertical-align:middle;">${icon}</span>&nbsp;` : ""}<span style="display:inline-block;vertical-align:middle;"><span style="display:block;font-size:9px;line-height:1.2;letter-spacing:0.04em;">${small}</span><span style="display:block;font-size:16px;line-height:1.15;font-weight:bold;">${big}</span></span></a></td>`
+          ? `<td style="padding:4px;"><a href="${safeHref(url)}" target="_blank" style="display:inline-block;text-decoration:none;"><img src="${base}/email/badges/${file}-${lang}.png" alt="${alt}" width="${width}" height="40" style="display:block;width:${width}px;height:40px;border:0;"></a></td>`
           : "";
-      const cells = badge(block.iosUrl, t("Télécharger dans", "Download on the"), t("l'App Store", "App Store"), "") + badge(block.androidUrl, t("Disponible sur", "Get it on"), "Google Play", "▶");
+      const cells =
+        badge(block.iosUrl, "app-store", lang === "fr" ? 127 : 120, t("Télécharger dans l'App Store", "Download on the App Store")) +
+        badge(block.androidUrl, "google-play", 135, t("Disponible sur Google Play", "Get it on Google Play"));
       if (!cells) return ctx.canvas ? row(placeholder(ctx, 60, t("Ajoutez les liens de vos applis", "Add your app links")), pad(ctx, block, 12, 12)) : "";
       return row(`<table role="presentation" cellpadding="0" cellspacing="0" border="0"${block.align === "left" ? "" : ` align="${block.align}"`} style="${block.align === "center" ? "margin:0 auto;" : block.align === "right" ? "margin-left:auto;" : ""}"><tr>${cells}</tr></table>`, pad(ctx, block, 16, 16));
     }
