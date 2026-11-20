@@ -61,7 +61,7 @@ function instructions(domain: SendingDomain): string {
 /* -------------------------------------------------------------------------- */
 
 function Steps({ current }: { current: number }) {
-  const labels = [t("Votre domaine", "Your domain"), t("Une ligne chez votre hébergeur", "One record at your provider"), t("Vérification", "Verification"), t("Votre adresse", "Your address")];
+  const labels = [t("Votre adresse pro", "Your work address"), t("Une ligne chez votre hébergeur", "One record at your provider"), t("Vérification", "Verification"), t("C'est prêt", "Done")];
   return (
     <ol className="flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold">
       {labels.map((label, i) => (
@@ -108,20 +108,20 @@ function Faq({ q, children }: { q: string; children: ReactNode }) {
 }
 
 /** Before / after, so the merchant sees what changes for their customers. */
-function Explainer({ brand, fallback, domain }: { brand: string; fallback: string; domain?: string }) {
-  const own = `bonjour@${domain ?? t("votre-boutique.fr", "your-shop.com")}`;
+function Explainer({ brand, fallback, own: typed }: { brand: string; fallback: string; own?: string }) {
+  const own = typed || t("contact@votre-entreprise.fr", "contact@your-company.com");
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-900/5 dark:bg-slate-800/40">
-          <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{t("Sans votre domaine", "Without your domain")}</p>
+          <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{t("Sans adresse pro", "Without a work address")}</p>
           <p className="mt-2 truncate text-sm text-slate-900 dark:text-white">
             <strong>{brand}</strong> <span className="text-slate-500">&lt;{fallback}&gt;</span>
           </p>
           <p className="mt-1 text-xs text-slate-500">{t("Ça marche, mais l'adresse est celle de Pingsell.", "It works, but the address is Pingsell's.")}</p>
         </div>
         <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-600/15 dark:bg-emerald-900/20">
-          <p className="text-xs font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-300">{t("Avec votre domaine", "With your domain")}</p>
+          <p className="text-xs font-semibold tracking-wide text-emerald-700 uppercase dark:text-emerald-300">{t("Avec votre adresse pro", "With your work address")}</p>
           <p className="mt-2 truncate text-sm text-slate-900 dark:text-white">
             <strong>{brand}</strong> <span className="text-slate-500">&lt;{own}&gt;</span>
           </p>
@@ -158,10 +158,10 @@ export function SendingDomainCard({ canManage }: { canManage: boolean }) {
   const fallback = data?.default_from_email ?? "bonjour@pingsell";
 
   useEffect(() => {
-    if (domain?.status !== "verified") return;
+    if (!domain) return;
     const current = domain.from_email;
     setLocalPart(current && current.endsWith(`@${domain.domain}`) ? current.slice(0, -domain.domain.length - 1) : "bonjour");
-  }, [domain?.status, domain?.domain, domain?.from_email]);
+  }, [domain]);
 
   // Open the guide of the provider we detected from the domain's name servers.
   useEffect(() => {
@@ -196,9 +196,12 @@ export function SendingDomainCard({ canManage }: { canManage: boolean }) {
   const saveFrom = (e: FormEvent) => {
     e.preventDefault();
     if (!domain) return;
-    void act("from", () => api.sendingDomain.setFrom(`${localPart.trim()}@${domain.domain}`), () => t("Adresse d'expéditeur enregistrée", "Sender address saved"));
+    void act("from", () => api.sendingDomain.setFrom(`${localPart.trim()}@${domain.domain}`), () =>
+      domain.status === "verified" ? t("Adresse d'expéditeur enregistrée", "Sender address saved") : t("Adresse retenue : elle servira dès que le domaine sera vérifié", "Address saved: it will be used as soon as the domain is verified"),
+    );
   };
 
+  const typedEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(domainInput.trim()) ? domainInput.trim().toLowerCase() : undefined;
   const guide = guideFor(provider);
   const detected = domain ? guideFor(domain.dns_provider) : null;
   const [dkim, dmarc] = domain?.records ?? [];
@@ -206,8 +209,8 @@ export function SendingDomainCard({ canManage }: { canManage: boolean }) {
   return (
     <Card>
       <CardHeader
-        title={t("Domaine d'envoi", "Sending domain")}
-        description={t("Envoyez vos emails depuis l'adresse de votre boutique plutôt que depuis celle de Pingsell. Facultatif · 5 minutes · une seule fois.", "Send your emails from your shop's address instead of Pingsell's. Optional · 5 minutes · one time only.")}
+        title={t("Votre adresse d'envoi", "Your sending address")}
+        description={t("Envoyez vos emails depuis votre adresse pro (contact@votre-entreprise.fr) plutôt que depuis celle de Pingsell. Facultatif · 5 minutes · une seule fois.", "Send your emails from your work address (contact@your-company.com) instead of Pingsell's. Optional · 5 minutes · one time only.")}
         action={
           domain && (
             <Badge tone={domain.status === "verified" ? "green" : "amber"} dot>
@@ -228,18 +231,31 @@ export function SendingDomainCard({ canManage }: { canManage: boolean }) {
       ) : !domain ? (
         /* ------------------------------ Step 1 ------------------------------ */
         <div className="space-y-6 p-6">
-          <Explainer brand={brand} fallback={data.from_email} />
+          <Explainer brand={brand} fallback={data.from_email} own={typedEmail} />
           <div className="space-y-4 border-t border-slate-900/10 pt-6 dark:border-white/10">
             <Steps current={1} />
+            <ol className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-4 dark:text-slate-300">
+              {[
+                t("Tapez votre adresse pro, celle que vos clients connaissent.", "Type your work address, the one your customers know."),
+                t("Pingsell vous donne une ligne à ajouter chez l'entreprise qui gère votre nom de domaine (OVH, IONOS, GoDaddy, Shopify, votre agence…). Vous pouvez aussi la lui envoyer en un clic.", "Pingsell gives you one record to add at the company that manages your domain name (GoDaddy, Namecheap, Shopify, your agency…). You can also send it to them in one click."),
+                t("Vous cliquez sur « Vérifier ». La ligne prend de quelques minutes à quelques heures pour apparaître.", "You click “Verify”. The record takes from a few minutes to a few hours to show up."),
+                t("C'est prêt : vos emails partent de votre adresse, et les réponses arrivent dans votre boîte habituelle.", "Done: your emails go out from your address, and replies land in your usual inbox."),
+              ].map((text, i) => (
+                <li key={i} className="rounded-xl bg-slate-50 p-3 text-[13px] dark:bg-slate-800/40">
+                  <span className="mb-1 block font-display text-xs font-bold text-slate-400">{String(i + 1).padStart(2, "0")}</span>
+                  {text}
+                </li>
+              ))}
+            </ol>
             {canManage ? (
               <form onSubmit={add} className="flex flex-wrap items-end gap-3">
                 <Field
-                  label={t("Quel est le nom de domaine de votre boutique ?", "What is your shop's domain name?")}
+                  label={t("Votre adresse email pro", "Your work email address")}
                   htmlFor="sending-domain"
                   className="min-w-0 flex-1"
-                  hint={t("C'est la fin de l'adresse de votre site ou de votre email pro : pour www.ma-boutique.fr, tapez ma-boutique.fr.", "It's the end of your website or work email address: for www.my-shop.com, type my-shop.com.")}
+                  hint={t("Par exemple contact@votre-entreprise.fr. Vous pouvez aussi taper seulement le nom de domaine (votre-entreprise.fr). Une adresse Gmail, Hotmail, Orange… ne convient pas : il faut une adresse sur votre propre nom de domaine.", "For example contact@your-company.com. You can also type just the domain name (your-company.com). A Gmail, Outlook, Yahoo… address won't work: it has to be on your own domain name.")}
                 >
-                  <Input id="sending-domain" value={domainInput} onChange={(e) => setDomainInput(e.target.value)} placeholder="ma-boutique.fr" autoComplete="off" spellCheck={false} />
+                  <Input id="sending-domain" type="text" inputMode="email" value={domainInput} onChange={(e) => setDomainInput(e.target.value)} placeholder={t("contact@votre-entreprise.fr", "contact@your-company.com")} autoComplete="email" spellCheck={false} />
                 </Field>
                 <Button type="submit" icon={Globe} loading={busy === "add"} disabled={!domainInput.trim()}>
                   {t("Continuer", "Continue")}
@@ -249,7 +265,7 @@ export function SendingDomainCard({ canManage }: { canManage: boolean }) {
               <p className="text-sm text-slate-500 dark:text-slate-400">{t("Le propriétaire ou un administrateur du compte peut s'en occuper.", "The account owner or an admin can set this up.")}</p>
             )}
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t("Pas de domaine ? Aucun problème : vos emails continuent de partir de ", "No domain? No problem: your emails keep going out from ")}
+              {t("Pas d'adresse pro ? Aucun problème : vos emails partent de ", "No work address? No problem: your emails go out from ")}
               <strong className="font-medium">{data.from_email}</strong>
               {t(" avec le nom de votre boutique, et les réponses de vos clients vous arrivent quand même.", " with your shop's name, and your customers' replies still reach you.")}
             </p>
@@ -376,6 +392,25 @@ export function SendingDomainCard({ canManage }: { canManage: boolean }) {
             </div>
           </section>
 
+          {canManage && (
+            <form onSubmit={saveFrom} className="flex flex-wrap items-end gap-3 rounded-xl p-4 ring-1 ring-slate-900/10 dark:ring-white/10">
+              <Field
+                label={t("Adresse d'expéditeur, une fois vérifié", "Sender address, once verified")}
+                htmlFor="from-local-pending"
+                className="min-w-0 flex-1"
+                hint={t(`En attendant la vérification, vos emails partent de ${fallback}.`, `Until it's verified, your emails go out from ${fallback}.`)}
+              >
+                <div className="flex items-center gap-2">
+                  <Input id="from-local-pending" value={localPart} onChange={(e) => setLocalPart(e.target.value.replace(/[\s@]/g, ""))} className="max-w-48" />
+                  <span className="truncate text-sm text-slate-600 dark:text-slate-300">@{domain.domain}</span>
+                </div>
+              </Field>
+              <Button type="submit" variant="secondary" size="sm" loading={busy === "from"} disabled={!localPart.trim() || `${localPart.trim()}@${domain.domain}` === domain.from_email}>
+                {t("Enregistrer", "Save")}
+              </Button>
+            </form>
+          )}
+
           <section className="space-y-3 border-t border-slate-900/10 pt-6 dark:border-white/10">
             <Steps current={3} />
             <p className="text-sm text-slate-600 dark:text-slate-300">
@@ -482,12 +517,13 @@ export function SendingDomainCard({ canManage }: { canManage: boolean }) {
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {domain.last_checked_at ? t(`Dernière vérification ${formatRelative(domain.last_checked_at)}`, `Last checked ${formatRelative(domain.last_checked_at)}`) : ""}
+              {domain.last_checked_at ? t(`Dernière vérification ${formatRelative(domain.last_checked_at)}. `, `Last checked ${formatRelative(domain.last_checked_at)}. `) : ""}
+              {t(`Une autre adresse sur ${domain.domain} ? Changez-la ci-dessus. Un autre nom de domaine ? Utilisez « Changer de domaine ».`, `Another address on ${domain.domain}? Change it above. Another domain name? Use “Change domain”.`)}
             </p>
             {canManage && (
               <div className="flex gap-2">
                 <Button variant="ghost" size="sm" icon={Trash2} onClick={() => setConfirmDelete(true)}>
-                  {t("Retirer", "Remove")}
+                  {t("Changer de domaine", "Change domain")}
                 </Button>
                 <Button size="sm" variant="secondary" icon={RefreshCw} loading={busy === "verify"} onClick={verify}>
                   {t("Revérifier", "Check again")}
@@ -510,10 +546,10 @@ export function SendingDomainCard({ canManage }: { canManage: boolean }) {
         }
         loading={busy === "delete"}
         danger
-        title={t("Retirer ce domaine ?", "Remove this domain?")}
+        title={t(`Retirer ${domain?.domain ?? "ce domaine"}$ ?`, `Remove ${domain?.domain ?? "this domain"}?`)}
         description={t(
-          `Vos emails repartiront de ${fallback}. Pour réutiliser ce domaine plus tard, il faudra publier une nouvelle ligne DKIM : vous pourrez supprimer l'ancienne chez votre hébergeur.`,
-          `Your emails will go out from ${fallback} again. To use this domain later you'll need to publish a new DKIM record: you can delete the old one at your provider.`,
+          `Vous pourrez ensuite taper votre nouvelle adresse pro. D'ici là, vos emails repartent de ${fallback}. La ligne DKIM de ${domain?.domain ?? "ce domaine"} ne servira plus : vous pourrez la supprimer chez votre hébergeur.`,
+          `You can then type your new work address. Until then, your emails go out from ${fallback}. The DKIM record of ${domain?.domain ?? "this domain"} won't be used any more: you can delete it at your provider.`,
         )}
         confirmLabel={t("Retirer", "Remove")}
       />

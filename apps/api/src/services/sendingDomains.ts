@@ -137,10 +137,17 @@ export async function verifySendingDomain(db: DatabaseSync, row: SendingDomainRo
      WHERE id = ?`,
     verified ? 'verified' : 'pending', dmarc, error, timestamp, verified ? 1 : 0, timestamp, row.id,
   );
-  if (!verified) run(db, 'UPDATE accounts SET from_email = NULL WHERE id = ?', row.account_id);
-  // First success: start sending from bonjour@<domain> right away (the merchant can change it).
-  else run(db, 'UPDATE accounts SET from_email = ? WHERE id = ? AND from_email IS NULL', `bonjour@${row.domain}`, row.account_id);
+  // On failure the chosen address is kept (it is only used once the domain is verified, see accountFromEmail).
+  // First success with no address chosen: start sending from bonjour@<domain> right away (the merchant can change it).
+  if (verified) run(db, 'UPDATE accounts SET from_email = ? WHERE id = ? AND from_email IS NULL', `bonjour@${row.domain}`, row.account_id);
   return getSendingDomain(db, row.account_id)!;
+}
+
+/** True when `email` is on this domain (or one of its subdomains), verified or not. */
+export function onDomain(row: SendingDomainRow | undefined, email: string): boolean {
+  if (!row) return false;
+  const d = domainOf(email);
+  return d === row.domain || d.endsWith(`.${row.domain}`);
 }
 
 /** True when `email` is on the account's verified domain (or one of its subdomains). */

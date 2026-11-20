@@ -13,7 +13,7 @@ import {
   isFreemail,
   normalizeDomain,
   refreshDmarc,
-  onVerifiedDomain,
+  onDomain,
   serializeSendingDomain,
   verifySendingDomain,
 } from '../services/sendingDomains.js';
@@ -52,13 +52,18 @@ export async function sendingDomainRoutes(app: FastifyInstance, { db, config }: 
     if (!domain) throw badRequest(t('Nom de domaine invalide, ex. : ma-boutique.fr', 'Invalid domain name, e.g. my-shop.com'));
     if (isFreemail(domain)) {
       throw badRequest(t(
-        `Impossible d’envoyer au nom de ${domain} : il faut un domaine qui vous appartient, comme celui de votre boutique.`,
-        `You can't send on behalf of ${domain}: use a domain you own, such as your shop's.`,
+        `Une adresse ${domain} ne peut pas servir d’expéditeur : il faut une adresse sur votre propre nom de domaine, comme contact@votre-entreprise.fr. Sans adresse pro, vos emails partent de ${config.defaultFromEmail} avec votre nom, et les réponses vous arrivent quand même.`,
+        `A ${domain} address can't be used as the sender: you need an address on your own domain, such as contact@your-company.com. Without one, your emails go out from ${config.defaultFromEmail} with your name, and replies still reach you.`,
       ));
     }
     const ours = config.smtp.mailDomain;
     if (ours && (domain === ours || domain.endsWith(`.${ours}`))) throw badRequest(t('Ce domaine est déjà celui de Pingsell', 'This is already Pingsell’s domain'));
     await refreshDmarc(db, createSendingDomain(db, request.accountId, domain));
+    // « contact@shop.com » typed instead of « shop.com »: that address becomes the sender as soon as the domain is verified.
+    const wanted = input.trim().toLowerCase();
+    if (z.email().safeParse(wanted).success && onDomain(getSendingDomain(db, request.accountId), wanted)) {
+      run(db, 'UPDATE accounts SET from_email = ? WHERE id = ?', wanted, request.accountId);
+    }
     const created = current(request.accountId)!;
     return reply.code(201).send({ domain: { ...created, dns_provider: await detectDnsProvider(domain) }, from_email: accountFromEmail(db, config, request.accountId) });
   });
@@ -80,8 +85,9 @@ export async function sendingDomainRoutes(app: FastifyInstance, { db, config }: 
     requireManager(request);
     const { from_email } = parse(fromSchema, request.body);
     const email = from_email?.trim().toLowerCase() ?? null;
-    if (email && !onVerifiedDomain(getSendingDomain(db, request.accountId), email)) {
-      throw badRequest(t('L’adresse doit être sur votre domaine vérifié', 'The address must be on your verified domain'));
+    // Allowed while the domain is still pending: it is only used once the domain is verified.
+    if (email && !onDomain(getSendingDomain(db, request.accountId), email)) {
+      throw badRequest(t('L’adresse doit être sur votre domaine d’envoi', 'The address must be on your sending domain'));
     }
     run(db, 'UPDATE accounts SET from_email = ? WHERE id = ?', email, request.accountId);
     return { domain: current(request.accountId), from_email: accountFromEmail(db, config, request.accountId) };

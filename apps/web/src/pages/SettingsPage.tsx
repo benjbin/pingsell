@@ -64,7 +64,7 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title={t("Paramètres", "Settings")} description={t("Votre compte, votre domaine d'envoi et vos clés API. Votre profil et l'équipe sont dans « Profil & équipe ».", "Your account, sending domain and API keys. Your profile and team live under “Profile & team”.")} />
+      <PageHeader title={t("Paramètres", "Settings")} description={t("Votre compte, votre adresse d'envoi pro et vos clés API. Votre profil et l'équipe sont dans « Profil & équipe ».", "Your account, work sending address and API keys. Your profile and team live under “Profile & team”.")} />
 
       <div className="space-y-6">
         <Card>
