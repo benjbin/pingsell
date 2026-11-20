@@ -164,6 +164,17 @@ export function dkimKeyFor(db: DatabaseSync, accountId: string, fromEmail: strin
   return { domainName: row!.domain, keySelector: row!.selector, privateKey: row!.private_key };
 }
 
+/** True when the account may send from `email`: our shared address, or an address on its verified domain. */
+export function senderAllowed(db: DatabaseSync, config: AppConfig, accountId: string, email: string): boolean {
+  const e = email.trim().toLowerCase();
+  return e === config.defaultFromEmail.toLowerCase() || onVerifiedDomain(getSendingDomain(db, accountId), e);
+}
+
+/** The address a campaign really goes out from: its own if still allowed, else the account's default. */
+export function effectiveFrom(db: DatabaseSync, config: AppConfig, accountId: string, email: string | null | undefined): string {
+  return email && senderAllowed(db, config, accountId, email) ? email : accountFromEmail(db, config, accountId);
+}
+
 /** The account's default sender address: its own (verified) address, else ours. */
 export function accountFromEmail(db: DatabaseSync, config: AppConfig, accountId: string): string {
   const own = get<{ from_email: string | null }>(db, 'SELECT from_email FROM accounts WHERE id = ?', accountId)?.from_email;

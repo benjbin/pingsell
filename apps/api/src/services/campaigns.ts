@@ -33,12 +33,24 @@ export function serializeCampaign(row: Row) {
     html: (row.html as string | null) ?? null,
     design: (row.design as string | null) ?? null,
     segment_id: (row.segment_id as string | null) ?? null,
+    contact_ids: parseIds(row.contact_ids),
     status: row.status as CampaignStatus,
     scheduled_at: (row.scheduled_at as string | null) ?? null,
     sent_at: (row.sent_at as string | null) ?? null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
+}
+
+function parseIds(v: unknown): string[] | null {
+  if (typeof v !== 'string' || !v) return null;
+  try {
+    const ids = JSON.parse(v);
+    // [] is kept: "chosen contacts" with nobody chosen must reach nobody, never fall back to everyone.
+    return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : null;
+  } catch {
+    return null;
+  }
 }
 
 export const rate = (num: number, den: number): number => (den > 0 ? Math.round((num / den) * 10000) / 10000 : 0);
@@ -139,8 +151,13 @@ export function campaignStatsDetail(db: DatabaseSync, campaignId: string): Campa
   return { ...summary, failed, unsubscribed, timeline };
 }
 
-/** SQL filter selecting the audience of a campaign (segment rules, or everyone) — always subscribed only. */
-export function audienceFilter(db: DatabaseSync, accountId: string, segmentId: string | null): CompiledRules | undefined {
+/**
+ * SQL filter selecting the audience of a campaign (chosen contacts, segment rules, or everyone) — always subscribed only:
+ * an unsubscribed contact never gets a campaign, even when picked by hand.
+ */
+export function audienceFilter(db: DatabaseSync, accountId: string, segmentId: string | null, contactIds?: string[] | null): CompiledRules | undefined {
+  if (contactIds && !contactIds.length) return { sql: '0', params: [] };
+  if (contactIds?.length) return { sql: `id IN (${contactIds.map(() => '?').join(',')}) AND status = 'subscribed'`, params: contactIds };
   if (!segmentId) return { sql: "status = 'subscribed'", params: [] };
   const rules = loadSegmentRules(db, accountId, segmentId);
   if (!rules) return undefined;
@@ -148,8 +165,8 @@ export function audienceFilter(db: DatabaseSync, accountId: string, segmentId: s
   return { sql: `${compiled.sql} AND status = 'subscribed'`, params: compiled.params };
 }
 
-export function audienceCount(db: DatabaseSync, accountId: string, segmentId: string | null): number {
-  const filter = audienceFilter(db, accountId, segmentId);
+export function audienceCount(db: DatabaseSync, accountId: string, segmentId: string | null, contactIds?: string[] | null): number {
+  const filter = audienceFilter(db, accountId, segmentId, contactIds);
   if (!filter) return 0;
   return scalar(db, `SELECT COUNT(*) FROM contacts WHERE account_id = ? AND ${filter.sql}`, accountId, ...filter.params);
 }
@@ -165,7 +182,7 @@ export function queueCampaign(db: DatabaseSync, config: AppConfig, campaignId: s
     const campaign = serializeCampaign(row);
     if (scalar(db, 'SELECT COUNT(*) FROM messages WHERE campaign_id = ?', campaignId) > 0) return 0;
 
-    const filter = audienceFilter(db, campaign.account_id, campaign.segment_id);
+    const filter = audienceFilter(db, campaign.account_id, campaign.segment_id, campaign.contact_ids);
     const recipients = filter
       ? all<{ id: string; email: string; first_name: string | null; last_name: string | null }>(
           db,

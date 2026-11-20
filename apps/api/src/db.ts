@@ -630,6 +630,8 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   );
   CREATE INDEX idx_connect_codes_expires ON connect_codes(expires_at);
   `,
+  // Campagne envoyée à des contacts choisis un par un (tableau JSON d'ids) au lieu de tous ou d'un segment.
+  `ALTER TABLE campaigns ADD COLUMN contact_ids TEXT;`,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

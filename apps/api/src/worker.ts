@@ -8,6 +8,7 @@ import { processTracking } from './services/webTracking.js';
 import { finalizePushCampaigns, queuePushCampaigns, sendPushBatch } from './services/push.js';
 import { processPushResends } from './services/pushGrowth.js';
 import { accountSender, markFailed, markSent } from './services/messages.js';
+import { effectiveFrom } from './services/sendingDomains.js';
 import { platformAdminAccountIds } from './services/platformAdmin.js';
 import { htmlToText } from './services/render.js';
 import type { EmailProvider } from './services/mailer.js';
@@ -215,7 +216,8 @@ export class SendingWorker {
         'SELECT from_name, from_email FROM campaigns WHERE id = ?',
         campaignId,
       );
-      sender = { name: c?.from_name || fallback.name, email: c?.from_email || fallback.email };
+      // An address that is no longer allowed (domain removed, old draft) falls back to the account's default.
+      sender = { name: c?.from_name || fallback.name, email: effectiveFrom(this.db, this.config, accountId, c?.from_email) };
     }
     cache.set(key, sender);
     return sender;

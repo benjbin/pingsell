@@ -6,13 +6,14 @@ import { useAuth } from "../../lib/auth";
 import { useAsync } from "../../lib/useAsync";
 import { CAMPAIGN_STATUS } from "../../lib/constants";
 import { formatDateTime, formatNumber, toDateTimeLocal } from "../../lib/format";
-import type { Campaign, CampaignInput } from "../../lib/types";
+import type { Campaign, CampaignInput, SendingDomainResponse } from "../../lib/types";
 import { Badge, Button, Card, CardHeader, ErrorState, Field, Input, PageHeader, Segmented, Select, Skeleton, Textarea } from "../../components/ui/primitives";
 import { ConfirmModal, Modal } from "../../components/ui/Overlay";
 import { useToast } from "../../components/ui/Toast";
 import { AiGeneratePanel } from "../../components/AiGeneratePanel";
 import { EmailPreview, renderMergeTags } from "../../components/EmailPreview";
 import { EmailBuilder } from "../../components/email-builder/EmailBuilder";
+import { ContactPicker } from "./ContactPicker";
 import { t } from "../../lib/i18n";
 import { PRESETS, applyBrandKit, parseBrandKit, parseDesign, renderEmail, serializeDesign, type Design, type Preset } from "../../components/email-builder/model";
 
@@ -25,6 +26,8 @@ interface FormState {
   html: string;
   design: string;
   segment_id: string;
+  audience: "all" | "segment" | "contacts";
+  contact_ids: string[];
 }
 
 function toForm(c: Campaign): FormState {
@@ -37,6 +40,8 @@ function toForm(c: Campaign): FormState {
     html: c.html ?? "",
     design: c.design ?? "",
     segment_id: c.segment_id ?? "",
+    audience: c.contact_ids ? "contacts" : c.segment_id ? "segment" : "all",
+    contact_ids: c.contact_ids ?? [],
   };
 }
 
@@ -46,11 +51,89 @@ function toInput(f: FormState, html: string): CampaignInput {
     subject: f.subject.trim(),
     preheader: f.preheader.trim() || undefined,
     from_name: f.from_name.trim() || undefined,
-    from_email: f.from_email.trim() || undefined,
+    // Empty = the account's default address (null clears an older choice).
+    from_email: f.from_email.trim() || null,
     html,
     design: f.design || null,
-    segment_id: f.segment_id || null,
+    segment_id: f.audience === "segment" ? f.segment_id || null : null,
+    contact_ids: f.audience === "contacts" ? f.contact_ids : null,
   };
+}
+
+/** Sender address: only the addresses the account may send from (its verified address, other ones on that domain, Pingsell's). */
+function SenderSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [data, setData] = useState<SendingDomainResponse | null>(null);
+  useEffect(() => {
+    api.sendingDomain.get().then(setData, () => undefined);
+  }, []);
+  const [custom, setCustom] = useState(false);
+  if (!data) return <Select id="cp-from-email" disabled><option>{t("Chargement…", "Loading…")}</option></Select>;
+
+  const verified = data.domain?.status === "verified" ? data.domain.domain : null;
+  const shared = data.default_from_email ?? "";
+  const current = value.trim().toLowerCase();
+  const onDomain = !!verified && (current.endsWith(`@${verified}`) || current.endsWith(`.${verified}`));
+  const allowed = !current || current === shared.toLowerCase() || onDomain;
+  const extras = [shared].filter((e) => e && e !== data.from_email);
+  const isCustom = custom || (onDomain && current !== data.from_email);
+  const selectValue = !allowed ? "" : isCustom ? "__custom" : current === data.from_email ? "" : current;
+  const localPart = onDomain ? current.slice(0, current.lastIndexOf("@")) : "";
+
+  return (
+    <div className="space-y-2">
+      <Select
+        id="cp-from-email"
+        value={selectValue}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__custom") {
+            setCustom(true);
+            onChange("");
+          } else {
+            setCustom(false);
+            onChange(v);
+          }
+        }}
+      >
+        <option value="">{data.from_email}{t(" (par défaut)", " (default)")}</option>
+        {extras.map((e) => (
+          <option key={e} value={e}>
+            {e}{t(" (adresse Pingsell)", " (Pingsell address)")}
+          </option>
+        ))}
+        {verified && <option value="__custom">{t(`Une autre adresse @${verified}…`, `Another @${verified} address…`)}</option>}
+      </Select>
+      {isCustom && verified && (
+        <div className="flex items-center gap-2">
+          <Input
+            aria-label={t("Début de l'adresse", "Address name")}
+            value={localPart}
+            onChange={(e) => {
+              const l = e.target.value.replace(/[\s@]/g, "");
+              onChange(l ? `${l}@${verified}` : "");
+            }}
+            placeholder="contact"
+            className="max-w-40"
+          />
+          <span className="truncate text-sm text-slate-600 dark:text-slate-300">@{verified}</span>
+        </div>
+      )}
+      {!allowed && (
+        <p className="text-xs text-amber-700 dark:text-amber-300">
+          {t(`${value} n'est pas une adresse autorisée : la campagne partira de ${data.from_email}.`, `${value} isn't an allowed address: the campaign will go out from ${data.from_email}.`)}
+        </p>
+      )}
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {verified
+          ? t("Vos adresses se gèrent dans ", "Manage your addresses in ")
+          : t("Pour envoyer depuis votre adresse pro, ajoutez-la dans ", "To send from your work address, add it in ")}
+        <Link to="/parametres" className="font-medium text-brand-600 hover:underline dark:text-brand-400">
+          {t("Paramètres", "Settings")}
+        </Link>
+        .
+      </p>
+    </div>
+  );
 }
 
 /** Derive a readable internal name from a subject, dropping merge tags. */
@@ -78,6 +161,8 @@ export function CampaignEditorPage() {
     html: "",
     design: serializeDesign(PRESETS[0].build(account?.name ?? t("Votre marque", "Your brand"))),
     segment_id: "",
+    audience: "all",
+    contact_ids: [],
   }));
   const [mode, setMode] = useState<"visual" | "html">("visual");
   const [toVisualOpen, setToVisualOpen] = useState(false);
@@ -220,11 +305,34 @@ export function CampaignEditorPage() {
     }
   }
 
+  /** Never fall back to everyone because the segment or the contacts were left empty. */
+  function audienceReady(): boolean {
+    if (form.audience === "segment" && !form.segment_id) {
+      toast.error(t("Choisissez un segment avant d'envoyer.", "Choose a segment before sending."));
+      return false;
+    }
+    if (form.audience === "contacts" && !form.contact_ids.length) {
+      toast.error(t("Ajoutez au moins un contact avant d'envoyer.", "Add at least one contact before sending."));
+      return false;
+    }
+    return true;
+  }
+
   async function openSendConfirm() {
+    if (!audienceReady()) return;
     setRecipients(null);
     setSendOpen(true);
     try {
-      const res = await api.contacts.list({ status: "subscribed", segment_id: form.segment_id || undefined, limit: 1 });
+      if (form.audience === "contacts") {
+        let total = 0;
+        for (let i = 0; i < form.contact_ids.length; i += 200) {
+          const res = await api.contacts.list({ status: "subscribed", ids: form.contact_ids.slice(i, i + 200).join(","), limit: 1 });
+          total += res.total;
+        }
+        setRecipients(total);
+        return;
+      }
+      const res = await api.contacts.list({ status: "subscribed", segment_id: form.audience === "segment" ? form.segment_id || undefined : undefined, limit: 1 });
       setRecipients(res.total);
     } catch {
       setRecipients(selectedSegment?.count ?? null);
@@ -248,6 +356,7 @@ export function CampaignEditorPage() {
   }
 
   async function schedule() {
+    if (!audienceReady()) return;
     const date = new Date(scheduleAt);
     if (Number.isNaN(date.getTime()) || date.getTime() < Date.now()) {
       toast.error(t("Choisissez une date dans le futur", "Pick a date in the future"));
@@ -311,31 +420,44 @@ export function CampaignEditorPage() {
           <Input id="cp-from-name" value={form.from_name} onChange={(e) => set("from_name")(e.target.value)} />
         </Field>
         <Field label={t("Email de l'expéditeur", "Sender email")} htmlFor="cp-from-email">
-          <Input id="cp-from-email" type="email" value={form.from_email} onChange={(e) => set("from_email")(e.target.value)} placeholder={t("bonjour@maboutique.fr", "hello@mystore.com")} />
+          <SenderSelect value={form.from_email} onChange={set("from_email")} />
         </Field>
-        <Field
-          label={t("Destinataires", "Recipients")}
-          htmlFor="cp-segment"
-          className="sm:col-span-2"
-          hint={
-            <span className="inline-flex items-center gap-1">
-              <Users className="size-3.5" />
-              {selectedSegment
-                ? t(`${formatNumber(selectedSegment.count)} contacts dans ce segment (seuls les abonnés recevront l'email)`, `${formatNumber(selectedSegment.count)} ${selectedSegment.count === 1 ? "contact" : "contacts"} in this segment (only subscribers will receive the email)`)
-                : t("Tous les contacts abonnés", "All subscribed contacts")}
-            </span>
-          }
-        >
-          <Select id="cp-segment" value={form.segment_id} onChange={(e) => set("segment_id")(e.target.value)}>
-            <option value="">{t("Tous les abonnés", "All subscribers")}</option>
-            {(segments.data ?? []).map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-                {s.count != null ? ` (${s.count})` : ""}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <div className="space-y-3 pt-2 sm:col-span-2">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{t("Destinataires", "Recipients")}</p>
+          <div>
+            <Segmented
+              value={form.audience}
+              onChange={(v) => set("audience")(v)}
+              options={[
+                { value: "all", label: t("Tous mes contacts", "All my contacts") },
+                { value: "segment", label: t("Un segment", "A segment") },
+                { value: "contacts", label: t("Contacts choisis", "Chosen contacts") },
+              ]}
+            />
+          </div>
+          {form.audience === "segment" && (
+            <Select id="cp-segment" aria-label={t("Segment", "Segment")} value={form.segment_id} onChange={(e) => set("segment_id")(e.target.value)}>
+              <option value="">{t("Choisissez un segment…", "Choose a segment…")}</option>
+              {(segments.data ?? []).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                  {s.count != null ? ` (${s.count})` : ""}
+                </option>
+              ))}
+            </Select>
+          )}
+          {form.audience === "contacts" && <ContactPicker ids={form.contact_ids} onChange={set("contact_ids")} disabled={!editable} />}
+          {form.audience !== "contacts" && (
+            <p className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <Users className="size-3.5 shrink-0" />
+              {form.audience === "segment"
+                ? selectedSegment
+                  ? t(`${formatNumber(selectedSegment.count)} contacts dans ce segment (seuls les abonnés recevront l'email)`, `${formatNumber(selectedSegment.count)} ${selectedSegment.count === 1 ? "contact" : "contacts"} in this segment (only subscribers will receive the email)`)
+                  : t("Choisissez le segment à qui envoyer.", "Choose the segment to send to.")
+                : t("Tous vos contacts abonnés recevront l'email.", "All your subscribed contacts will receive the email.")}
+            </p>
+          )}
+        </div>
       </fieldset>
     </Card>
   );
@@ -614,7 +736,7 @@ export function CampaignEditorPage() {
                 <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums dark:text-white">{formatNumber(recipients)}</p>
               )}
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                {t("destinataires abonnés", recipients === 1 ? "subscribed recipient" : "subscribed recipients")} · {selectedSegment ? t(`segment « ${selectedSegment.name} »`, `segment “${selectedSegment.name}”`) : t("tous les abonnés", "all subscribers")}
+                {t("destinataires abonnés", recipients === 1 ? "subscribed recipient" : "subscribed recipients")} · {form.audience === "contacts" ? t("contacts choisis", "chosen contacts") : form.audience === "segment" && selectedSegment ? t(`segment « ${selectedSegment.name} »`, `segment “${selectedSegment.name}”`) : t("tous les abonnés", "all subscribers")}
               </p>
             </div>
           </div>

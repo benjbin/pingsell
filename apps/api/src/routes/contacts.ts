@@ -60,6 +60,15 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       );
       params.push(like, like, like, like);
     }
+    // `ids=a,b,c`: fetch given contacts (e.g. those picked for a campaign).
+    const ids = queryString(request.query, 'ids');
+    if (ids) {
+      const list = [...new Set(ids.split(',').map((s) => s.trim()).filter(Boolean))].slice(0, 200);
+      if (list.length) {
+        where.push(`id IN (${list.map(() => '?').join(',')})`);
+        params.push(...list);
+      }
+    }
     const tag = queryString(request.query, 'tag');
     if (tag) {
       where.push('EXISTS (SELECT 1 FROM json_each(contacts.tags) WHERE LOWER(json_each.value) = ?)');

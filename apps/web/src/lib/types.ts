@@ -302,6 +302,8 @@ export interface Campaign {
   html: string | null;
   design?: string | null;
   segment_id: string | null;
+  /** Contacts chosen one by one (takes precedence over the segment). */
+  contact_ids?: string[] | null;
   status: CampaignStatus;
   scheduled_at: string | null;
   sent_at: string | null;
@@ -315,10 +317,11 @@ export interface CampaignInput {
   subject: string;
   preheader?: string;
   from_name?: string;
-  from_email?: string;
+  from_email?: string | null;
   html?: string;
   design?: string | null;
   segment_id?: string | null;
+  contact_ids?: string[] | null;
 }
 
 export interface CampaignStats {

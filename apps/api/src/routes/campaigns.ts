@@ -13,6 +13,7 @@ import {
 } from '../services/campaigns.js';
 import { findContactByEmail, isValidEmail, normalizeEmail } from '../services/contacts.js';
 import { accountSender, createMessage, markFailed, markSent } from '../services/messages.js';
+import { effectiveFrom, senderAllowed } from '../services/sendingDomains.js';
 import { t } from '../i18n.js';
 
 const nullableText = (max: number) => z.string().trim().max(max).nullable().optional();
@@ -26,6 +27,8 @@ const createSchema = z.object({
   html: z.string().max(1_000_000).nullable().optional(),
   design: z.string().max(2_000_000).nullable().optional(),
   segment_id: z.string().trim().min(1).nullable().optional(),
+  /** Chosen contacts (takes precedence over the segment). Empty or null = everyone / the segment. */
+  contact_ids: z.array(z.string().trim().min(1).max(64)).max(5000).nullable().optional(),
 });
 const patchSchema = createSchema.partial();
 const testSchema = z.object({ to: z.string().trim().min(1, zmsg('Destinataire requis', 'Recipient is required')) });
@@ -56,7 +59,7 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     if (!campaign.subject.trim()) throw badRequest(t("L'objet de la campagne est requis", 'Campaign subject is required'));
     if (!campaign.html?.trim()) throw badRequest(t('Le contenu HTML de la campagne est requis', 'Campaign HTML content is required'));
     if (campaign.segment_id) assertSegment(campaign.account_id, campaign.segment_id);
-    if (audienceCount(db, campaign.account_id, campaign.segment_id) === 0) {
+    if (audienceCount(db, campaign.account_id, campaign.segment_id, campaign.contact_ids) === 0) {
       throw badRequest(t('Aucun destinataire abonné ne correspond à cette audience', 'No subscribed recipients match this audience'));
     }
   };
@@ -93,26 +96,55 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     );
   });
 
+  /** Keeps only this account's contacts (deduplicated). null = not in "chosen contacts" mode; "[]" = nobody chosen yet. */
+  function idsJson(accountId: string, ids: string[] | null | undefined): string | null {
+    if (!ids) return null;
+    const unique = [...new Set(ids)];
+    if (!unique.length) return '[]';
+    const own = new Set<string>();
+    for (let i = 0; i < unique.length; i += 500) {
+      const chunk = unique.slice(i, i + 500);
+      for (const r of all<{ id: string }>(db, `SELECT id FROM contacts WHERE account_id = ? AND id IN (${chunk.map(() => '?').join(',')})`, accountId, ...chunk)) own.add(r.id);
+    }
+    const kept = unique.filter((id) => own.has(id));
+    return JSON.stringify(kept);
+  }
+
+  /** Only our shared address or one on the account's verified domain: anything else would be spoofing and land in spam. */
+  function assertSender(accountId: string, email: string | null | undefined) {
+    if (email && !senderAllowed(db, config, accountId, email)) {
+      throw badRequest(
+        t(
+          `Vous ne pouvez pas envoyer depuis ${email} : choisissez une adresse de la liste. Pour utiliser votre adresse pro, ajoutez-la dans Paramètres, section « Votre adresse d'envoi ».`,
+          `You can't send from ${email}: pick an address from the list. To use your work address, add it under Settings, “Your sending address”.`,
+        ),
+      );
+    }
+  }
+
   app.post('/campaigns', async (request, reply) => {
     const body = parse(createSchema, request.body);
     assertSegment(request.accountId, body.segment_id);
+    assertSender(request.accountId, body.from_email);
     const sender = accountSender(db, config, request.accountId);
     const id = newId();
     const timestamp = now();
     run(
       db,
-      `INSERT INTO campaigns (id, account_id, name, subject, preheader, from_name, from_email, html, design, segment_id, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
+      `INSERT INTO campaigns (id, account_id, name, subject, preheader, from_name, from_email, html, design, segment_id, contact_ids, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
       id,
       request.accountId,
       body.name,
       body.subject ?? '',
       body.preheader ?? null,
       body.from_name || sender.name,
-      body.from_email || sender.email,
+      // Empty = the account's default address, read at send time (so it follows a newly verified domain).
+      body.from_email || null,
       body.html ?? null,
       body.design ?? null,
       body.segment_id ?? null,
+      idsJson(request.accountId, body.contact_ids),
       timestamp,
       timestamp,
     );
@@ -126,10 +158,12 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     const campaign = load(request.accountId, request.params.id);
     if (campaign.status !== 'draft') throw conflict(t('Seules les campagnes en brouillon sont modifiables', 'Only draft campaigns can be edited'));
     if (body.segment_id !== undefined) assertSegment(request.accountId, body.segment_id);
+    assertSender(request.accountId, body.from_email);
     const updates: Record<string, SQLInputValue> = {};
     for (const key of ['name', 'subject', 'preheader', 'from_name', 'from_email', 'html', 'design', 'segment_id'] as const) {
       if (body[key] !== undefined) updates[key] = key === 'subject' ? (body.subject ?? '') : (body[key] ?? null);
     }
+    if (body.contact_ids !== undefined) updates.contact_ids = idsJson(request.accountId, body.contact_ids);
     const keys = Object.keys(updates);
     if (keys.length) {
       run(
@@ -180,7 +214,7 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
         messageId: id,
         to: email,
         fromName: campaign.from_name || sender.name,
-        fromEmail: campaign.from_email || sender.email,
+        fromEmail: effectiveFrom(db, config, request.accountId, campaign.from_email),
         subject: rendered.subject,
         html: rendered.html,
         text: rendered.text,

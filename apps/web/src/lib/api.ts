@@ -184,6 +184,8 @@ export interface ContactQuery {
   tag?: string;
   status?: string;
   segment_id?: string;
+  /** Comma-separated contact ids. */
+  ids?: string;
   page?: number;
   limit?: number;
 }
