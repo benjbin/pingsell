@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import {
   ArrowDown,
   ArrowLeft,
@@ -61,6 +61,10 @@ import {
   extractPlain,
   isRichPath,
   renderBlock,
+  sectionBoxCss,
+  sectionGroups,
+  sectionOf,
+  type BlockStyle,
   sanitizeRich,
   setPath,
   type Block,
@@ -292,6 +296,21 @@ export function EmailBuilder(props: EmailBuilderProps) {
     setBlocks(
       designRef.current.blocks.map((b) => (b.id === id ? ({ ...b, ...patch } as Block) : b)),
       key,
+    );
+  }
+
+  /** Sets the radius, border or glow on every block of the section `id` belongs to. */
+  function updateSection(id: string, patch: Partial<BlockStyle>) {
+    const blocks = designRef.current.blocks;
+    const members = new Set(sectionOf(blocks, blocks.findIndex((b) => b.id === id)));
+    setBlocks(
+      blocks.map((b, i) => {
+        if (!members.has(i)) return b;
+        const style: Record<string, unknown> = { ...b.style, ...patch };
+        for (const k of Object.keys(style)) if (style[k] === undefined || style[k] === "") delete style[k];
+        return { ...b, style: style as BlockStyle };
+      }),
+      `section:${id}:${Object.keys(patch).join(",")}`,
     );
   }
 
@@ -588,48 +607,61 @@ export function EmailBuilder(props: EmailBuilderProps) {
                     {t("Glissez un bloc ou une image ici, ou choisissez un modèle.", "Drag a block or image here, or pick a template.")}
                   </div>
                 )}
-                {design.blocks.map((block, index) => (
-                  <CanvasBlock
-                    key={block.id}
-                    block={block}
-                    theme={design.theme}
-                    device={device}
-                    selected={block.id === selectedId}
-                    disabled={disabled}
-                    dropBefore={dropIndex === index}
-                    dropAfter={dropIndex === index + 1 && index === design.blocks.length - 1}
-                    onSelect={() => {
-                      setSelectedId(block.id);
-                      setInsertAt(null);
-                    }}
-                    onCommit={(el) => commitField(block.id, el)}
-                    onDragStart={() => {
-                      dragFrom.current = index;
-                    }}
-                    onDragOver={(e) => onDragOverBlock(e, index)}
-                    onDragEnd={() => {
-                      dragFrom.current = null;
-                      setDropIndex(null);
-                    }}
-                    onUp={() => move(index, index - 1)}
-                    onDown={() => move(index, index + 2)}
-                    onDuplicate={() => duplicate(block.id)}
-                    onRemove={() => remove(block.id)}
-                    onInsertBelow={() => setInsertAt(insertAt === index + 1 ? null : index + 1)}
-                    insertMenu={
-                      insertAt === index + 1 ? (
-                        <QuickInsert
-                          onPick={(type) => {
-                            insert(type, index + 1);
-                            setInsertAt(null);
-                          }}
-                        />
-                      ) : null
-                    }
-                    isFirst={index === 0}
-                    isLast={index === design.blocks.length - 1}
-                  />
-                ))}
+                {sectionGroups(design.blocks).map((g) => {
+                  const items = design.blocks.slice(g.start, g.end).map((block, k) => {
+                    const index = g.start + k;
+                    return (
+                      <CanvasBlock
+                        key={block.id}
+                        block={block}
+                        inSection={!!g.style}
+                        theme={design.theme}
+                        device={device}
+                        selected={block.id === selectedId}
+                        disabled={disabled}
+                        dropBefore={dropIndex === index}
+                        dropAfter={dropIndex === index + 1 && index === design.blocks.length - 1}
+                        onSelect={() => {
+                          setSelectedId(block.id);
+                          setInsertAt(null);
+                        }}
+                        onCommit={(el) => commitField(block.id, el)}
+                        onDragStart={() => {
+                          dragFrom.current = index;
+                        }}
+                        onDragOver={(e) => onDragOverBlock(e, index)}
+                        onDragEnd={() => {
+                          dragFrom.current = null;
+                          setDropIndex(null);
+                        }}
+                        onUp={() => move(index, index - 1)}
+                        onDown={() => move(index, index + 2)}
+                        onDuplicate={() => duplicate(block.id)}
+                        onRemove={() => remove(block.id)}
+                        onInsertBelow={() => setInsertAt(insertAt === index + 1 ? null : index + 1)}
+                        insertMenu={
+                          insertAt === index + 1 ? (
+                            <QuickInsert
+                              onPick={(type) => {
+                                insert(type, index + 1);
+                                setInsertAt(null);
+                              }}
+                            />
+                          ) : null
+                        }
+                        isFirst={index === 0}
+                        isLast={index === design.blocks.length - 1}
+                      />
+                    );
+                  });
+                  return g.style ? (
+                    <div key={`s-${design.blocks[g.start].id}`} style={{ padding: `0 ${g.style.inset ?? 0}px` }}>
+                      <div style={cssObject(sectionBoxCss(g.style, design.theme))}>{items}</div>
+                    </div>
+                  ) : (
+                    items
+                  );
+                })}
               </div>
             </div>
             {uploading && (
@@ -671,7 +703,14 @@ export function EmailBuilder(props: EmailBuilderProps) {
           </div>
           <fieldset disabled={disabled} className="min-h-0 flex-1 overflow-y-auto">
             {selected ? (
-              <BlockInspector key={selected.id} block={selected} theme={design.theme} onChange={(patch) => update(selected.id, patch, `${selected.id}:${Object.keys(patch).join(",")}`)} />
+              <BlockInspector
+                key={selected.id}
+                block={selected}
+                theme={design.theme}
+                onChange={(patch) => update(selected.id, patch, `${selected.id}:${Object.keys(patch).join(",")}`)}
+                section={sectionGroups(design.blocks).find((g) => design.blocks.slice(g.start, g.end).some((b) => b.id === selected.id))?.style ?? null}
+                onSectionStyle={(patch) => updateSection(selected.id, patch)}
+              />
             ) : (
               <ThemeInspector
                 theme={design.theme}
@@ -846,7 +885,13 @@ function MergeTagMenu({ onPick, disabled }: { onPick: (tag: string) => void; dis
 
 // --- Canvas block ------------------------------------------------------------------------
 
+/** "border-radius" style entries → React style object. */
+function cssObject(o: Record<string, string | undefined>): CSSProperties {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined).map(([k, v]) => [k.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()), v])) as CSSProperties;
+}
+
 function CanvasBlock(props: {
+  inSection: boolean;
   block: Block;
   theme: Theme;
   device: Device;
@@ -871,7 +916,8 @@ function CanvasBlock(props: {
   const { block, theme, selected, disabled, device } = props;
   const ref = useRef<HTMLDivElement>(null);
   const [richFocus, setRichFocus] = useState(false);
-  const html = useMemo(() => renderBlock(block, theme, { canvas: true, editable: !disabled }), [block, theme, disabled]);
+  const { inSection } = props;
+  const html = useMemo(() => renderBlock(block, theme, { canvas: true, editable: !disabled, inSection }), [block, theme, disabled, inSection]);
   const hidden = (device === "mobile" && block.style?.hideMobile) || (device === "desktop" && block.style?.hideDesktop);
 
   // Delegated listeners for the editable fields rendered inside the block HTML.

@@ -309,7 +309,21 @@ const DEFAULT_PAD: Partial<Record<Block["type"], [number, number]>> = {
 
 type Setter = (patch: Record<string, unknown>) => void;
 
-export function BlockInspector({ block, theme, onChange }: { block: Block; theme: Theme; onChange: (patch: Partial<Block>) => void }) {
+export function BlockInspector({
+  block,
+  theme,
+  onChange,
+  section,
+  onSectionStyle,
+}: {
+  block: Block;
+  theme: Theme;
+  onChange: (patch: Partial<Block>) => void;
+  /** The look of the section this block belongs to (blocks that follow each other with the same background). */
+  section?: BlockStyle | null;
+  /** Changes the radius, border or glow of the whole section. */
+  onSectionStyle?: (patch: Partial<BlockStyle>) => void;
+}) {
   const set: Setter = (patch) => {
     // `undefined` / "" = inherit from the global style.
     const clean: Record<string, unknown> = {};
@@ -321,6 +335,9 @@ export function BlockInspector({ block, theme, onChange }: { block: Block; theme
     for (const k of Object.keys(style)) if (style[k] === undefined || style[k] === "" || style[k] === false) delete style[k];
     onChange({ style: Object.keys(style).length ? (style as BlockStyle) : undefined } as Partial<Block>);
   };
+  // Radius, border and glow belong to the section when the block is part of one.
+  const look: BlockStyle = section ?? block.style ?? {};
+  const setLook = (patch: Partial<BlockStyle>) => (section && onSectionStyle ? onSectionStyle(patch) : setStyle(patch));
   const pads = DEFAULT_PAD[block.type];
   const typo = !NO_BLOCK_TYPO.has(block.type);
   const st = block.style;
@@ -354,9 +371,26 @@ export function BlockInspector({ block, theme, onChange }: { block: Block; theme
       {pads && (
         <Section title={t("Fond & bordure de section", "Section background & border")} defaultOpen={!!(block.style?.bg || block.style?.borderWidth)}>
           <ColorField label={t("Fond", "Background")} value={block.style?.bg} onChange={(bg) => setStyle({ bg })} allowEmpty />
-          <Slider label={t("Arrondi", "Corner radius")} value={block.style?.radius} inherit={0} min={0} max={40} onChange={(radius) => setStyle({ radius })} />
-          <Slider label={t("Bordure", "Border")} value={block.style?.borderWidth} inherit={0} min={0} max={6} onChange={(borderWidth) => setStyle({ borderWidth })} />
-          {!!block.style?.borderWidth && <ColorField label={t("Couleur de bordure", "Border color")} value={block.style?.borderColor} onChange={(borderColor) => setStyle({ borderColor })} allowEmpty />}
+          <Slider label={t("Arrondi", "Corner radius")} value={look.radius} inherit={0} min={0} max={40} onChange={(radius) => setLook({ radius })} />
+          <Slider label={t("Bordure", "Border")} value={look.borderWidth} inherit={0} min={0} max={6} onChange={(borderWidth) => setLook({ borderWidth })} />
+          {!!look.borderWidth && <ColorField label={t("Couleur de bordure", "Border color")} value={look.borderColor} onChange={(borderColor) => setLook({ borderColor })} allowEmpty />}
+          {!!block.style?.bg && (
+            <>
+              <ColorField label={t("Lueur (dégradé)", "Glow (gradient)")} value={look.glow} onChange={(glow) => setLook({ glow })} allowEmpty />
+              {!!look.glow && (
+                <Choice
+                  label={t("Position de la lueur", "Glow position")}
+                  value={look.glowAt ?? "bottom"}
+                  onChange={(glowAt) => setLook({ glowAt })}
+                  options={[
+                    { value: "bottom", label: t("En bas", "Bottom") },
+                    { value: "corner", label: t("Dans le coin", "Corner") },
+                  ]}
+                />
+              )}
+              <Hint>{t("Les blocs qui se suivent avec le même fond forment une seule section\u00a0: l'arrondi, la bordure et la lueur s'appliquent à toute la section.", "Consecutive blocks with the same background form one section: the radius, border and glow apply to the whole section.")}</Hint>
+            </>
+          )}
         </Section>
       )}
       <Section title={t("Visibilité", "Visibility")} defaultOpen={!!(block.style?.hideMobile || block.style?.hideDesktop)}>

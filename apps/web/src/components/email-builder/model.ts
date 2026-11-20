@@ -144,6 +144,9 @@ export interface BlockStyle {
   /** Outer horizontal margin (turns a colored section into an inset card). */
   inset?: number;
   bg?: string;
+  /** Warm light rising from the section's edge (a radial gradient into `bg`). */
+  glow?: string;
+  glowAt?: "bottom" | "corner";
   radius?: number;
   borderWidth?: number;
   borderColor?: string;
@@ -1424,8 +1427,85 @@ ${buttonHtml(ctx, block.cta, block.href, false, "cta", { bg: block.accent })}
   }
 }
 
+// --- Sections ----------------------------------------------------------------------
+// Consecutive blocks with the same section background (and inset) form one section: a single box
+// holding them all, so its rounded corners, border and glow span the whole section.
+
+const sectionKey = (b: Block | undefined) => (b?.style?.bg ? `${b.style.bg.toLowerCase()}|${b.style.inset ?? 0}` : null);
+
+export interface SectionGroup {
+  start: number;
+  /** Exclusive. */
+  end: number;
+  /** The section's look (background, inset, radius, border, glow); null = blocks outside any section. */
+  style: BlockStyle | null;
+}
+
+/** The section look shared by a run of blocks: each setting is taken from the first block that has it. */
+function sectionStyle(blocks: Block[]): BlockStyle {
+  const pick = <K extends keyof BlockStyle>(k: K) => blocks.find((b) => b.style?.[k] !== undefined && b.style?.[k] !== "")?.style?.[k];
+  return { bg: blocks[0].style?.bg, inset: blocks[0].style?.inset, radius: pick("radius"), borderWidth: pick("borderWidth"), borderColor: pick("borderColor"), glow: pick("glow"), glowAt: pick("glowAt") };
+}
+
+export function sectionGroups(blocks: Block[]): SectionGroup[] {
+  const groups: SectionGroup[] = [];
+  let i = 0;
+  while (i < blocks.length) {
+    const key = sectionKey(blocks[i]);
+    let j = i + 1;
+    if (key) while (j < blocks.length && sectionKey(blocks[j]) === key) j++;
+    groups.push({ start: i, end: j, style: key ? sectionStyle(blocks.slice(i, j)) : null });
+    i = j;
+  }
+  return groups;
+}
+
+/** Indexes of the blocks in the same section as `index` (just itself outside a section). */
+export function sectionOf(blocks: Block[], index: number): number[] {
+  const g = sectionGroups(blocks).find((x) => index >= x.start && index < x.end);
+  return g && g.style ? Array.from({ length: g.end - g.start }, (_, k) => g.start + k) : [index];
+}
+
+function hexRgb(hex: string): [number, number, number] | null {
+  let h = hex.trim().replace(/^#/, "");
+  if (h.length === 3) h = h.replace(/./g, (c) => c + c);
+  if (!/^[0-9a-f]{6}/i.test(h)) return null;
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+}
+
+/** Halfway colour between two hex colours (`t` = share of `b`). */
+function blend(a: string, b: string, t: number): string {
+  const x = hexRgb(a);
+  const y = hexRgb(b);
+  if (!x || !y) return a;
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+}
+
+export function glowGradient(bg: string, glow: string, at: "bottom" | "corner" = "bottom"): string {
+  const mid = blend(glow, bg, 0.45);
+  return at === "corner"
+    ? `radial-gradient(120% 70% at 100% 115%, ${glow} 0%, ${mid} 30%, ${bg} 65%)`
+    : `radial-gradient(130% 90% at 50% 118%, ${glow} 0%, ${mid} 26%, ${bg} 62%)`;
+}
+
+/** CSS of a section's box (also used by the editor canvas). */
+export function sectionBoxCss(s: BlockStyle, theme: Theme): Record<string, string | undefined> {
+  const r = s.radius ?? 0;
+  return {
+    "background-color": s.bg,
+    "background-image": s.bg && s.glow ? glowGradient(s.bg, s.glow, s.glowAt) : undefined,
+    "border-radius": r ? `${r}px` : undefined,
+    border: s.borderWidth ? `${s.borderWidth}px solid ${s.borderColor || mix(theme.text, 0.15)}` : undefined,
+    overflow: r ? "hidden" : undefined,
+  };
+}
+
+function sectionTable(s: BlockStyle, theme: Theme, html: string, cls = ""): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"${cls ? ` class="${cls}"` : ""}><tr><td style="padding:0 ${s.inset ?? 0}px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"${s.bg ? ` bgcolor="${s.bg}"` : ""} style="${css(sectionBoxCss(s, theme))}"><tr><td>${html}</td></tr></table></td></tr></table>`;
+}
+
 /** Renders a single block. `canvas` adds placeholders and (if `editable`) inline-editable fields. */
-export function renderBlock(block: Block, baseTheme: Theme, opts: { canvas?: boolean; editable?: boolean } = {}): string {
+export function renderBlock(block: Block, baseTheme: Theme, opts: { canvas?: boolean; editable?: boolean; inSection?: boolean } = {}): string {
   const s = block.style;
   const theme: Theme = s
     ? {
@@ -1446,17 +1526,13 @@ export function renderBlock(block: Block, baseTheme: Theme, opts: { canvas?: boo
     html = html.replace(/font-size:\s*(\d+(?:\.\d+)?)px/g, (_m, n: string) => `font-size:${Math.max(8, Math.round(Number(n) * k))}px`);
   }
   const cls = [s?.hideMobile ? "hide-m" : "", s?.hideDesktop ? "hide-d" : ""].filter(Boolean).join(" ");
+  // Inside a section, the section draws the box; the block keeps only its visibility.
+  if (opts.inSection) return cls && !ctx.canvas ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="${cls}"><tr><td>${html}</td></tr></table>` : html;
   const boxed = !!(s?.bg || s?.radius || s?.borderWidth);
   if (!boxed && !cls && !s?.inset) return html;
-  const box = css({
-    background: s?.bg,
-    "border-radius": s?.radius ? `${s.radius}px` : undefined,
-    border: s?.borderWidth ? `${s.borderWidth}px solid ${s.borderColor || mix(theme.text, 0.15)}` : undefined,
-    overflow: s?.radius ? "hidden" : undefined,
-  });
-  const inset = s?.inset ?? 0;
-  if (ctx.canvas) return `<div style="padding:0 ${inset}px;"><div style="${box}">${html}</div></div>`;
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"${cls ? ` class="${cls}"` : ""}><tr><td style="padding:0 ${inset}px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"${s?.bg ? ` bgcolor="${s.bg}"` : ""} style="${box}"><tr><td>${html}</td></tr></table></td></tr></table>`;
+  const look: BlockStyle = { ...s, inset: s?.inset ?? 0 };
+  if (ctx.canvas) return `<div style="padding:0 ${look.inset}px;"><div style="${css(sectionBoxCss(look, theme))}">${html}</div></div>`;
+  return sectionTable(look, theme, html, cls);
 }
 
 /** Google Fonts used by a design (theme + block overrides). */
@@ -1496,7 +1572,13 @@ export function googleFontsHref(families: string[]): string | null {
 /** Full, standalone email document. Always contains an unsubscribe link. */
 export function renderEmail(design: Design, preheader = ""): string {
   const { theme } = design;
-  const body = design.blocks.map((b) => renderBlock(b, theme)).join("\n");
+  const body = sectionGroups(design.blocks)
+    .map((g) => {
+      const blocks = design.blocks.slice(g.start, g.end);
+      if (!g.style) return blocks.map((b) => renderBlock(b, theme)).join("\n");
+      return sectionTable(g.style, theme, blocks.map((b) => renderBlock(b, theme, { inSection: true })).join("\n"));
+    })
+    .join("\n");
   const hasFooter = design.blocks.some((b) => b.type === "footer");
   const muted = mutedColor(theme);
   const footer = hasFooter
