@@ -1,3 +1,4 @@
+import { convertEmailImages } from '../services/emailImages.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { all, get, newId, now, run, scalar, transaction, type SQLInputValue } from '../db.js';
@@ -203,7 +204,8 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
       contactId: known?.id ?? null,
       contact,
       subject: `[TEST] ${campaign.subject || campaign.name}`,
-      html: campaign.html,
+      // The same conversion as the real send (SVG/WebP → PNG/JPG), so the test looks like what recipients get.
+      html: (await convertEmailImages(db, config, request.accountId, campaign.html)).html,
       preheader: campaign.preheader,
       senderName: campaign.from_name || sender.name,
       // Not 'queued': the test is sent synchronously below and must never be picked up by the worker.

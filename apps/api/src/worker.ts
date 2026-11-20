@@ -11,6 +11,7 @@ import { accountSender, markFailed, markSent } from './services/messages.js';
 import { effectiveFrom } from './services/sendingDomains.js';
 import { platformAdminAccountIds } from './services/platformAdmin.js';
 import { htmlToText } from './services/render.js';
+import { convertEmailImages } from './services/emailImages.js';
 import type { EmailProvider } from './services/mailer.js';
 import { outsideLang } from './i18n.js';
 
@@ -70,7 +71,7 @@ export class SendingWorker {
       do {
         this.rerun = false;
         this.promoteScheduled();
-        this.queueSendingCampaigns();
+        await this.queueSendingCampaigns();
         processAbandonedCarts(this.db);
         processScheduledTriggers(this.db);
         processTracking(this.db);
@@ -103,13 +104,23 @@ export class SendingWorker {
     if (changed) this.log.info(`[worker] ${changed} campagne(s) programmée(s) démarrée(s)`);
   }
 
-  private queueSendingCampaigns(): void {
-    const campaigns = all<{ id: string; name: string }>(
+  private async queueSendingCampaigns(): Promise<void> {
+    const campaigns = all<{ id: string; name: string; account_id: string; html: string | null }>(
       this.db,
-      `SELECT c.id, c.name FROM campaigns c
+      `SELECT c.id, c.name, c.account_id, c.html FROM campaigns c
         WHERE c.status = 'sending' AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.campaign_id = c.id)`,
     );
     for (const c of campaigns) {
+      // Pictures Gmail can't show (SVG, WebP) become PNG/JPG first, so every recipient gets the same email.
+      if (c.html) {
+        try {
+          const res = await convertEmailImages(this.db, this.config, c.account_id, c.html);
+          if (res.converted) run(this.db, 'UPDATE campaigns SET html = ? WHERE id = ?', res.html, c.id);
+          if (res.converted || res.failed.length) this.log.info(`[worker] campagne « ${c.name} » : ${res.converted} image(s) convertie(s)${res.failed.length ? `, échecs : ${res.failed.join(' ; ')}` : ''}`);
+        } catch (err) {
+          this.log.error(`[worker] conversion des images de « ${c.name} » : ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       const queued = queueCampaign(this.db, this.config, c.id);
       this.log.info(`[worker] campagne « ${c.name} » : ${queued} message(s) en file`);
     }
