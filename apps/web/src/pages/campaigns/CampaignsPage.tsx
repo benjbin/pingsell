@@ -180,7 +180,7 @@ export function CampaignsPage() {
                             <Button variant="ghost" size="sm" icon={BarChart3} onClick={() => navigate(`/campagnes/${c.id}/rapport`)} aria-label={t("Rapport", "Report")} title={t("Rapport", "Report")} />
                           )}
                           <Button variant="ghost" size="sm" icon={Copy} onClick={() => void duplicate(c)} aria-label={t("Dupliquer", "Duplicate")} title={t("Dupliquer", "Duplicate")} />
-                          {c.status === "draft" && (
+                          {c.status !== "sending" && (
                             <Button variant="ghost" size="sm" icon={Trash2} onClick={() => setToDelete(c)} aria-label={t("Supprimer", "Delete")} title={t("Supprimer", "Delete")} />
                           )}
                         </div>
@@ -200,8 +200,17 @@ export function CampaignsPage() {
         onConfirm={remove}
         loading={deleting}
         danger
-        title={t("Supprimer ce brouillon ?", "Delete this draft?")}
-        description={t(`« ${toDelete?.name ?? ""} » sera définitivement supprimé.`, `“${toDelete?.name ?? ""}” will be permanently deleted.`)}
+        title={toDelete?.status === "draft" ? t("Supprimer ce brouillon ?", "Delete this draft?") : t("Supprimer cette campagne ?", "Delete this campaign?")}
+        description={
+          toDelete?.status === "sent" || toDelete?.status === "failed"
+            ? t(
+                `« ${toDelete.name} » et son rapport seront définitivement supprimés. Les emails déjà reçus restent dans les boîtes de vos contacts, et les chiffres globaux de vos statistiques ne changent pas.`,
+                `“${toDelete.name}” and its report will be permanently deleted. Emails already received stay in your contacts' inboxes, and your overall statistics don't change.`,
+              )
+            : toDelete?.status === "scheduled"
+              ? t(`« ${toDelete.name} » sera définitivement supprimée et ne partira pas.`, `“${toDelete.name}” will be permanently deleted and won't be sent.`)
+              : t(`« ${toDelete?.name ?? ""} » sera définitivement supprimé.`, `“${toDelete?.name ?? ""}” will be permanently deleted.`)
+        }
         confirmLabel={t("Supprimer", "Delete")}
       />
     </>
