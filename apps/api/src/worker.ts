@@ -14,6 +14,7 @@ import { htmlToText } from './services/render.js';
 import { convertEmailImages } from './services/emailImages.js';
 import type { EmailProvider } from './services/mailer.js';
 import { outsideLang } from './i18n.js';
+import { guardCampaigns } from './services/deliverability.js';
 
 export interface WorkerLogger {
   info(msg: string): void;
@@ -76,6 +77,9 @@ export class SendingWorker {
         processScheduledTriggers(this.db);
         processTracking(this.db);
         processDueRuns(this.db, this.config);
+        for (const p of guardCampaigns(this.db)) {
+          this.log.info(`[worker] campagne « ${p.name} » mise en pause automatiquement (${p.reason.kind} : ${p.reason.count}/${p.reason.of})`);
+        }
         await sendWebhooks(takeWebhooks(), this.log);
         await sendTeamNotifications(this.db, this.config, this.provider);
         const sent = await this.sendBatch();
@@ -160,19 +164,21 @@ export class SendingWorker {
   private async sendBatch(): Promise<number> {
     type Queued = { id: string; account_id: string; campaign_id: string | null; to_email: string; subject: string; html: string };
     const cols = 'SELECT id, account_id, campaign_id, to_email, subject, html FROM messages';
+    // A paused campaign keeps its queue but sends nothing until it is resumed.
+    const notPaused = "NOT EXISTS (SELECT 1 FROM campaigns p WHERE p.id = messages.campaign_id AND p.paused_reason IS NOT NULL)";
     const size = this.config.worker.batchSize;
     // The platform admin's own account skips the warm-up's daily cap (PLATFORM_ADMIN_EMAILS); everyone else stays under it.
     const admins = this.config.warmup ? platformAdminAccountIds(this.db) : [];
     const inAdmins = admins.map(() => '?').join(',');
     const batch: Queued[] = admins.length
-      ? all<Queued>(this.db, `${cols} WHERE status = 'queued' AND account_id IN (${inAdmins}) ORDER BY created_at LIMIT ?`, ...admins, size)
+      ? all<Queued>(this.db, `${cols} WHERE status = 'queued' AND account_id IN (${inAdmins}) AND ${notPaused} ORDER BY created_at, rowid LIMIT ?`, ...admins, size)
       : [];
     const allowed = Math.min(size - batch.length, this.warmupRemaining());
     if (allowed > 0) {
       batch.push(
         ...all<Queued>(
           this.db,
-          `${cols} WHERE status = 'queued'${admins.length ? ` AND account_id NOT IN (${inAdmins})` : ''} ORDER BY created_at LIMIT ?`,
+          `${cols} WHERE status = 'queued'${admins.length ? ` AND account_id NOT IN (${inAdmins})` : ''} AND ${notPaused} ORDER BY created_at, rowid LIMIT ?`,
           ...admins,
           allowed,
         ),

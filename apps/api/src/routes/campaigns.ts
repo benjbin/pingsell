@@ -274,6 +274,35 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     return withStats(request.accountId, campaign.id);
   });
 
+  /** Holds the sending (the queue is kept). */
+  app.post<Params>('/campaigns/:id/pause', async (request) => {
+    const campaign = load(request.accountId, request.params.id);
+    if (campaign.status !== 'sending') throw conflict(t("Cette campagne n'est pas en cours d'envoi", 'This campaign isn’t sending'));
+    if (!campaign.paused) run(db, 'UPDATE campaigns SET paused_reason = ?, updated_at = ? WHERE id = ?', JSON.stringify({ kind: 'manual', at: now() }), now(), campaign.id);
+    return withStats(request.accountId, campaign.id);
+  });
+
+  /** Sends the rest. After an automatic pause, the red lines then only count the emails sent from now on. */
+  app.post<Params>('/campaigns/:id/resume', async (request) => {
+    const campaign = load(request.accountId, request.params.id);
+    if (campaign.status !== 'sending' || !campaign.paused) throw conflict(t("Cette campagne n'est pas en pause", 'This campaign isn’t paused'));
+    run(db, 'UPDATE campaigns SET paused_reason = NULL, guard_since = ?, updated_at = ? WHERE id = ?', now(), now(), campaign.id);
+    kickWorker();
+    return withStats(request.accountId, campaign.id);
+  });
+
+  /** Stops for good: the emails not sent yet are dropped, the campaign ends with what already left. */
+  app.post<Params>('/campaigns/:id/stop', async (request) => {
+    const campaign = load(request.accountId, request.params.id);
+    if (campaign.status !== 'sending') throw conflict(t("Cette campagne n'est pas en cours d'envoi", 'This campaign isn’t sending'));
+    transaction(db, () => {
+      run(db, "DELETE FROM messages WHERE campaign_id = ? AND status = 'queued'", campaign.id);
+      const sent = scalar(db, "SELECT COUNT(*) FROM messages WHERE campaign_id = ? AND status IN ('sent','bounced')", campaign.id);
+      run(db, 'UPDATE campaigns SET status = ?, paused_reason = NULL, sent_at = COALESCE(sent_at, ?), updated_at = ? WHERE id = ?', sent > 0 ? 'sent' : 'failed', now(), now(), campaign.id);
+    });
+    return withStats(request.accountId, campaign.id);
+  });
+
   app.get<Params>('/campaigns/:id/stats', async (request) => {
     const campaign = load(request.accountId, request.params.id);
     return campaignStatsDetail(db, campaign.id);

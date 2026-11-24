@@ -634,6 +634,14 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   `ALTER TABLE campaigns ADD COLUMN contact_ids TEXT;`,
   // Logo de la boutique / entreprise (une image de la médiathèque), affiché dans l'application.
   `ALTER TABLE accounts ADD COLUMN logo_url TEXT;`,
+  // Délivrabilité : pause automatique d'une campagne (taux de rebonds / blocages / plaintes trop haut),
+  // contacts inactifs écartés à l'envoi, plainte « spam » rattachée au message.
+  `
+  ALTER TABLE campaigns ADD COLUMN paused_reason TEXT;
+  ALTER TABLE campaigns ADD COLUMN guard_since TEXT;
+  ALTER TABLE campaigns ADD COLUMN skipped_inactive INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE messages ADD COLUMN complained_at TEXT;
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

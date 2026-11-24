@@ -326,9 +326,21 @@ export interface Campaign {
   status: CampaignStatus;
   scheduled_at: string | null;
   sent_at: string | null;
+  /** Sending on hold: by hand, or automatically when bounces / blocks / spam complaints go too high. */
+  paused?: CampaignPause | null;
+  /** Inactive contacts left out of the send (mailed many times, never opened). */
+  skipped_inactive?: number;
   created_at: string;
   updated_at: string;
   stats?: CampaignStatsSummary;
+}
+
+export interface CampaignPause {
+  kind: "bounces" | "blocks" | "complaints" | "manual";
+  count?: number;
+  of?: number;
+  rate?: number;
+  at: string;
 }
 
 export interface CampaignInput {

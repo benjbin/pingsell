@@ -284,6 +284,9 @@ export const api = {
     send: (id: string) => post<unknown>(`/campaigns/${id}/send`),
     schedule: (id: string, scheduled_at: string) => post<unknown>(`/campaigns/${id}/schedule`, { scheduled_at }),
     unschedule: (id: string) => post<unknown>(`/campaigns/${id}/unschedule`),
+    pause: (id: string) => post<unknown>(`/campaigns/${id}/pause`),
+    resume: (id: string) => post<unknown>(`/campaigns/${id}/resume`),
+    stop: (id: string) => post<unknown>(`/campaigns/${id}/stop`),
     stats: (id: string) => get<CampaignStats>(`/campaigns/${id}/stats`),
     recipients: (id: string, q: { filter?: RecipientFilter; search?: string; page?: number; limit?: number } = {}) =>
       get<Paginated<CampaignRecipient>>(`/campaigns/${id}/recipients`, { ...q, filter: q.filter === "all" ? undefined : q.filter }),

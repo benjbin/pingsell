@@ -2,6 +2,7 @@ import type { AppConfig } from '../config.js';
 import { all, get, now, run, scalar, transaction, type DatabaseSync, type Row } from '../db.js';
 import { compileRules, loadSegmentRules, type CompiledRules } from './segments.js';
 import { accountSender, createMessage } from './messages.js';
+import { orderedRecipients, parsePauseReason } from './deliverability.js';
 
 export const CAMPAIGN_STATUSES = ['draft', 'scheduled', 'sending', 'sent', 'failed'] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
@@ -37,6 +38,10 @@ export function serializeCampaign(row: Row) {
     status: row.status as CampaignStatus,
     scheduled_at: (row.scheduled_at as string | null) ?? null,
     sent_at: (row.sent_at as string | null) ?? null,
+    /** Why the sending is on hold (automatic guard or by hand); null while it runs. */
+    paused: parsePauseReason(row.paused_reason),
+    /** Inactive contacts left out of the send (mailed many times, never opened). */
+    skipped_inactive: Number(row.skipped_inactive ?? 0),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -183,14 +188,12 @@ export function queueCampaign(db: DatabaseSync, config: AppConfig, campaignId: s
     if (scalar(db, 'SELECT COUNT(*) FROM messages WHERE campaign_id = ?', campaignId) > 0) return 0;
 
     const filter = audienceFilter(db, campaign.account_id, campaign.segment_id, campaign.contact_ids);
-    const recipients = filter
-      ? all<{ id: string; email: string; first_name: string | null; last_name: string | null }>(
-          db,
-          `SELECT id, email, first_name, last_name FROM contacts WHERE account_id = ? AND ${filter.sql} ORDER BY created_at`,
-          campaign.account_id,
-          ...filter.params,
-        )
-      : [];
+    // Engaged contacts first, mailbox providers interleaved, long-inactive contacts left out
+    // (except when chosen by hand: then the merchant decided).
+    const { recipients, skipped } = filter
+      ? orderedRecipients(db, campaign.account_id, filter, { sunset: !campaign.contact_ids?.length })
+      : { recipients: [], skipped: 0 };
+    run(db, 'UPDATE campaigns SET skipped_inactive = ? WHERE id = ?', skipped, campaignId);
 
     if (!recipients.length) {
       run(db, "UPDATE campaigns SET status = 'failed', updated_at = ? WHERE id = ?", now(), campaignId);

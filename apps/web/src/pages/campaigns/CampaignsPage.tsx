@@ -162,9 +162,15 @@ export function CampaignsPage() {
                         </Link>
                       </td>
                       <td className="px-3 py-3.5">
-                        <Badge tone={CAMPAIGN_STATUS[c.status]?.tone} dot>
-                          {CAMPAIGN_STATUS[c.status]?.label ?? c.status}
-                        </Badge>
+                        {c.status === "sending" && c.paused ? (
+                          <Badge tone={c.paused.kind === "manual" ? "slate" : "red"} dot>
+                            {t("En pause", "Paused")}
+                          </Badge>
+                        ) : (
+                          <Badge tone={CAMPAIGN_STATUS[c.status]?.tone} dot>
+                            {CAMPAIGN_STATUS[c.status]?.label ?? c.status}
+                          </Badge>
+                        )}
                       </td>
                       <td className="px-3 py-3.5">{hasStats ? <Rate value={formatNumber(st.sent)} sub={t(`sur ${formatNumber(st.recipients)}`, `of ${formatNumber(st.recipients)}`)} /> : <span className="text-slate-400">—</span>}</td>
                       <td className="px-3 py-3.5">{hasStats ? <Rate value={formatPercent(st.open_rate)} sub={t(`${formatNumber(st.opened)} ouvertures`, `${formatNumber(st.opened)} ${st.opened === 1 ? "open" : "opens"}`)} /> : <span className="text-slate-400">—</span>}</td>

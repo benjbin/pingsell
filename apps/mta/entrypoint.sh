@@ -52,6 +52,13 @@ chown root:nobody /etc/pingsell-hook.env
 chmod 640 /etc/pingsell-hook.env
 
 # --- Postfix ------------------------------------------------------------------------------
+# Deliverability: each mailbox provider gets a few connections at a time, and a provider that answers
+# "slow down" (4xx) is retried later with a growing delay instead of being hammered.
+MICROSOFT_MAP=""
+for d in outlook.com outlook.fr hotmail.com hotmail.fr hotmail.co.uk live.com live.fr msn.com; do
+  MICROSOFT_MAP="${MICROSOFT_MAP:+${MICROSOFT_MAP}, }${d}=slow:"
+done
+
 postconf -e \
   "myhostname = ${MAIL_HOSTNAME}" \
   "mydomain = ${MAIL_DOMAIN}" \
@@ -68,7 +75,7 @@ postconf -e \
   "alias_maps =" \
   "mynetworks = ${INTERNAL_NETWORKS}" \
   "relay_domains = ${MAIL_DOMAIN}" \
-  "transport_maps = inline:{ ${MAIL_DOMAIN}=pingsell-hook: }" \
+  "transport_maps = inline:{ ${MAIL_DOMAIN}=pingsell-hook:, ${MICROSOFT_MAP} }" \
   "pingsell-hook_destination_recipient_limit = 1" \
   "recipient_delimiter = +" \
   "smtpd_relay_restrictions = permit_mynetworks, reject_unauth_destination" \
@@ -87,7 +94,17 @@ postconf -e \
   "maximal_queue_lifetime = 2d" \
   "bounce_queue_lifetime = 1d" \
   "default_destination_concurrency_limit = 5" \
-  "smtp_destination_concurrency_limit = 5"
+  "smtp_destination_concurrency_limit = 5" \
+  "smtp_destination_concurrency_failed_cohort_limit = 10" \
+  "minimal_backoff_time = 5m" \
+  "maximal_backoff_time = 1h" \
+  "queue_run_delay = 5m" \
+  "slow_destination_concurrency_limit = 2" \
+  "slow_destination_rate_delay = 0" \
+  "slow_destination_concurrency_failed_cohort_limit = 10"
+
+# Microsoft (Outlook, Hotmail, Live) is the strictest with new senders: fewer connections at once.
+postconf -M "slow/unix=slow unix - - n - - smtp"
 
 # Public port 25: inbound mail for MAIL_DOMAIN only. Never relays, whatever the source IP
 # (behind Docker's port publishing every client could look "internal").

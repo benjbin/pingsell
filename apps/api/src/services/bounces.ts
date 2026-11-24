@@ -83,8 +83,9 @@ export function applyBounce(db: DatabaseSync, report: BounceReport): { contactId
       }
     } else if (report.kind === 'soft') {
       run(db, "UPDATE messages SET status = 'failed', error = ? WHERE id = ? AND status = 'sent'", error, msg.id);
-    } else if (report.kind === 'complaint' && msg.contact_id) {
-      run(db, "UPDATE contacts SET status = 'complained', updated_at = ? WHERE id = ?", new Date().toISOString(), msg.contact_id);
+    } else if (report.kind === 'complaint') {
+      run(db, 'UPDATE messages SET complained_at = COALESCE(complained_at, ?) WHERE id = ?', new Date().toISOString(), msg.id);
+      if (msg.contact_id) run(db, "UPDATE contacts SET status = 'complained', updated_at = ? WHERE id = ?", new Date().toISOString(), msg.contact_id);
     }
   });
   return { contactId: msg.contact_id };
