@@ -133,18 +133,22 @@ export class SendingWorker {
   /** Emails handed to the provider today (UTC), cached and bumped as we send. */
   private sentToday = { day: '', count: 0 };
   private warmupLogged = '';
+  private windowLogged = '';
 
-  /** How many more emails the IP warm-up allows today (Infinity when no warm-up is configured). */
-  private warmupRemaining(): number {
+  /**
+   * Today's warm-up cap (null when no warm-up is configured). Everything counts toward it except the
+   * platform admin's own automation / transactional emails; the admin's campaigns do count, since they
+   * share the same IP reputation.
+   */
+  private warmupLimit(admins: string[]): { limit: number; day: number } | null {
     const w = this.config.warmup;
-    if (!w) return Infinity;
+    if (!w) return null;
     const today = new Date().toISOString().slice(0, 10);
     if (this.sentToday.day !== today) {
-      // The platform admin's own sends are outside the cap, so they don't use up the other accounts' share either.
-      const admins = platformAdminAccountIds(this.db);
+      const inAdmins = admins.map(() => '?').join(',');
       const row = get<{ n: number }>(
         this.db,
-        `SELECT COUNT(*) AS n FROM messages WHERE sent_at >= ? AND status IN ('sent','bounced')${admins.length ? ` AND account_id NOT IN (${admins.map(() => '?').join(',')})` : ''}`,
+        `SELECT COUNT(*) AS n FROM messages WHERE sent_at >= ? AND status IN ('sent','bounced')${admins.length ? ` AND NOT (account_id IN (${inAdmins}) AND campaign_id IS NULL)` : ''}`,
         `${today}T00:00:00.000Z`,
         ...admins,
       );
@@ -152,13 +156,43 @@ export class SendingWorker {
     }
     const start = Date.parse(`${w.startDate.slice(0, 10)}T00:00:00Z`);
     const day = Number.isFinite(start) ? Math.max(0, Math.floor((Date.now() - start) / 86_400_000)) : 0;
-    const limit = Math.min(w.max, Math.round(w.initial * Math.pow(w.growth, day)));
-    const remaining = Math.max(0, limit - this.sentToday.count);
-    if (!remaining && this.warmupLogged !== today) {
-      this.warmupLogged = today;
-      this.log.info(`[worker] warm-up : plafond du jour atteint (${limit} emails, jour ${day + 1}), la suite partira demain`);
+    return { limit: Math.min(w.max, Math.round(w.initial * Math.pow(w.growth, day))), day };
+  }
+
+  /** Fraction of today's sending window already elapsed (0 before it opens, 1 once it is closed). */
+  private windowFraction(): number {
+    const { startHour, endHour, timeZone } = this.config.sendWindow;
+    let hour = 0;
+    let minute = 0;
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+      hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+      minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+    } catch {
+      return 1; // unknown time zone: no window
     }
-    return remaining;
+    const span = Math.max(1, (endHour - startHour) * 60);
+    const elapsed = (hour - startHour) * 60 + minute;
+    if (elapsed < 0) return 0;
+    // A quarter of an hour ahead, so the drip starts as soon as the window opens.
+    return Math.min(1, (elapsed + 15) / span);
+  }
+
+  /** How many campaign emails may leave right now: today's cap, released gradually over the sending window. */
+  private campaignAllowance(cap: { limit: number; day: number } | null): number {
+    if (!cap) return Infinity;
+    const today = new Date().toISOString().slice(0, 10);
+    const { startHour, endHour } = this.config.sendWindow;
+    const fraction = this.windowFraction();
+    const allowed = Math.max(0, Math.ceil(cap.limit * fraction) - this.sentToday.count);
+    if (!allowed && this.sentToday.count >= cap.limit && this.warmupLogged !== today) {
+      this.warmupLogged = today;
+      this.log.info(`[worker] warm-up : plafond du jour atteint (${cap.limit} emails, jour ${cap.day + 1}), la suite partira demain à partir de ${startHour} h`);
+    } else if (!allowed && fraction === 0 && this.windowLogged !== today) {
+      this.windowLogged = today;
+      this.log.info(`[worker] campagnes en attente : envoi étalé entre ${startHour} h et ${endHour} h`);
+    }
+    return allowed;
   }
 
   private async sendBatch(): Promise<number> {
@@ -167,22 +201,29 @@ export class SendingWorker {
     // A paused campaign keeps its queue but sends nothing until it is resumed.
     const notPaused = "NOT EXISTS (SELECT 1 FROM campaigns p WHERE p.id = messages.campaign_id AND p.paused_reason IS NOT NULL)";
     const size = this.config.worker.batchSize;
-    // The platform admin's own account skips the warm-up's daily cap (PLATFORM_ADMIN_EMAILS); everyone else stays under it.
     const admins = this.config.warmup ? platformAdminAccountIds(this.db) : [];
     const inAdmins = admins.map(() => '?').join(',');
-    const batch: Queued[] = admins.length
-      ? all<Queued>(this.db, `${cols} WHERE status = 'queued' AND account_id IN (${inAdmins}) AND ${notPaused} ORDER BY created_at, rowid LIMIT ?`, ...admins, size)
-      : [];
-    const allowed = Math.min(size - batch.length, this.warmupRemaining());
-    if (allowed > 0) {
-      batch.push(
-        ...all<Queued>(
-          this.db,
-          `${cols} WHERE status = 'queued'${admins.length ? ` AND account_id NOT IN (${inAdmins})` : ''} AND ${notPaused} ORDER BY created_at, rowid LIMIT ?`,
-          ...admins,
-          allowed,
-        ),
-      );
+    const notAdmin = admins.length ? ` AND account_id NOT IN (${inAdmins})` : '';
+    const cap = this.warmupLimit(admins);
+    const dailyLeft = cap ? Math.max(0, cap.limit - this.sentToday.count) : Infinity;
+    const batch: Queued[] = [];
+
+    // 1. The platform admin's own automation / transactional emails: outside the cap (tests, notifications).
+    if (admins.length) {
+      batch.push(...all<Queued>(this.db, `${cols} WHERE status = 'queued' AND campaign_id IS NULL AND account_id IN (${inAdmins}) ORDER BY created_at, rowid LIMIT ?`, ...admins, size));
+    }
+    // 2. Everyone else's automation / transactional emails (welcome, abandoned cart…): daily cap only, any hour.
+    let room = Math.min(size - batch.length, dailyLeft);
+    let counted = 0;
+    if (room > 0) {
+      const rows = all<Queued>(this.db, `${cols} WHERE status = 'queued' AND campaign_id IS NULL${notAdmin} ORDER BY created_at, rowid LIMIT ?`, ...admins, room);
+      counted += rows.length;
+      batch.push(...rows);
+    }
+    // 3. Campaign emails, the admin's included: daily cap, released gradually over the sending window.
+    room = Math.min(size - batch.length, dailyLeft - counted, this.campaignAllowance(cap) - counted);
+    if (room > 0) {
+      batch.push(...all<Queued>(this.db, `${cols} WHERE status = 'queued' AND campaign_id IS NOT NULL AND ${notPaused} ORDER BY created_at, rowid LIMIT ?`, room));
     }
     if (!batch.length) return 0;
 
@@ -205,7 +246,7 @@ export class SendingWorker {
           campaignId: message.campaign_id,
         });
         markSent(this.db, message.id, providerId);
-        if (!admins.includes(message.account_id)) this.sentToday.count++;
+        if (message.campaign_id || !admins.includes(message.account_id)) this.sentToday.count++;
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         markFailed(this.db, message.id, reason);

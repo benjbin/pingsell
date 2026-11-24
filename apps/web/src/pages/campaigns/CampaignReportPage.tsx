@@ -138,7 +138,15 @@ export function CampaignReportPage() {
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-amber-400 opacity-75" />
             <span className="relative inline-flex size-2.5 rounded-full bg-amber-500" />
           </span>
-          <span className="min-w-0 flex-1">{t("Envoi en cours… les statistiques se mettent à jour automatiquement.", "Sending… stats update automatically.")}</span>
+          <span className="min-w-0 flex-1">
+            {t("Envoi en cours… les statistiques se mettent à jour automatiquement.", "Sending… stats update automatically.")}
+            <span className="mt-0.5 block text-xs opacity-80">
+              {t(
+                "Envoi progressif : vos contacts les plus actifs d'abord, réparti entre 8 h et 21 h et, pour une grosse campagne, sur plusieurs jours. Gmail et Outlook font ainsi confiance à votre serveur.",
+                "Gradual sending: your most active contacts first, spread between 8 am and 9 pm and, for a big campaign, over several days. That's how Gmail and Outlook come to trust your server.",
+              )}
+            </span>
+          </span>
           <Button variant="ghost" size="sm" icon={Pause} loading={busy === "pause"} onClick={() => void act("pause")}>
             {t("Mettre en pause", "Pause")}
           </Button>

@@ -51,6 +51,11 @@ export interface AppConfig {
   };
   /** IP warm-up: daily email cap that grows from `initial` by `growth` per day since `startDate`. */
   warmup?: { startDate: string; initial: number; growth: number; max: number };
+  /**
+   * Campaign emails under the warm-up cap are spread over this daily window (local time of `timeZone`)
+   * instead of leaving in one burst; automation and transactional emails are not held by it.
+   */
+  sendWindow: { startHour: number; endHour: number; timeZone: string };
   shopifyApiKey?: string;
   shopifyApiSecret?: string;
   push: {
@@ -106,6 +111,11 @@ function loadConfig(): AppConfig {
       apnsProductionUrl: str('PUSH_APNS_URL', 'https://api.push.apple.com').replace(/\/+$/, ''),
       apnsSandboxUrl: str('PUSH_APNS_SANDBOX_URL', 'https://api.sandbox.push.apple.com').replace(/\/+$/, ''),
       expoUrl: str('PUSH_EXPO_URL', 'https://exp.host/--/api/v2/push/send'),
+    },
+    sendWindow: {
+      startHour: int('SEND_WINDOW_START_HOUR', 8),
+      endHour: int('SEND_WINDOW_END_HOUR', 21),
+      timeZone: str('SEND_WINDOW_TZ', 'Europe/Paris'),
     },
     worker: {
       intervalMs: int('WORKER_INTERVAL_MS', 2000),
