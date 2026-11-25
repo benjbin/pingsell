@@ -1,23 +1,26 @@
-import { all, get, now, run, type DatabaseSync, type SQLInputValue } from '../db.js';
+import { all, now, run, type DatabaseSync, type SQLInputValue } from '../db.js';
 
 /**
  * Keeps big sends out of the spam folder.
  *
  *  - Order: engaged contacts first (they open, which builds the reputation the rest will ride on),
- *    then new / never-mailed contacts, then the cold ones. Inside each group the mailbox providers
- *    are interleaved in proportion, so Gmail, Outlook, Orange… each get a steady flow instead of
- *    100 000 emails in a row.
+ *    then new / never-mailed contacts, then the cold ones. Inside each group contacts come in the order
+ *    they were added, which is unrelated to their mailbox provider: Gmail, Outlook, Orange… each get a
+ *    steady flow in proportion instead of 100 000 emails in a row.
  *  - Sunset: contacts mailed again and again without a single open or click are left out
  *    (they hurt the sender's reputation and are often spam traps). Hand-picked contacts are never left out.
  *  - Guard: a campaign pauses itself as soon as its hard-bounce, block or spam-complaint rate goes
  *    over the mailbox providers' red lines, before the domain's reputation is burnt.
+ *
+ * Engagement is read from the contact itself (contacts.last_engaged_at / last_sent_at / sends_since_engaged,
+ * kept up to date on every send, open and click) so ordering 2 million contacts never scans the message history.
  */
 
 const DAY_MS = 86_400_000;
 
 /** Engaged = opened or clicked within this many days. */
 export const ENGAGED_DAYS = 90;
-/** Sunset: at least this many emails over SUNSET_DAYS without any open or click. */
+/** Sunset: at least this many emails since the last open or click, and none within SUNSET_DAYS. */
 export const SUNSET_MIN_SENT = 5;
 export const SUNSET_DAYS = 180;
 
@@ -28,64 +31,63 @@ export interface Recipient {
   last_name: string | null;
 }
 
+/** Where the paging of an audience stands: the group being queued and the last contact rowid seen in it. */
+export interface AudienceCursor {
+  tier: number;
+  after: number;
+}
+
+export const AUDIENCE_START: AudienceCursor = { tier: 0, after: 0 };
+const TIERS = 3;
+
 /**
- * The audience of a campaign in sending order, plus how many inactive contacts were left out.
- * `filter` is the SQL audience filter on `contacts` (see audienceFilter).
+ * One page of a campaign's audience in sending order: scans at most `scan` (250) subscribed contacts of the account
+ * (an index range, whatever the segment's selectivity) and returns those of the current group that match `filter`.
+ * `next` is null once the last group is done. `filter` is the SQL audience filter on `contacts` (see audienceFilter).
  */
-export function orderedRecipients(
+export function audiencePage(
   db: DatabaseSync,
   accountId: string,
   filter: { sql: string; params: SQLInputValue[] },
-  opts: { sunset: boolean; at?: number },
-): { recipients: Recipient[]; skipped: number } {
+  cursor: AudienceCursor,
+  opts: { sunset: boolean; at?: number; scan?: number },
+): { recipients: Recipient[]; skipped: number; next: AudienceCursor | null } {
   const at = opts.at ?? Date.now();
+  const scan = opts.scan ?? 250;
   const engagedSince = new Date(at - ENGAGED_DAYS * DAY_MS).toISOString();
   const sunsetSince = new Date(at - SUNSET_DAYS * DAY_MS).toISOString();
-  const rows = all<Recipient & { tier: number; sunset: number }>(
+  const rows = all<Recipient & { rid: number; tier: number; sunset: number }>(
     db,
-    `WITH aud AS (
-        SELECT id, email, first_name, last_name, created_at,
-               lower(substr(email, instr(email, '@') + 1)) AS dom
-          FROM contacts WHERE account_id = ? AND ${filter.sql}
-     ),
-     eng AS (
-        SELECT m.contact_id,
-               MAX(COALESCE(m.clicked_at, m.opened_at)) AS last_eng,
-               SUM(CASE WHEN m.sent_at >= ? THEN 1 ELSE 0 END) AS recent_sent
-          FROM messages m JOIN aud ON aud.id = m.contact_id
-         WHERE m.status IN ('sent', 'bounced')
-         GROUP BY m.contact_id
-     ),
-     scored AS (
-        SELECT aud.*,
-               CASE WHEN eng.last_eng >= ? THEN 0
-                    WHEN eng.contact_id IS NULL THEN 1
-                    ELSE 2 END AS tier,
-               CASE WHEN COALESCE(eng.recent_sent, 0) >= ? AND (eng.last_eng IS NULL OR eng.last_eng < ?) THEN 1 ELSE 0 END AS sunset
-          FROM aud LEFT JOIN eng ON eng.contact_id = aud.id
-     )
-     SELECT id, email, first_name, last_name, tier, sunset,
-            (ROW_NUMBER() OVER (PARTITION BY tier, dom ORDER BY created_at, id) * 1.0)
-              / COUNT(*) OVER (PARTITION BY tier, dom) AS spread
-       FROM scored
-      ORDER BY tier, spread, dom`,
-    accountId,
+    `SELECT rowid AS rid, id, email, first_name, last_name,
+            CASE WHEN (${filter.sql}) THEN
+              CASE WHEN COALESCE(last_engaged_at, '') >= ? THEN 0 WHEN last_sent_at IS NULL THEN 1 ELSE 2 END
+            ELSE -1 END AS tier,
+            CASE WHEN sends_since_engaged >= ? AND COALESCE(last_engaged_at, '') < ? THEN 1 ELSE 0 END AS sunset
+       FROM contacts
+      WHERE account_id = ? AND status = 'subscribed' AND rowid > ?
+      ORDER BY rowid LIMIT ?`,
     ...filter.params,
-    sunsetSince,
     engagedSince,
     SUNSET_MIN_SENT,
     sunsetSince,
+    accountId,
+    cursor.after,
+    scan,
   );
   const recipients: Recipient[] = [];
   let skipped = 0;
   for (const r of rows) {
+    if (r.tier !== cursor.tier) continue;
     if (opts.sunset && r.sunset) {
       skipped++;
       continue;
     }
     recipients.push({ id: r.id, email: r.email, first_name: r.first_name, last_name: r.last_name });
   }
-  return { recipients, skipped };
+  let next: AudienceCursor | null;
+  if (rows.length === scan) next = { tier: cursor.tier, after: rows[rows.length - 1].rid };
+  else next = cursor.tier + 1 < TIERS ? { tier: cursor.tier + 1, after: 0 } : null;
+  return { recipients, skipped, next };
 }
 
 /* ---------------------------------------------------------------- guard */
@@ -125,21 +127,6 @@ export interface GuardStats {
   complaints: number;
 }
 
-export function guardStats(db: DatabaseSync, campaignId: string, since: string | null): GuardStats {
-  const row = get<GuardStats>(
-    db,
-    `SELECT COUNT(*) AS handled,
-            SUM(CASE WHEN status = 'bounced' THEN 1 ELSE 0 END) AS bounces,
-            SUM(CASE WHEN status = 'failed' AND error LIKE '5.7.%' THEN 1 ELSE 0 END) AS blocks,
-            SUM(CASE WHEN complained_at IS NOT NULL THEN 1 ELSE 0 END) AS complaints
-       FROM messages
-      WHERE campaign_id = ? AND sent_at IS NOT NULL AND status IN ('sent', 'bounced', 'failed')${since ? ' AND sent_at >= ?' : ''}`,
-    campaignId,
-    ...(since ? [since] : []),
-  );
-  return { handled: Number(row?.handled ?? 0), bounces: Number(row?.bounces ?? 0), blocks: Number(row?.blocks ?? 0), complaints: Number(row?.complaints ?? 0) };
-}
-
 /** The first red line crossed, or null. */
 export function crossedLine(s: GuardStats): Omit<PauseReason, 'at'> | null {
   for (const kind of ['complaints', 'bounces', 'blocks'] as const) {
@@ -150,15 +137,20 @@ export function crossedLine(s: GuardStats): Omit<PauseReason, 'at'> | null {
   return null;
 }
 
-/** Pauses every sending campaign that crossed a red line. Returns the campaigns paused. */
+/**
+ * Pauses every sending campaign that crossed a red line. Returns the campaigns paused.
+ * Reads the guard counters kept on the campaign (g_*, reset on resume): one small query whatever the campaign size.
+ * Campaigns from before the counters are guarded as soon as the worker has caught their counters up.
+ */
 export function guardCampaigns(db: DatabaseSync): Array<{ id: string; name: string; reason: PauseReason }> {
   const paused: Array<{ id: string; name: string; reason: PauseReason }> = [];
-  const campaigns = all<{ id: string; name: string; guard_since: string | null }>(
+  const campaigns = all<{ id: string; name: string } & GuardStats>(
     db,
-    "SELECT id, name, guard_since FROM campaigns WHERE status = 'sending' AND paused_reason IS NULL",
+    `SELECT id, name, g_handled AS handled, g_bounces AS bounces, g_blocks AS blocks, g_complaints AS complaints
+       FROM campaigns WHERE status = 'sending' AND paused_reason IS NULL AND counters_ok = 1`,
   );
   for (const c of campaigns) {
-    const line = crossedLine(guardStats(db, c.id, c.guard_since));
+    const line = crossedLine({ handled: Number(c.handled), bounces: Number(c.bounces), blocks: Number(c.blocks), complaints: Number(c.complaints) });
     if (!line) continue;
     const reason: PauseReason = { ...line, at: now() };
     run(db, 'UPDATE campaigns SET paused_reason = ?, updated_at = ? WHERE id = ? AND paused_reason IS NULL', JSON.stringify(reason), now(), c.id);

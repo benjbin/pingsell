@@ -61,6 +61,7 @@ Après le redéploiement, le service `mta` apparaît dans la liste. Aucune varia
 | `MAIL_WARMUP_START` | vide (sans limite) | **À remplir** avec le premier jour d'envoi (`2026-11-20` par exemple) |
 | `MAIL_WARMUP_INITIAL` / `MAIL_WARMUP_GROWTH` / `MAIL_WARMUP_MAX` | `200` / `1.4` / `100000` | Plafond du jour 1, croissance quotidienne, plafond final |
 | `EMAIL_PROVIDER` | `smtp` | `log` = rien ne part (tests) ; `ses` reste possible |
+| `SES_SNS_TOPIC_ARNS` | vide (route coupée) | Seulement avec `EMAIL_PROVIDER=ses` : ARN du ou des topics SNS (séparés par des virgules) qui reçoivent les rebonds et plaintes SES. Abonner le topic en HTTPS à `<PUBLIC_URL>/webhooks/ses` (la confirmation d'abonnement est faite automatiquement, la signature SNS est vérifiée), et le choisir comme destination d'événements *Bounce* + *Complaint* du configuration set SES (ou comme topic de notification de l'identité, avec « include original headers ») |
 
 ## 4. Warm-up : faire monter l'IP en douceur
 

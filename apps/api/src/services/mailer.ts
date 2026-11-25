@@ -26,6 +26,26 @@ export interface EmailProvider {
   send(email: OutgoingEmail): Promise<SendResult>;
 }
 
+/**
+ * Whether a send error is worth retrying. Permanent: the provider refused this email or this recipient
+ * (SMTP 5xx, SES MessageRejected / unverified sender…). Transient: anything that says "not now" — timeouts,
+ * dropped connections, SMTP 4xx, SES throttling or a provider-side 5xx HTTP error. Unknown errors are retried
+ * (a bounded number of times by the worker) rather than losing the email.
+ */
+export function classifySendError(err: unknown): 'transient' | 'permanent' {
+  const e = (err ?? {}) as { name?: unknown; code?: unknown; responseCode?: unknown; $metadata?: { httpStatusCode?: unknown }; $retryable?: unknown };
+  const name = typeof e.name === 'string' ? e.name : '';
+  const code = typeof e.code === 'string' ? e.code : '';
+  const smtp = typeof e.responseCode === 'number' ? e.responseCode : null;
+  if (smtp !== null) return smtp >= 500 && smtp < 600 ? 'permanent' : 'transient';
+  if (['MessageRejected', 'MailFromDomainNotVerifiedException', 'BadRequestException', 'NotFoundException'].includes(name)) return 'permanent';
+  // Nodemailer refuses an address before talking to the server (bad syntax): retrying won't help.
+  if (code === 'EENVELOPE') return 'permanent';
+  const http = typeof e.$metadata?.httpStatusCode === 'number' ? e.$metadata.httpStatusCode : null;
+  if (http !== null && http >= 400 && http < 500 && http !== 429 && !e.$retryable && !/Throttl|TooManyRequests|LimitExceeded|SendingPaused|AccountSuspended/i.test(name)) return 'permanent';
+  return 'transient';
+}
+
 /** Formats `Name <email>` with RFC 5322 quoting when needed. */
 export function formatAddress(name: string, email: string): string {
   const clean = name.replace(/[\r\n]/g, ' ').trim();
@@ -61,12 +81,17 @@ export class SesProvider implements EmailProvider {
 
   async send(email: OutgoingEmail): Promise<SendResult> {
     const [{ SendEmailCommand }, client] = await Promise.all([import('@aws-sdk/client-sesv2'), this.getClient()]);
-    const headers = email.unsubscribeUrl
-      ? [
-          { Name: 'List-Unsubscribe', Value: `<${email.unsubscribeUrl}>` },
-          { Name: 'List-Unsubscribe-Post', Value: 'List-Unsubscribe=One-Click' },
-        ]
-      : undefined;
+    // X-Pingsell-Message lets the SNS bounce / complaint notifications (POST /webhooks/ses) find the message
+    // when the notification carries the original headers rather than the email tags.
+    const headers = [
+      { Name: 'X-Pingsell-Message', Value: email.messageId.replace(/[^\w-]/g, '') },
+      ...(email.unsubscribeUrl
+        ? [
+            { Name: 'List-Unsubscribe', Value: `<${email.unsubscribeUrl}>` },
+            { Name: 'List-Unsubscribe-Post', Value: 'List-Unsubscribe=One-Click' },
+          ]
+        : []),
+    ];
     const result = await client.send(
       new SendEmailCommand({
         FromEmailAddress: formatAddress(email.fromName, email.fromEmail),

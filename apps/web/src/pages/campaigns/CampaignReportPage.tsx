@@ -84,10 +84,12 @@ export function CampaignReportPage() {
   // Poll while the worker is sending.
   useEffect(() => {
     if (!inProgress) return;
+    // Every 5 s, and not while the tab is in the background.
     const timer = setInterval(() => {
+      if (document.hidden) return;
       void campaign.reload();
       void stats.reload();
-    }, 3000);
+    }, 5000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inProgress]);

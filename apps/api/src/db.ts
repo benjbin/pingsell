@@ -667,6 +667,73 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   UPDATE campaigns SET queued_at = COALESCE(sent_at, updated_at)
    WHERE EXISTS (SELECT 1 FROM messages m WHERE m.campaign_id = campaigns.id);
   `,
+  // [envoi] Campagnes de 2 M de destinataires sans bloquer l'API ni remplir le disque.
+  // Tout est rapide sur la base de production : uniquement des ADD COLUMN, des index et une petite table.
+  //  - messages.html n'est plus rempli pour les messages de campagne ('' : rendu à l'envoi depuis campaigns.html).
+  //  - messages.in_queue : 1 en file, 0 sorti de la file, NULL = ligne d'avant cette version. Les nouveaux index
+  //    sont partiels sur cette colonne : les anciennes lignes (html de 143 Ko en pages de débordement, colonnes
+  //    status / sent_at… placées après) ne sont jamais relues pour construire les index.
+  //  - compteurs par campagne (statistiques, garde-fou, fin d'envoi) au lieu de recompter les messages à chaque tick ;
+  //    counters_ok = 0 pour les campagnes existantes, rattrapées en tâche de fond par le worker (app_state.backfill_*).
+  //  - events.message_id / campaign_id indexés (désinscriptions par campagne sans json_extract).
+  //  - contacts.last_engaged_at / last_sent_at / sends_since_engaged : ordre d'envoi et « sunset » sans relire l'historique.
+  //  - sends_daily : compteur du warm-up.
+  `
+  ALTER TABLE messages ADD COLUMN in_queue INTEGER;
+  ALTER TABLE messages ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE messages ADD COLUMN next_attempt_at TEXT;
+  CREATE INDEX idx_messages_queue ON messages(campaign_id) WHERE in_queue = 1;
+  CREATE UNIQUE INDEX idx_messages_campaign_contact ON messages(campaign_id, contact_id)
+    WHERE in_queue IS NOT NULL AND campaign_id IS NOT NULL AND contact_id IS NOT NULL;
+  CREATE INDEX idx_messages_campaign_sent ON messages(campaign_id, sent_at) WHERE in_queue IS NOT NULL AND campaign_id IS NOT NULL;
+  CREATE INDEX idx_messages_campaign_opened ON messages(campaign_id, opened_at) WHERE in_queue IS NOT NULL AND opened_at IS NOT NULL;
+  CREATE INDEX idx_messages_campaign_clicked ON messages(campaign_id, clicked_at) WHERE in_queue IS NOT NULL AND clicked_at IS NOT NULL;
+  CREATE INDEX idx_messages_campaign_failed ON messages(campaign_id) WHERE in_queue IS NOT NULL AND status IN ('failed', 'bounced');
+  UPDATE OR IGNORE messages SET in_queue = 1 WHERE status = 'queued';
+
+  ALTER TABLE campaigns ADD COLUMN deleted_at TEXT;
+  ALTER TABLE campaigns ADD COLUMN purge_pending INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN lean INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN queue_cursor TEXT;
+  ALTER TABLE campaigns ADD COLUMN queue_attempts INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN queue_retry_at TEXT;
+  ALTER TABLE campaigns ADD COLUMN queue_error TEXT;
+  ALTER TABLE campaigns ADD COLUMN counters_ok INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN n_total INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN n_queued INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN n_sent INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN n_failed INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN n_bounced INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN n_opened INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN n_clicked INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN n_complained INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN n_unsub INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN g_handled INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN g_bounces INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN g_blocks INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN g_complaints INTEGER NOT NULL DEFAULT 0;
+  CREATE INDEX idx_campaigns_status ON campaigns(status);
+
+  CREATE TABLE campaign_hours (
+    campaign_id TEXT NOT NULL,
+    hour TEXT NOT NULL,
+    opens INTEGER NOT NULL DEFAULT 0,
+    clicks INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (campaign_id, hour)
+  ) WITHOUT ROWID;
+
+  ALTER TABLE events ADD COLUMN message_id TEXT;
+  ALTER TABLE events ADD COLUMN campaign_id TEXT;
+  CREATE INDEX idx_events_message ON events(message_id) WHERE message_id IS NOT NULL;
+  CREATE INDEX idx_events_campaign ON events(campaign_id, type) WHERE campaign_id IS NOT NULL;
+
+  ALTER TABLE contacts ADD COLUMN last_engaged_at TEXT;
+  ALTER TABLE contacts ADD COLUMN last_sent_at TEXT;
+  ALTER TABLE contacts ADD COLUMN sends_since_engaged INTEGER NOT NULL DEFAULT 0;
+
+  CREATE TABLE sends_daily (day TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS app_state (key TEXT PRIMARY KEY, value TEXT);
+  `,
 ];
 
 const BUSY_TIMEOUT_MS = 1000;

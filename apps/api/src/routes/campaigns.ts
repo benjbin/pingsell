@@ -1,7 +1,7 @@
 import { convertEmailImages } from '../services/emailImages.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { all, get, newId, now, run, scalar, transaction, type SQLInputValue } from '../db.js';
+import { all, get, newId, now, run, scalar, type SQLInputValue } from '../db.js';
 import type { Deps } from '../deps.js';
 import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString, zmsg } from '../lib/http.js';
 import {
@@ -11,6 +11,7 @@ import {
   campaignStatsMap,
   campaignStatsSummary,
   serializeCampaign,
+  stopCampaign,
 } from '../services/campaigns.js';
 import { findContactByEmail, isValidEmail, normalizeEmail } from '../services/contacts.js';
 import { accountSender, createMessage, markFailed, markSent } from '../services/messages.js';
@@ -39,7 +40,7 @@ type Params = { Params: { id: string } };
 
 export async function campaignRoutes(app: FastifyInstance, { db, config, provider, kickWorker }: Deps) {
   const load = (accountId: string, id: string) => {
-    const row = get(db, 'SELECT * FROM campaigns WHERE id = ? AND account_id = ?', id, accountId);
+    const row = get(db, 'SELECT * FROM campaigns WHERE id = ? AND account_id = ? AND deleted_at IS NULL', id, accountId);
     if (!row) throw notFound(t('Campagne introuvable', 'Campaign not found'));
     return serializeCampaign(row);
   };
@@ -67,7 +68,7 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
 
   app.get('/campaigns', async (request) => {
     const p = pagination(request.query);
-    const where = ['account_id = ?'];
+    const where = ['account_id = ?', 'deleted_at IS NULL'];
     const params: SQLInputValue[] = [request.accountId];
     const status = queryString(request.query, 'status');
     if (status) {
@@ -181,11 +182,13 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
   app.delete<Params>('/campaigns/:id', async (request, reply) => {
     const campaign = load(request.accountId, request.params.id);
     if (campaign.status === 'sending') throw conflict(t("Impossible de supprimer une campagne en cours d'envoi", 'You can’t delete a campaign that is sending'));
-    transaction(db, () => {
-      // Keep message history (account-level statistics) but detach it from the campaign.
-      run(db, 'UPDATE messages SET campaign_id = NULL WHERE campaign_id = ?', campaign.id);
+    // A campaign that never sent anything simply goes. One with messages is only hidden (soft delete): its
+    // message history stays for the account-level statistics, without rewriting millions of message rows.
+    if (get(db, 'SELECT 1 AS x FROM messages WHERE campaign_id = ? LIMIT 1', campaign.id)) {
+      run(db, "UPDATE campaigns SET deleted_at = ?, status = CASE WHEN status = 'scheduled' THEN 'draft' ELSE status END, updated_at = ? WHERE id = ?", now(), now(), campaign.id);
+    } else {
       run(db, 'DELETE FROM campaigns WHERE id = ?', campaign.id);
-    });
+    }
     return reply.code(204).send();
   });
 
@@ -286,20 +289,26 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
   app.post<Params>('/campaigns/:id/resume', async (request) => {
     const campaign = load(request.accountId, request.params.id);
     if (campaign.status !== 'sending' || !campaign.paused) throw conflict(t("Cette campagne n'est pas en pause", 'This campaign isn’t paused'));
-    run(db, 'UPDATE campaigns SET paused_reason = NULL, guard_since = ?, updated_at = ? WHERE id = ?', now(), now(), campaign.id);
+    run(
+      db,
+      'UPDATE campaigns SET paused_reason = NULL, guard_since = ?, g_handled = 0, g_bounces = 0, g_blocks = 0, g_complaints = 0, updated_at = ? WHERE id = ?',
+      now(),
+      now(),
+      campaign.id,
+    );
     kickWorker();
     return withStats(request.accountId, campaign.id);
   });
 
-  /** Stops for good: the emails not sent yet are dropped, the campaign ends with what already left. */
+  /**
+   * Stops for good: the campaign ends at once with what already left (nothing more is sent from now on, not even
+   * from the batch in flight); the emails not sent yet are deleted in the background by small chunks.
+   */
   app.post<Params>('/campaigns/:id/stop', async (request) => {
     const campaign = load(request.accountId, request.params.id);
     if (campaign.status !== 'sending') throw conflict(t("Cette campagne n'est pas en cours d'envoi", 'This campaign isn’t sending'));
-    transaction(db, () => {
-      run(db, "DELETE FROM messages WHERE campaign_id = ? AND status = 'queued'", campaign.id);
-      const sent = scalar(db, "SELECT COUNT(*) FROM messages WHERE campaign_id = ? AND status IN ('sent','bounced')", campaign.id);
-      run(db, 'UPDATE campaigns SET status = ?, paused_reason = NULL, sent_at = COALESCE(sent_at, ?), updated_at = ? WHERE id = ?', sent > 0 ? 'sent' : 'failed', now(), now(), campaign.id);
-    });
+    stopCampaign(db, campaign.id);
+    kickWorker();
     return withStats(request.accountId, campaign.id);
   });
 
@@ -308,42 +317,154 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     return campaignStatsDetail(db, campaign.id);
   });
 
-  /** Who the campaign went to, with what happened for each person (sent, opened, clicked, failed, unsubscribed). */
+  /**
+   * Who the campaign went to, with what happened for each person (sent, opened, clicked, failed, unsubscribed).
+   * Polled while sending, so it never scans the whole campaign: each filter walks its own index, totals come from
+   * the campaign counters, "unsubscribed" is looked up for the rows of the page only, and a search looks through
+   * the SEARCH_WINDOW most recent recipients of a large campaign (`search_truncated: true` when it stopped there).
+   */
   app.get<Params>('/campaigns/:id/recipients', async (request) => {
     const campaign = load(request.accountId, request.params.id);
     const p = pagination(request.query);
-    const unsub = `EXISTS (SELECT 1 FROM events e WHERE e.account_id = m.account_id AND e.type = 'unsubscribe' AND json_extract(e.data, '$.message_id') = m.id)`;
-    const where = ['m.campaign_id = ?', 'm.account_id = ?'];
-    const params: SQLInputValue[] = [campaign.id, request.accountId];
-    const filter = queryString(request.query, 'filter');
-    if (filter === 'opened') where.push('m.opened_at IS NOT NULL');
-    else if (filter === 'clicked') where.push('m.clicked_at IS NOT NULL');
-    else if (filter === 'not_opened') where.push("m.status = 'sent' AND m.opened_at IS NULL");
-    else if (filter === 'failed') where.push("m.status IN ('failed', 'bounced')");
-    else if (filter === 'unsubscribed') where.push(unsub);
-    else if (filter === 'queued') where.push("m.status = 'queued'");
-    const search = queryString(request.query, 'search');
-    if (search) {
-      const like = `%${search.toLowerCase().replace(/[\\%_]/g, (x) => `\\${x}`)}%`;
-      where.push(`(LOWER(m.to_email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) LIKE ? ESCAPE '\\')`);
-      params.push(like, like);
-    }
-    const whereSql = where.join(' AND ');
-    const total = scalar(db, `SELECT COUNT(*) FROM messages m LEFT JOIN contacts c ON c.id = m.contact_id WHERE ${whereSql}`, ...params);
-    const rows = all<{
-      id: string; contact_id: string | null; to_email: string; first_name: string | null; last_name: string | null;
-      status: string; error: string | null; sent_at: string | null; opened_at: string | null; clicked_at: string | null; unsubscribed: number;
-    }>(
+    const meta = get<Record<string, number>>(
       db,
-      `SELECT m.id, m.contact_id, m.to_email, c.first_name, c.last_name, m.status, m.error, m.sent_at, m.opened_at, m.clicked_at, ${unsub} AS unsubscribed
-         FROM messages m LEFT JOIN contacts c ON c.id = m.contact_id
-        WHERE ${whereSql}
-        ORDER BY COALESCE(m.clicked_at, m.opened_at, m.sent_at, m.created_at) DESC, m.id
-        LIMIT ? OFFSET ?`,
-      ...params,
-      p.limit,
-      p.offset,
-    );
-    return listResponse(rows.map((r) => ({ ...r, unsubscribed: !!r.unsubscribed })), total, p);
+      'SELECT lean, counters_ok, n_total, n_queued, n_sent, n_failed, n_bounced, n_opened, n_clicked, n_unsub FROM campaigns WHERE id = ?',
+      campaign.id,
+    )!;
+    const n = (k: string) => Number(meta[k] ?? 0);
+    // Campaigns queued by this version: their messages are in the partial indexes (in_queue IS NOT NULL).
+    const lean = !!n('lean');
+    const where = ['m.campaign_id = ?'];
+    const params: SQLInputValue[] = [campaign.id];
+    if (lean) where.push('m.in_queue IS NOT NULL');
+    let order = lean ? 'm.sent_at DESC, m.rowid DESC' : 'm.rowid DESC';
+    const filter = queryString(request.query, 'filter');
+    let counted: number | null = n('counters_ok') ? n('n_total') : null;
+    const ifCounted = (v: number) => (counted === null ? null : v);
+    if (filter === 'opened') {
+      where.push('m.opened_at IS NOT NULL');
+      if (lean) order = 'm.opened_at DESC, m.rowid DESC';
+      counted = ifCounted(n('n_opened'));
+    } else if (filter === 'clicked') {
+      where.push('m.clicked_at IS NOT NULL');
+      if (lean) order = 'm.clicked_at DESC, m.rowid DESC';
+      counted = ifCounted(n('n_clicked'));
+    } else if (filter === 'not_opened') {
+      where.push("m.sent_at IS NOT NULL AND m.status = 'sent' AND m.opened_at IS NULL");
+      // Opens on emails that bounced afterwards are rare: close enough for a page count.
+      counted = ifCounted(Math.max(0, n('n_sent') - n('n_opened')));
+    } else if (filter === 'failed') {
+      where.push("m.status IN ('failed', 'bounced')");
+      order = 'm.rowid DESC';
+      counted = ifCounted(n('n_failed') + n('n_bounced'));
+    } else if (filter === 'unsubscribed') {
+      // Events carry the campaign id since this version; older ones only have it in their JSON.
+      where.push(
+        `m.id IN (SELECT message_id FROM events WHERE campaign_id = ? AND type = 'unsubscribe' AND message_id IS NOT NULL${
+          lean
+            ? ''
+            : ` UNION SELECT json_extract(data, '$.message_id') FROM events
+                 WHERE account_id = ? AND type = 'unsubscribe' AND created_at >= ? AND campaign_id IS NULL AND json_extract(data, '$.campaign_id') = ?`
+        })`,
+      );
+      params.push(campaign.id, ...(lean ? [] : [request.accountId, campaign.created_at, campaign.id]));
+      // Driven by the (few) unsubscribe events, not by the campaign's index ("+" keeps the planner off it).
+      where[0] = '+m.campaign_id = ?';
+      if (lean) where[1] = '+m.in_queue IS NOT NULL';
+      order = 'm.rowid DESC';
+      counted = ifCounted(n('n_unsub'));
+    } else if (filter === 'queued') {
+      where.push(lean ? 'm.in_queue = 1' : "m.status = 'queued'");
+      order = 'm.rowid DESC';
+      counted = ifCounted(n('n_queued'));
+    }
+    const cols = 'm.rowid AS rid, m.id, m.contact_id, m.to_email, m.status, m.error, m.sent_at, m.opened_at, m.clicked_at';
+    const whereSql = where.join(' AND ');
+    const outerOrder = order.replace(/m\.rowid/g, 'm.rid');
+    const search = queryString(request.query, 'search');
+    type RecipientRow = {
+      id: string; contact_id: string | null; to_email: string; first_name: string | null; last_name: string | null;
+      status: string; error: string | null; sent_at: string | null; opened_at: string | null; clicked_at: string | null;
+    };
+    const select = 'SELECT m.id, m.contact_id, m.to_email, c.first_name, c.last_name, m.status, m.error, m.sent_at, m.opened_at, m.clicked_at';
+    let rows: RecipientRow[];
+    let total: number;
+    let truncated = false;
+    if (!search) {
+      // The page is cut from the index first, then joined with the contacts.
+      rows = all<RecipientRow>(
+        db,
+        `${select} FROM (SELECT ${cols} FROM messages m WHERE ${whereSql} ORDER BY ${order} LIMIT ? OFFSET ?) m
+           LEFT JOIN contacts c ON c.id = m.contact_id ORDER BY ${outerOrder}`,
+        ...params,
+        p.limit,
+        p.offset,
+      );
+      total = counted ?? scalar(db, `SELECT COUNT(*) FROM messages m WHERE ${whereSql}`, ...params);
+    } else {
+      const term = search.toLowerCase();
+      const like = `%${term.replace(/[\\%_]/g, (x) => `\\${x}`)}%`;
+      const searchSql = `(LOWER(m.to_email) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) LIKE ? ESCAPE '\\')`;
+      // 1. Anywhere in the email or the name, among the SEARCH_WINDOW first recipients in display order…
+      const hits = new Set(
+        all<{ rid: number }>(
+          db,
+          `SELECT m.rid FROM (SELECT ${cols} FROM messages m WHERE ${whereSql} ORDER BY ${order}${lean ? ` LIMIT ${SEARCH_WINDOW}` : ''}) m
+             LEFT JOIN contacts c ON c.id = m.contact_id WHERE ${searchSql}`,
+          ...params,
+          like,
+          like,
+        ).map((r) => r.rid),
+      );
+      // 2. …plus, over the whole campaign, the addresses that start with the search (contacts' email index).
+      for (const r of all<{ rid: number }>(
+        db,
+        `SELECT m.rowid AS rid FROM (SELECT id FROM contacts WHERE account_id = ? AND email >= ? AND email < ? LIMIT 200) pc
+           CROSS JOIN messages m ON m.contact_id = pc.id WHERE ${whereSql}`,
+        request.accountId,
+        term,
+        `${term}￿`,
+        ...params,
+      )) hits.add(r.rid);
+      truncated = lean && (counted ?? SEARCH_WINDOW + 1) > SEARCH_WINDOW;
+      total = hits.size;
+      rows = all<RecipientRow>(
+        db,
+        `${select} FROM messages m LEFT JOIN contacts c ON c.id = m.contact_id
+          WHERE m.rowid IN (SELECT value FROM json_each(?)) ORDER BY ${order} LIMIT ? OFFSET ?`,
+        JSON.stringify([...hits]),
+        p.limit,
+        p.offset,
+      );
+    }
+    const unsubscribed = unsubscribedAmong(campaign, rows.map((r) => r.id), lean);
+    return {
+      ...listResponse(rows.map((r) => ({ ...r, unsubscribed: unsubscribed.has(r.id) })), total, p),
+      ...(search ? { search_truncated: truncated } : {}),
+    };
   });
+
+  /** Which of these messages (one page) led to an unsubscribe. */
+  function unsubscribedAmong(campaign: { account_id: string; created_at: string }, ids: string[], lean: boolean): Set<string> {
+    const out = new Set<string>();
+    if (!ids.length) return out;
+    const marks = ids.map(() => '?').join(',');
+    for (const r of all<{ mid: string }>(db, `SELECT message_id AS mid FROM events WHERE message_id IN (${marks}) AND type = 'unsubscribe'`, ...ids)) out.add(r.mid);
+    if (!lean) {
+      // Unsubscribes recorded before events had a message_id column (bounded: this account, since the campaign).
+      for (const r of all<{ mid: string }>(
+        db,
+        `SELECT json_extract(data, '$.message_id') AS mid FROM events
+          WHERE account_id = ? AND type = 'unsubscribe' AND created_at >= ? AND message_id IS NULL
+            AND json_extract(data, '$.message_id') IN (${marks})`,
+        campaign.account_id,
+        campaign.created_at,
+        ...ids,
+      )) out.add(r.mid);
+    }
+    return out;
+  }
 }
+
+/** A search in the recipients of a large campaign looks through this many of its most recent recipients. */
+const SEARCH_WINDOW = 10_000;

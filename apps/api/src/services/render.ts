@@ -179,14 +179,28 @@ export function htmlToText(html: string): string {
 
 /** Full rendering pipeline for one recipient. */
 export function renderEmail(input: RenderInput): RenderedEmail {
+  return personalizeEmail(prepareTemplate(input.html, input.senderName), input);
+}
+
+/**
+ * The part of the rendering that is the same for every recipient (document wrapper, unsubscribe footer,
+ * dark-mode guard). Computed once per campaign and reused for each recipient by personalizeEmail().
+ * Depends on the current language (footer texts), like renderEmail.
+ */
+export function prepareTemplate(rawHtml: string, senderName: string): string {
+  let html = ensureDocument(rawHtml || '');
+  if (!hasUnsubscribeTag(html)) html = insertBeforeBodyEnd(html, unsubscribeFooter(senderName, isDarkEmail(html)));
+  // Before the preheader and the tracking pixel, which need no protection.
+  return guardDarkEmail(html);
+}
+
+/** Per-recipient part of the rendering: `prepared` comes from prepareTemplate (input.html is ignored). */
+export function personalizeEmail(prepared: string, input: Omit<RenderInput, 'html' | 'senderName'>): RenderedEmail {
   const { messageId, publicUrl, contact } = input;
   const tracking = input.tracking ?? true;
   const unsubscribeUrl = `${publicUrl}/u/${messageId}`;
 
-  let html = ensureDocument(input.html || '');
-  if (!hasUnsubscribeTag(html)) html = insertBeforeBodyEnd(html, unsubscribeFooter(input.senderName, isDarkEmail(html)));
-  // Before the preheader and the tracking pixel, which need no protection.
-  html = guardDarkEmail(html);
+  let html = prepared;
   if (input.preheader) {
     const pre = escapeHtml(applyMergeTags(input.preheader, contact, unsubscribeUrl, 'text'));
     html = insertAfterBodyStart(
@@ -205,6 +219,11 @@ export function renderEmail(input: RenderInput): RenderedEmail {
 
   const subject = tidySubject(applyMergeTags(input.subject, contact, unsubscribeUrl, 'text'));
   return { subject, html, text: htmlToText(html), unsubscribeUrl };
+}
+
+/** The subject renderEmail would produce for this recipient (stored on the queued message, without the body). */
+export function renderSubject(subject: string, contact: MergeContact, publicUrl: string, messageId: string): string {
+  return tidySubject(applyMergeTags(subject, contact, `${publicUrl}/u/${messageId}`, 'text'));
 }
 
 /** Cleans a subject after merge: collapses spaces, drops punctuation left dangling by an empty tag. */

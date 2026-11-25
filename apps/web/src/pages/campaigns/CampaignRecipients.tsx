@@ -30,7 +30,10 @@ export function CampaignRecipients({ campaignId, stats, live }: { campaignId: st
   // Follow the sending progress.
   useEffect(() => {
     if (!live) return;
-    const timer = setInterval(() => void list.reload(), 4000);
+    // Every 10 s, and not while the tab is in the background.
+    const timer = setInterval(() => {
+      if (!document.hidden) void list.reload();
+    }, 10_000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live]);

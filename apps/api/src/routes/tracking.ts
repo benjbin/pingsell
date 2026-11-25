@@ -5,6 +5,7 @@ import { cancelRunsForContact, fireTrigger } from '../services/automations.js';
 import { recordEvent } from '../services/contacts.js';
 import { decorateLink } from '../services/webTracking.js';
 import { escapeHtml } from '../services/render.js';
+import { bumpCampaign, markClicked, markOpened, messageHtml } from '../services/messages.js';
 import { currentLang, t } from '../i18n.js';
 import { WORKER_STALE_MS, workerTickAgeMs } from '../lib/health.js';
 
@@ -12,13 +13,15 @@ import { WORKER_STALE_MS, workerTickAgeMs } from '../lib/health.js';
 const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** What the tracking routes need of a message: never its HTML (up to ~150 KB), read only to check a click. */
 interface MessageRow {
+  rid: number;
   id: string;
   account_id: string;
   campaign_id: string | null;
   automation_id: string | null;
   contact_id: string | null;
-  html: string;
+  to_email: string;
   opened_at: string | null;
   clicked_at: string | null;
 }
@@ -46,12 +49,12 @@ function page(reply: FastifyReply, status: number, title: string, body: string) 
 </html>`);
 }
 
-export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
+export async function trackingRoutes(app: FastifyInstance, { db, config }: Deps) {
   const loadMessage = (id: string) =>
     UUID_RE.test(id)
       ? get<MessageRow>(
           db,
-          'SELECT id, account_id, campaign_id, automation_id, contact_id, html, opened_at, clicked_at FROM messages WHERE id = ?',
+          'SELECT rowid AS rid, id, account_id, campaign_id, automation_id, contact_id, to_email, opened_at, clicked_at FROM messages WHERE id = ?',
           id,
         )
       : undefined;
@@ -90,8 +93,7 @@ export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
     const message = loadMessage(id);
     if (message && !message.opened_at) {
       transaction(db, () => {
-        const changed = run(db, 'UPDATE messages SET opened_at = ? WHERE id = ? AND opened_at IS NULL', now(), id);
-        if (changed) recordEvent(db, message.account_id, message.contact_id, 'open', eventData(message));
+        if (markOpened(db, message, now())) recordEvent(db, message.account_id, message.contact_id, 'open', eventData(message));
       });
     }
     return reply
@@ -106,11 +108,13 @@ export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
     const target = typeof request.query.u === 'string' ? request.query.u : '';
     const message = loadMessage(request.params.id);
     const encoded = encodeURIComponent(target);
-    const legit =
-      message &&
-      /^https?:\/\//i.test(target) &&
-      (message.html.includes(encoded) || message.html.includes(escapeHtml(encoded)));
-    if (!legit) {
+    let legit = false;
+    if (message && /^https?:\/\//i.test(target)) {
+      // Campaign emails store no HTML: rendered again from the campaign, with the same links.
+      const html = messageHtml(db, config, get(db, 'SELECT id, account_id, campaign_id, contact_id, to_email, html FROM messages WHERE id = ?', message.id) ?? {});
+      legit = html.includes(encoded) || html.includes(escapeHtml(encoded));
+    }
+    if (!message || !legit) {
       return page(
         reply,
         404,
@@ -119,10 +123,9 @@ export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
       );
     }
     transaction(db, () => {
-      const timestamp = now();
       // A click implies the email was opened (pixel blocked by the client, for instance).
-      run(db, 'UPDATE messages SET opened_at = COALESCE(opened_at, ?), clicked_at = COALESCE(clicked_at, ?) WHERE id = ?', timestamp, timestamp, message.id);
-      if (!message.opened_at) recordEvent(db, message.account_id, message.contact_id, 'open', eventData(message, { via: 'click' }));
+      const { opened } = markClicked(db, message, now());
+      if (opened) recordEvent(db, message.account_id, message.contact_id, 'open', eventData(message, { via: 'click' }));
       recordEvent(db, message.account_id, message.contact_id, 'click', eventData(message, { url: target }));
       if (message.contact_id) fireTrigger(db, message.account_id, message.contact_id, 'email_clicked', { url: target, campaign_id: message.campaign_id ?? null, automation_id: message.automation_id ?? null });
     });
@@ -137,39 +140,67 @@ export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
       if (!contact) return false;
       if (contact.status !== 'unsubscribed') {
         run(db, "UPDATE contacts SET status = 'unsubscribed', updated_at = ? WHERE id = ?", now(), message.contact_id!);
-        recordEvent(db, message.account_id, message.contact_id, 'unsubscribe', eventData(message, { method }));
+        const eventId = recordEvent(db, message.account_id, message.contact_id, 'unsubscribe', eventData(message, { method }));
+        // Indexed columns: the campaign report counts and lists its unsubscribes without reading the JSON.
+        run(db, 'UPDATE events SET message_id = ?, campaign_id = ? WHERE id = ?', message.id, message.campaign_id, eventId);
+        bumpCampaign(db, message.campaign_id, message.rid, { n_unsub: 1 });
         cancelRunsForContact(db, message.contact_id!);
       }
       return true;
     });
   };
 
-  // The page follows the visitor's browser language (Accept-Language), not the sender's.
+  const notFoundPage = (reply: FastifyReply) =>
+    page(
+      reply,
+      404,
+      t('Lien introuvable', 'Link not found'),
+      `<p style="margin:0;color:#475569;">${t('Ce lien de désinscription est invalide.', 'This unsubscribe link is invalid.')}</p>`,
+    );
+
+  const testPage = (reply: FastifyReply) =>
+    page(
+      reply,
+      200,
+      t('Email de test', 'Test email'),
+      `<p style="margin:0;color:#475569;">${t(
+        "Cet email était un envoi de test : aucune désinscription n'est nécessaire.",
+        'This was a test email: no need to unsubscribe.',
+      )}</p>`,
+    );
+
+  const senderName = (message: MessageRow) =>
+    escapeHtml(get<{ name: string }>(db, 'SELECT name FROM accounts WHERE id = ?', message.account_id)?.name ?? t('cet expéditeur', 'this sender'));
+
+  // The pages follow the visitor's browser language (Accept-Language), not the sender's.
+  // GET only asks for a confirmation: link scanners (corporate mail filters, antivirus) open every link of an
+  // email, and must not unsubscribe people who never clicked. The button POSTs to the same address.
   app.get<{ Params: { id: string } }>('/u/:id', async (request, reply) => {
     const message = loadMessage(request.params.id);
-    if (!message) {
-      return page(
-        reply,
-        404,
-        t('Lien introuvable', 'Link not found'),
-        `<p style="margin:0;color:#475569;">${t('Ce lien de désinscription est invalide.', 'This unsubscribe link is invalid.')}</p>`,
-      );
-    }
-    const account = get<{ name: string }>(db, 'SELECT name FROM accounts WHERE id = ?', message.account_id);
-    const sender = escapeHtml(account?.name ?? t('cet expéditeur', 'this sender'));
-    if (!message.contact_id) {
-      return page(
-        reply,
-        200,
-        t('Email de test', 'Test email'),
-        `<p style="margin:0;color:#475569;">${t(
-          "Cet email était un envoi de test : aucune désinscription n'est nécessaire.",
-          'This was a test email: no need to unsubscribe.',
-        )}</p>`,
-      );
-    }
-    unsubscribe(message, 'link');
+    if (!message) return notFoundPage(reply);
+    if (!message.contact_id) return testPage(reply);
+    const sender = senderName(message);
+    const contact = get<{ status: string }>(db, 'SELECT status FROM contacts WHERE id = ?', message.contact_id);
+    if (contact?.status === 'unsubscribed') return unsubscribedPage(reply, sender);
     return page(
+      reply,
+      200,
+      t('Se désinscrire ?', 'Unsubscribe?'),
+      `<p style="margin:0 0 24px;color:#475569;line-height:24px;">${t(
+        `Vous ne recevrez plus d'emails marketing de <strong>${sender}</strong> à l'adresse ${escapeHtml(message.to_email)}.`,
+        `You won’t receive any more marketing emails from <strong>${sender}</strong> at ${escapeHtml(message.to_email)}.`,
+      )}</p>
+       <form method="post" style="margin:0;">
+         <button type="submit" style="appearance:none;border:0;border-radius:10px;background:#0B214A;color:#fff;font:600 16px/24px Inter,Segoe UI,Helvetica,Arial,sans-serif;padding:12px 28px;cursor:pointer;">${t(
+           'Confirmer la désinscription',
+           'Confirm unsubscribe',
+         )}</button>
+       </form>`,
+    );
+  });
+
+  const unsubscribedPage = (reply: FastifyReply, sender: string) =>
+    page(
       reply,
       200,
       t('Vous êtes désinscrit(e)', 'You’re unsubscribed'),
@@ -182,12 +213,19 @@ export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
          `Was this a mistake? Contact ${sender} directly to resubscribe.`,
        )}</p>`,
     );
-  });
 
-  // RFC 8058 one-click unsubscribe (List-Unsubscribe-Post).
+  // The confirmation button, and RFC 8058 one-click unsubscribe (List-Unsubscribe-Post: List-Unsubscribe=One-Click,
+  // sent by the mailbox provider itself): both unsubscribe.
   app.post<{ Params: { id: string } }>('/u/:id', async (request, reply) => {
     const message = loadMessage(request.params.id);
-    if (message) unsubscribe(message, 'one-click');
-    return reply.code(200).send({ ok: true });
+    const body = request.body;
+    const oneClick =
+      (typeof body === 'string' && /List-Unsubscribe=One-Click/i.test(body)) ||
+      (!!body && typeof body === 'object' && (body as Record<string, unknown>)['List-Unsubscribe'] === 'One-Click');
+    if (message) unsubscribe(message, oneClick ? 'one-click' : 'link');
+    if (oneClick || !String(request.headers.accept ?? '').includes('text/html')) return reply.code(200).send({ ok: true });
+    if (!message) return notFoundPage(reply);
+    if (!message.contact_id) return testPage(reply);
+    return unsubscribedPage(reply, senderName(message));
   });
 }

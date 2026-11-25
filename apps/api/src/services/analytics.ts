@@ -270,7 +270,7 @@ function campaignsTable(db: DatabaseSync, accountId: string, w: Window, credit: 
             (SELECT COUNT(*) FROM events e WHERE e.account_id = c.account_id AND e.type = 'unsubscribe'
                AND json_extract(e.data, '$.campaign_id') = c.id) AS unsubscribed
        FROM campaigns c JOIN messages m ON m.campaign_id = c.id
-      WHERE c.account_id = ? AND c.sent_at >= ? AND c.sent_at < ?
+      WHERE c.account_id = ? AND c.deleted_at IS NULL AND c.sent_at >= ? AND c.sent_at < ?
       GROUP BY c.id ORDER BY c.sent_at DESC`,
     accountId,
     w.start,
