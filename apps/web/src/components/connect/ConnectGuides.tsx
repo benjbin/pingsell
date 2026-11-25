@@ -206,6 +206,14 @@ export function ShopifyGuide({ done, onDone, returnTo }: GuideProps & { returnTo
     setSyncing(true);
     try {
       const r = await api.integrations.shopify.sync();
+      if (r.running) {
+        toast.success(
+          t("Synchronisation lancée", "Sync started"),
+          t("Vos clients et commandes arrivent en arrière-plan.", "Your customers and orders are being imported in the background."),
+        );
+        await load();
+        return;
+      }
       toast.success(
         t("Synchronisation terminée", "Sync complete"),
         t(

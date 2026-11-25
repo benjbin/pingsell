@@ -268,7 +268,7 @@ export async function queueCampaign(db: DatabaseSync, config: AppConfig, campaig
   let cursor: AudienceCursor | null = parseCursor(row.queue_cursor);
 
   if (!cursor) {
-    cursor = AUDIENCE_START;
+    cursor = { ...AUDIENCE_START, at: Date.now() };
     // First run: counters start from zero. A campaign half-queued by an older version keeps counters_ok = 0
     // (the worker's catch-up counts its old messages).
     const legacy = get(db, 'SELECT 1 AS x FROM messages WHERE campaign_id = ? LIMIT 1', campaignId);
@@ -334,7 +334,7 @@ export async function queueCampaign(db: DatabaseSync, config: AppConfig, campaig
           cursor = after < chosen.length ? { tier: 0, after } : null;
         } else {
           // Engaged contacts first, long-inactive contacts left out (see deliverability.ts).
-          const page = audiencePage(db, campaign.account_id, filter, cursor!, { sunset: true });
+          const page = audiencePage(db, campaign.account_id, filter, cursor!, { sunset: true, campaignId });
           add(page.recipients);
           skipped += page.skipped;
           cursor = page.next;

@@ -25,7 +25,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data && chown -R n
 
 VOLUME ["/data"]
 EXPOSE 4000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=600s --retries=3 \
   CMD wget -qO- "http://127.0.0.1:${PORT}/health" >/dev/null || exit 1
 
 # -s : tini reste sous-reaper quand Docker met déjà son propre init en PID 1 (compose `init: true`).

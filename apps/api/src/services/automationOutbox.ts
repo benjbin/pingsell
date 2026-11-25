@@ -9,16 +9,43 @@ import { t, withAccountLang } from '../i18n.js';
 import type { EmailProvider } from './mailer.js';
 import { renderSystemEmail } from './systemEmail.js';
 
+/** The 8 16-bit groups of an IPv6 address (handles "::" and a trailing dotted IPv4), or null. */
+function ipv6Groups(ip: string): number[] | null {
+  let v = ip.toLowerCase().replace(/%.*$/, '');
+  const dotted = v.match(/(\d+\.\d+\.\d+\.\d+)$/);
+  if (dotted) {
+    const p = dotted[1].split('.').map(Number);
+    v = v.slice(0, -dotted[1].length) + ((p[0] << 8) | p[1]).toString(16) + ':' + ((p[2] << 8) | p[3]).toString(16);
+  }
+  const halves = v.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  const groups = [...head, ...Array(Math.max(0, fill)).fill('0'), ...tail].map((g) => parseInt(g, 16));
+  return groups.length === 8 && groups.every((g) => Number.isInteger(g) && g >= 0 && g <= 0xffff) ? groups : null;
+}
+
 /** Private, loopback and link-local addresses: a merchant's webhook must never reach our own network. */
 export function isPrivateAddress(ip: string): boolean {
   if (isIP(ip) === 6) {
-    const v = ip.toLowerCase();
-    if (v === '::1' || v === '::' || v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe80')) return true;
-    const mapped = v.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    return mapped ? isPrivateAddress(mapped[1]) : false;
+    const g = ipv6Groups(ip);
+    if (!g) return true; // unparseable: refuse
+    // ::/80 prefix: unspecified, loopback, IPv4-compatible (::a.b.c.d) and IPv4-mapped (::ffff:a.b.c.d) → judge the IPv4.
+    if (g.slice(0, 5).every((x) => x === 0) && (g[5] === 0 || g[5] === 0xffff)) {
+      if (g[5] === 0 && g[6] === 0 && g[7] <= 1) return true; // :: and ::1
+      return isPrivateAddress(`${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}`);
+    }
+    if (g[0] === 0x64 && g[1] === 0xff9b) return true; // NAT64 64:ff9b::/96 (and /48 local use)
+    if ((g[0] & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
+    if ((g[0] & 0xffc0) === 0xfe80 || (g[0] & 0xffc0) === 0xfec0) return true; // fe80::/10 link-local, fec0::/10 site-local
+    if ((g[0] & 0xff00) === 0xff00) return true; // ff00::/8 multicast
+    if (g[0] === 0x2002) return isPrivateAddress(`${g[1] >> 8}.${g[1] & 255}.${g[2] >> 8}.${g[2] & 255}`); // 6to4
+    if (g[0] === 0x2001 && g[1] === 0) return true; // Teredo 2001::/32
+    return false;
   }
   const [a, b] = ip.split('.').map(Number);
-  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -267,7 +267,11 @@ async function refreshSegmentCounts(db: DatabaseSync, accountId: string, rows: A
       const p = offload(db, 'segmentCounts', accountId, [String(r.rules)]).then(
         ([count]) => {
           // Skipped if the rules changed meanwhile (that edit cleared counted_at and counts again).
-          run(db, 'UPDATE segments SET contacts_count = ?, counted_at = ? WHERE id = ? AND rules = ?', count, startedAt, id, String(r.rules));
+          try {
+            run(db, 'UPDATE segments SET contacts_count = ?, counted_at = ? WHERE id = ? AND rules = ?', count, startedAt, id, String(r.rules));
+          } catch (err) {
+            console.error('[segments] count not saved:', err);
+          }
           return count;
         },
         (err) => {
@@ -276,7 +280,7 @@ async function refreshSegmentCounts(db: DatabaseSync, accountId: string, rows: A
         },
       );
       counting.set(id, p);
-      p.finally(() => counting.delete(id));
+      p.finally(() => counting.delete(id)).catch(() => {});
     }
   }
   return Promise.all(rows.map((r) => counting.get(String(r.id)) ?? Promise.resolve(r.contacts_count == null ? null : Number(r.contacts_count))));

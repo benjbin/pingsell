@@ -282,9 +282,6 @@ export async function runBackup(source: DatabaseSync | string, cfg: BackupConfig
   try {
     mkdirSync(cfg.dir, { recursive: true, mode: 0o700 });
     cleanBackupLeftovers(cfg.dir, 10 * 60_000);
-    // Libère la place de la plus ancienne avant d'en écrire une nouvelle (keep - 1 anciennes + la nouvelle).
-    pruneBackups(cfg.dir, cfg.keep - 1);
-
     const dbBytes = fileSize(dbPath) + fileSize(`${dbPath}-wal`);
     const fs = statfsSync(cfg.dir);
     const free = Number(fs.bavail) * Number(fs.bsize);
@@ -292,6 +289,9 @@ export async function runBackup(source: DatabaseSync | string, cfg: BackupConfig
     if (free < needed) {
       throw new Error(`espace disque insuffisant (${gb(free)} libres, ${gb(needed)} nécessaires = ${BACKUP_FREE_SPACE_FACTOR} × la base) : sauvegarde ignorée`);
     }
+    // Espace vérifié : on libère la place de la plus ancienne avant d'écrire la nouvelle (keep - 1 anciennes + la nouvelle).
+    // Si l'espace manque, rien n'est supprimé : les anciennes sauvegardes restent.
+    pruneBackups(cfg.dir, cfg.keep - 1);
 
     const name = `pingsell-${stamp(date)}`;
     const plain = join(cfg.dir, `.${name}.db.tmp`);

@@ -35,6 +35,8 @@ export interface Recipient {
 export interface AudienceCursor {
   tier: number;
   after: number;
+  /** When queueing started (ms): fixes the tier boundaries for the whole walk. */
+  at?: number;
 }
 
 export const AUDIENCE_START: AudienceCursor = { tier: 0, after: 0 };
@@ -50,9 +52,9 @@ export function audiencePage(
   accountId: string,
   filter: { sql: string; params: SQLInputValue[] },
   cursor: AudienceCursor,
-  opts: { sunset: boolean; at?: number; scan?: number },
+  opts: { sunset: boolean; at?: number; scan?: number; campaignId?: string },
 ): { recipients: Recipient[]; skipped: number; next: AudienceCursor | null } {
-  const at = opts.at ?? Date.now();
+  const at = opts.at ?? cursor.at ?? Date.now();
   const scan = opts.scan ?? 250;
   const engagedSince = new Date(at - ENGAGED_DAYS * DAY_MS).toISOString();
   const sunsetSince = new Date(at - SUNSET_DAYS * DAY_MS).toISOString();
@@ -64,7 +66,9 @@ export function audiencePage(
             ELSE -1 END AS tier,
             CASE WHEN sends_since_engaged >= ? AND COALESCE(last_engaged_at, '') < ? THEN 1 ELSE 0 END AS sunset
        FROM contacts
-      WHERE account_id = ? AND status = 'subscribed' AND rowid > ?
+      WHERE account_id = ? AND status = 'subscribed' AND rowid > ?${
+        opts.campaignId ? ' AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.campaign_id = ? AND m.contact_id = contacts.id AND m.in_queue IS NOT NULL)' : ''
+      }
       ORDER BY rowid LIMIT ?`,
     ...filter.params,
     engagedSince,
@@ -72,12 +76,16 @@ export function audiencePage(
     sunsetSince,
     accountId,
     cursor.after,
+    ...(opts.campaignId ? [opts.campaignId] : []),
     scan,
   );
   const recipients: Recipient[] = [];
   let skipped = 0;
   for (const r of rows) {
-    if (r.tier !== cursor.tier) continue;
+    // A later pass also takes contacts whose tier went down after an earlier pass went past them
+    // (e.g. a cold contact who opened an older email meanwhile): nobody is left out. The unique index on
+    // (campaign, contact) and the NOT EXISTS above keep anyone from being queued twice.
+    if (r.tier < 0 || r.tier > cursor.tier) continue;
     if (opts.sunset && r.sunset) {
       skipped++;
       continue;
@@ -85,8 +93,8 @@ export function audiencePage(
     recipients.push({ id: r.id, email: r.email, first_name: r.first_name, last_name: r.last_name });
   }
   let next: AudienceCursor | null;
-  if (rows.length === scan) next = { tier: cursor.tier, after: rows[rows.length - 1].rid };
-  else next = cursor.tier + 1 < TIERS ? { tier: cursor.tier + 1, after: 0 } : null;
+  if (rows.length === scan) next = { tier: cursor.tier, after: rows[rows.length - 1].rid, at };
+  else next = cursor.tier + 1 < TIERS ? { tier: cursor.tier + 1, after: 0, at } : null;
   return { recipients, skipped, next };
 }
 

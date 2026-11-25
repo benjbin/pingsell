@@ -528,6 +528,8 @@ export interface StoreConnectAuthorizeResponse {
 export interface ShopifySyncResult {
   customers: number;
   orders: number;
+  /** True when the sync was started in the background (the counts are then 0 until it ends). */
+  running?: boolean;
 }
 
 export interface Asset {

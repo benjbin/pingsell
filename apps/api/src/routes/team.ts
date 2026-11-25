@@ -229,6 +229,10 @@ export async function teamRoutes(app: FastifyInstance, { db, config, provider }:
   });
 }
 
+/** Large per-account tables, emptied in slices before the final cascade (children before contacts). */
+const ACCOUNT_BULK_TABLES = ['events', 'messages', 'push_messages', 'web_pageviews', 'web_actions', 'app_inbox', 'push_prompt_events', 'push_devices', 'web_visitors', 'app_users', 'contacts'] as const;
+const ACCOUNT_DELETE_SLICE = 500;
+
 /** Owner only: permanently delete the account and everything in it (contacts, campaigns, team…). */
 export async function accountDeletionRoutes(app: FastifyInstance, { db }: Deps) {
   app.post('/account/delete', async (request, reply) => {
@@ -237,7 +241,20 @@ export async function accountDeletionRoutes(app: FastifyInstance, { db }: Deps) 
     if (user?.role !== 'owner') throw forbidden(t('Seul le propriétaire peut supprimer le compte', 'Only the owner can delete the account'));
     const body = parse(z.object({ password: z.string().min(1, zmsg('Saisissez votre mot de passe', 'Enter your password')) }), request.body);
     if (!verifyPassword(body.password, user.password_hash)) throw badRequest(t('Mot de passe incorrect', 'Incorrect password'));
-    // Every table references accounts with ON DELETE CASCADE.
+    // Every table references accounts with ON DELETE CASCADE, but one cascade over millions of rows would block
+    // the API for minutes (and the watchdog would kill it, rolling everything back). So the big tables are emptied
+    // first in short committed slices with yields; each slice is kept, so an interrupted deletion resumes on retry.
+    // Sessions and API keys go first: nobody can use the account while it is being deleted.
+    run(db, 'DELETE FROM sessions WHERE account_id = ?', request.accountId);
+    run(db, 'DELETE FROM api_keys WHERE account_id = ?', request.accountId);
+    run(db, "UPDATE campaigns SET status = 'failed' WHERE account_id = ? AND status IN ('sending', 'scheduled')", request.accountId);
+    for (const table of ACCOUNT_BULK_TABLES) {
+      for (;;) {
+        const n = run(db, `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE account_id = ? LIMIT ${ACCOUNT_DELETE_SLICE})`, request.accountId);
+        if (n < ACCOUNT_DELETE_SLICE) break;
+        await new Promise((r) => setImmediate(r));
+      }
+    }
     run(db, 'DELETE FROM accounts WHERE id = ?', request.accountId);
     return reply.code(204).send();
   });

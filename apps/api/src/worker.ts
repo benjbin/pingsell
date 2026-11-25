@@ -2,7 +2,7 @@ import type { AppConfig } from './config.js';
 import { all, checkpointWal, get, now, run, scalar, type DatabaseSync } from './db.js';
 import { markWorkerTick } from './lib/health.js';
 import { optimizeDatabase } from './services/maintenance.js';
-import { backfillLegacy, finalizeCampaigns, purgeStoppedQueues, queueCampaign } from './services/campaigns.js';
+import { anySent, backfillLegacy, finalizeCampaigns, purgeStoppedQueues, queueCampaign } from './services/campaigns.js';
 import { processDueRuns, processScheduledTriggers, takeWebhooks } from './services/automations.js';
 import { sendTeamNotifications, sendWebhooks } from './services/automationOutbox.js';
 import { processAbandonedCarts } from './services/carts.js';
@@ -77,7 +77,8 @@ export class SendingWorker {
   private current: Promise<void> | null = null;
   private maintenanceAt = 0;
   private checkpointAt = 0;
-  private optimizeAt = 0;
+  /** First run 10 min after start (not during the post-deploy rush), then hourly. */
+  private optimizeAt = Date.now() - 3_600_000 + 10 * 60_000;
   private optimizeRunning = false;
   private backupRunning = false;
   private backupWarned = false;
@@ -88,6 +89,8 @@ export class SendingWorker {
   private purgeRunning = false;
   /** Provider circuit breaker. */
   private failuresInRow = 0;
+  /** Emails the provider accepted but whose "sent" could not be written: never handed over again by this process. */
+  private readonly sentUnrecorded = new Set<string>();
   private breakerTrips = 0;
   private providerPausedUntil = 0;
   /** Round-robin position across accounts / campaigns. */
@@ -179,6 +182,9 @@ export class SendingWorker {
   private optimize(): void {
     const at = Date.now();
     if (this.optimizeRunning || at - this.optimizeAt < 3_600_000) return;
+    // Its long reads keep the WAL from restarting: never while a campaign is being queued or purged
+    // (the WAL would grow by GB and one COMMIT on the HTTP thread would then pay for the checkpoint).
+    if (this.queueing.size > 0 || this.purgeRunning) return;
     this.optimizeAt = at;
     this.optimizeRunning = true;
     void this.track(
@@ -340,7 +346,9 @@ export class SendingWorker {
           // Given up: what was already queued is dropped like a stop, so nobody gets half a campaign later.
           run(
             this.db,
-            "UPDATE campaigns SET status = 'failed', queue_attempts = ?, queue_error = ?, purge_pending = 1, queued_at = COALESCE(queued_at, ?), updated_at = ? WHERE id = ?",
+            "UPDATE campaigns SET status = ?, queue_attempts = ?, queue_error = ?, purge_pending = 1, queued_at = COALESCE(queued_at, ?), updated_at = ? WHERE id = ?",
+            // Emails already sent stay visible as a sent campaign (truncated audience noted in queue_error).
+            anySent(this.db, c.id) ? 'sent' : 'failed',
             attempts,
             reason.slice(0, 1000),
             now(),
@@ -580,6 +588,7 @@ export class SendingWorker {
         continue;
       }
       // Claim: still queued (a stop or a delete may have removed it while the batch was going).
+      if (this.sentUnrecorded.has(message.id)) continue; // already handed to the provider, record failed: never twice
       if (!run(this.db, "UPDATE messages SET attempts = attempts + 1 WHERE id = ? AND status = 'queued' AND in_queue = 1", message.id)) {
         run(this.db, "UPDATE messages SET in_queue = 0 WHERE id = ? AND in_queue = 1 AND status != 'queued'", message.id);
         continue;
@@ -614,10 +623,28 @@ export class SendingWorker {
           accountId: message.account_id,
           campaignId: message.campaign_id,
         });
-        markSent(this.db, message.id, providerId);
+        // The email has left: from here on, a database error must never lead to a retry (it would send it again).
         this.failuresInRow = 0;
         this.breakerTrips = 0;
-        if (message.campaign_id || !admins.includes(message.account_id)) this.countSent();
+        try {
+          markSent(this.db, message.id, providerId);
+        } catch (dbErr) {
+          this.sentUnrecorded.add(message.id);
+          this.log.error(`[worker] email ${message.id} envoyé mais non enregistré (${errText(dbErr)}) : il ne sera pas renvoyé`);
+          try {
+            run(this.db, "UPDATE messages SET status = 'sent', in_queue = 0, sent_at = COALESCE(sent_at, ?) WHERE id = ?", now(), message.id);
+          } catch {
+            /* the in-memory set above still prevents a resend in this process */
+          }
+        }
+        try {
+          if (message.campaign_id || !admins.includes(message.account_id)) this.countSent();
+        } catch (countErr) {
+          this.log.error(`[worker] compteur d'envois : ${errText(countErr)}`);
+        }
+        const elapsedOk = Date.now() - started;
+        if (elapsedOk < minInterval) await sleep(minInterval - elapsedOk);
+        continue;
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
         const kind = classifySendError(err);
