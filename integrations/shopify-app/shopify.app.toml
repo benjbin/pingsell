@@ -7,7 +7,7 @@
 name = "Pingsell"
 # Identifiant de l’app dans les URL Shopify (page des formules : admin.shopify.com/store/…/charges/pingsell/pricing_plans).
 handle = "pingsell"
-client_id = "A_REMPLACER_PAR_LE_CLIENT_ID"
+client_id = "2893a4c0c3383285ca6b54f7f2813b10"
 # Page où Shopify envoie le marchand après « Installer » et chaque fois qu'il ouvre Pingsell depuis son admin.
 application_url = "https://app.pingsell.neokrome.tech/api/v1/integrations/shopify/app"
 # Pingsell s'ouvre dans l'admin Shopify (app intégrée, App Bridge) : une page d'accueil avec les chiffres
