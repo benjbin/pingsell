@@ -4,6 +4,7 @@ import { all, get, scalar, type DatabaseSync, type Row, type SQLInputValue } fro
 import { platformAdminEmails } from '../services/platformAdmin.js';
 import type { Deps } from '../deps.js';
 import { notFound, parse } from '../lib/http.js';
+import { memo, offload } from '../lib/offload.js';
 import { t } from '../i18n.js';
 
 /**
@@ -136,10 +137,6 @@ function accountQuery(since: string, filter: string, order: string) {
   return { sql, params: [since, since, since, since] as SQLInputValue[] };
 }
 
-/** Same search on the list and its total: account name, account email or any member's email. */
-const SEARCH_SQL = `(instr(ulower(r.name), ?) > 0 OR instr(ulower(r.email), ?) > 0
-  OR EXISTS (SELECT 1 FROM users x WHERE x.account_id = r.id AND instr(ulower(x.email), ?) > 0))`;
-const RISK_SQL = `(r.bounce_rate_30d > 0.05 OR (r.emails_30d > 0 AND r.complaints_30d * 1.0 / r.emails_30d > 0.003))`;
 
 /** UNION of (account_id, integration) pairs actually in use; `scope` restricts to some accounts. */
 function integrationPairsSql(scope: string) {
@@ -219,7 +216,7 @@ const SERIES = ['accounts', 'contacts', 'emails_sent', 'opens', 'clicks', 'bounc
 type SeriesKey = (typeof SERIES)[number];
 
 /** One zero-filled entry per UTC day, oldest first, `days` entries ending today. */
-function timeseries(db: DatabaseSync, days: number, accountId: string | null) {
+export function adminTimeseries(db: DatabaseSync, days: number, accountId: string | null) {
   const first = startOfUtcDay(Date.now()) - (days - 1) * DAY_MS;
   const since = iso(first);
   const out = new Map<string, Record<SeriesKey, number>>();
@@ -287,7 +284,8 @@ function periodCounts(db: DatabaseSync, start: string, end: string) {
   return Object.fromEntries(keys.map((k) => [k, num(row[k])])) as Record<(typeof keys)[number], number>;
 }
 
-function overview(db: DatabaseSync, days: number, deps: Deps) {
+/** Read-worker task (lib/offload.ts): the platform overview, without the process figures added by the route. */
+export function adminOverview(db: DatabaseSync, days: number) {
   const nowMs = Date.now();
   const end = iso(nowMs + 1000);
   const start = iso(nowMs - days * DAY_MS);
@@ -353,14 +351,7 @@ function overview(db: DatabaseSync, days: number, deps: Deps) {
       runs_overdue: scalar(db, "SELECT COUNT(*) FROM automation_runs WHERE status = 'pending' AND next_run_at < ?", iso(nowMs - 10 * 60_000)),
       failed_24h: scalar(db, "SELECT COUNT(*) FROM messages WHERE status = 'failed' AND created_at >= ?", iso(nowMs - DAY_MS)),
     },
-    system: {
-      db_size_bytes: pageCount * pageSize,
-      uptime_s: Math.round(process.uptime()),
-      node: process.version,
-      commit: process.env.SOURCE_COMMIT ?? process.env.GIT_SHA ?? null,
-      email_provider: deps.config.emailProvider,
-      warmup_start: deps.config.warmup?.startDate ?? null,
-    },
+    db_size_bytes: pageCount * pageSize,
   };
 }
 
@@ -403,7 +394,8 @@ function activity(db: DatabaseSync, limit: number) {
 
 /* ───────────── Deliverability ───────────── */
 
-function deliverability(db: DatabaseSync, days: number) {
+/** Read-worker task: deliverability by domain and grouped errors (risky accounts come from the cached rows). */
+export function adminDeliverability(db: DatabaseSync, days: number) {
   const since = iso(Date.now() - days * DAY_MS);
   const by_domain = all<{ domain: string; sent: number; bounced: number; opened: number }>(
     db,
@@ -431,15 +423,94 @@ function deliverability(db: DatabaseSync, days: number) {
     } else merged.set(error, { error, count: num(r.n), last_at: r.last_at });
   }
   const errors = [...merged.values()].sort((a, b) => b.count - a.count).slice(0, 10);
-
-  const risky_accounts = loadAccounts(db, RISK_SQL, [], 'r.bounce_rate_30d DESC NULLS LAST, r.emails_30d DESC, r.id', 20, 0);
-  return { by_domain, errors, risky_accounts };
+  return { by_domain, errors };
 }
+
+/* ───────────── Cached, off-the-main-thread computations ───────────── */
+
+/** An account row plus what the search looks into (name, email, members' emails), all lowercased. */
+type SearchableAccount = AccountRow & { search: string[] };
+
+/**
+ * Read-worker task: every account with its figures, unsorted. The aggregates read whole tables
+ * (millions of messages), so the list is computed once (cached), then searched, sorted and paged in JS.
+ */
+export function adminAccountRows(db: DatabaseSync): SearchableAccount[] {
+  const members = new Map<string, string[]>();
+  for (const u of all<{ account_id: string; email: string }>(db, 'SELECT account_id, email FROM users')) {
+    const list = members.get(u.account_id) ?? [];
+    list.push(String(u.email).toLowerCase());
+    members.set(u.account_id, list);
+  }
+  return loadAccounts(db, '1', [], 'r.id', -1, 0).map((a) => ({
+    ...a,
+    search: [a.name.toLowerCase(), a.email.toLowerCase(), ...(members.get(a.id) ?? [])],
+  }));
+}
+
+/** Read-worker task: the parts of an account's page that are not in its row. */
+export function adminAccountDetail(db: DatabaseSync, id: string) {
+  const users = all<Row>(db, 'SELECT email, name, role, created_at, last_seen_at FROM users WHERE account_id = ? ORDER BY created_at', id).map((u) => ({
+    email: String(u.email),
+    name: String(u.name),
+    role: String(u.role),
+    created_at: String(u.created_at),
+    last_seen_at: (u.last_seen_at as string | null) ?? null,
+  }));
+  const campaigns = all<Row>(
+    db,
+    `SELECT c.id, c.name, c.status, c.sent_at, (SELECT COUNT(*) FROM messages m WHERE m.campaign_id = c.id) AS recipients
+       FROM campaigns c WHERE c.account_id = ? ORDER BY COALESCE(c.sent_at, c.created_at) DESC LIMIT 10`,
+    id,
+  ).map((c) => ({ id: String(c.id), name: String(c.name), status: String(c.status), sent_at: (c.sent_at as string | null) ?? null, recipients: num(c.recipients) }));
+  const automations = all<Row>(
+    db,
+    `SELECT x.id, x.name, x.trigger, x.status, (SELECT COUNT(*) FROM automation_runs r WHERE r.automation_id = x.id) AS runs
+       FROM automations x WHERE x.account_id = ? ORDER BY x.created_at DESC LIMIT 50`,
+    id,
+  ).map((x) => ({ id: String(x.id), name: String(x.name), trigger: String(x.trigger), status: String(x.status), runs: num(x.runs) }));
+  const sites = all<Row>(db, 'SELECT host, pageviews, last_seen FROM web_sites WHERE account_id = ? ORDER BY pageviews DESC, host LIMIT 50', id).map((s) => ({
+    host: String(s.host),
+    pageviews: num(s.pageviews),
+    last_seen: String(s.last_seen),
+  }));
+  const failures = all<Row>(
+    db,
+    `SELECT COALESCE(sent_at, created_at) AS at, to_email, error FROM messages
+      WHERE account_id = ? AND status IN ('failed','bounced') ORDER BY created_at DESC LIMIT 10`,
+    id,
+  ).map((f) => ({ at: String(f.at), to: maskEmail(f.to_email as string), error: maskEmailsIn(String(f.error ?? '')) }));
+  return { users, campaigns, automations, sites, failures, timeseries: adminTimeseries(db, 30, id) };
+}
+
+/** Admin pages read whole tables: results are kept 5 minutes (then served while refreshed, for up to an hour). */
+const CACHE_MS = 5 * 60_000;
+const CACHE_STALE_MS = 3600_000;
+
+const isRisky = (r: AccountRow) => (r.bounce_rate_30d ?? 0) > 0.05 || (r.emails_30d > 0 && r.complaints_30d / r.emails_30d > 0.003);
+
+/** ORDER BY `value` (NULLS LAST), then created_at DESC, then id — as the former SQL did. */
+function compareAccounts(key: 'created_at' | 'last_seen_at' | 'contacts' | 'emails_30d' | 'bounce_rate_30d', dir: 1 | -1) {
+  return (a: AccountRow, b: AccountRow) => {
+    const x = a[key];
+    const y = b[key];
+    if (x !== y) {
+      if (x == null) return 1;
+      if (y == null) return -1;
+      return (x < y ? -1 : 1) * dir;
+    }
+    if (a.created_at !== b.created_at) return a.created_at < b.created_at ? 1 : -1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  };
+}
+
+const publicRow = ({ search: _search, ...row }: SearchableAccount): AccountRow => row;
 
 /* ───────────── Routes ───────────── */
 
 export async function adminRoutes(app: FastifyInstance, deps: Deps) {
   const { db } = deps;
+  const accountRows = () => memo('admin:accounts', CACHE_MS, CACHE_STALE_MS, () => offload(db, 'adminAccountRows'));
 
   /** Non-admins get the regular « route not found »: the feature does not exist for them. */
   async function guard(request: FastifyRequest, reply: FastifyReply) {
@@ -453,69 +524,45 @@ export async function adminRoutes(app: FastifyInstance, deps: Deps) {
 
   app.get('/admin/overview', { preHandler: guard }, async (request) => {
     const { days } = parse(daysSchema, request.query);
-    return overview(db, days, deps);
+    const { db_size_bytes, ...data } = await memo(`admin:overview:${days}`, CACHE_MS, CACHE_STALE_MS, () => offload(db, 'adminOverview', days));
+    return {
+      ...data,
+      system: {
+        db_size_bytes,
+        uptime_s: Math.round(process.uptime()),
+        node: process.version,
+        commit: process.env.SOURCE_COMMIT ?? process.env.GIT_SHA ?? null,
+        email_provider: deps.config.emailProvider,
+        warmup_start: deps.config.warmup?.startDate ?? null,
+      },
+    };
   });
 
   app.get('/admin/timeseries', { preHandler: guard }, async (request) => {
     const { days } = parse(timeseriesSchema, request.query);
-    return { days: timeseries(db, days, null) };
+    return { days: await memo(`admin:timeseries:${days}`, CACHE_MS, CACHE_STALE_MS, () => offload(db, 'adminTimeseries', days, null)) };
   });
 
   app.get('/admin/accounts', { preHandler: guard }, async (request) => {
     const q = parse(accountsSchema, request.query);
     const search = q.search ? q.search.toLowerCase() : '';
-    const filter = search ? SEARCH_SQL : '1';
-    const params = search ? [search, search, search] : [];
-    const column = {
-      created_at: 'r.created_at',
-      last_seen: 'r.last_seen_at',
-      contacts: 'r.contacts',
-      emails_30d: 'r.emails_30d',
-      bounce_rate: 'r.bounce_rate_30d',
-    }[q.sort];
-    const dir = q.order === 'asc' ? 'ASC' : 'DESC';
-    const data = loadAccounts(db, filter, params, `${column} ${dir} NULLS LAST, r.created_at DESC, r.id`, q.limit, q.offset);
-    const total = scalar(db, `SELECT COUNT(*) FROM accounts r WHERE ${filter}`, ...params);
-    return { data, total, limit: q.limit, offset: q.offset };
+    const key = ({ created_at: 'created_at', last_seen: 'last_seen_at', contacts: 'contacts', emails_30d: 'emails_30d', bounce_rate: 'bounce_rate_30d' } as const)[q.sort];
+    const rows = (await accountRows()).filter((r) => !search || r.search.some((s) => s.includes(search)));
+    rows.sort(compareAccounts(key, q.order === 'asc' ? 1 : -1));
+    return { data: rows.slice(q.offset, q.offset + q.limit).map(publicRow), total: rows.length, limit: q.limit, offset: q.offset };
   });
 
   app.get('/admin/accounts/:id', { preHandler: guard }, async (request) => {
     const { id } = parse(idSchema, request.params);
-    const account = loadAccounts(db, 'r.id = ?', [id], 'r.id', 1, 0)[0];
-    if (!account) throw notFound(t('Compte introuvable', 'Account not found'));
-
-    const users = all<Row>(db, 'SELECT email, name, role, created_at, last_seen_at FROM users WHERE account_id = ? ORDER BY created_at', id).map((u) => ({
-      email: String(u.email),
-      name: String(u.name),
-      role: String(u.role),
-      created_at: String(u.created_at),
-      last_seen_at: (u.last_seen_at as string | null) ?? null,
-    }));
-    const campaigns = all<Row>(
-      db,
-      `SELECT c.id, c.name, c.status, c.sent_at, (SELECT COUNT(*) FROM messages m WHERE m.campaign_id = c.id) AS recipients
-         FROM campaigns c WHERE c.account_id = ? ORDER BY COALESCE(c.sent_at, c.created_at) DESC LIMIT 10`,
-      id,
-    ).map((c) => ({ id: String(c.id), name: String(c.name), status: String(c.status), sent_at: (c.sent_at as string | null) ?? null, recipients: num(c.recipients) }));
-    const automations = all<Row>(
-      db,
-      `SELECT x.id, x.name, x.trigger, x.status, (SELECT COUNT(*) FROM automation_runs r WHERE r.automation_id = x.id) AS runs
-         FROM automations x WHERE x.account_id = ? ORDER BY x.created_at DESC LIMIT 50`,
-      id,
-    ).map((x) => ({ id: String(x.id), name: String(x.name), trigger: String(x.trigger), status: String(x.status), runs: num(x.runs) }));
-    const sites = all<Row>(db, 'SELECT host, pageviews, last_seen FROM web_sites WHERE account_id = ? ORDER BY pageviews DESC, host LIMIT 50', id).map((s) => ({
-      host: String(s.host),
-      pageviews: num(s.pageviews),
-      last_seen: String(s.last_seen),
-    }));
-    const failures = all<Row>(
-      db,
-      `SELECT COALESCE(sent_at, created_at) AS at, to_email, error FROM messages
-        WHERE account_id = ? AND status IN ('failed','bounced') ORDER BY created_at DESC LIMIT 10`,
-      id,
-    ).map((f) => ({ at: String(f.at), to: maskEmail(f.to_email as string), error: maskEmailsIn(String(f.error ?? '')) }));
-
-    return { account, users, campaigns, automations, sites, failures, timeseries: timeseries(db, 30, id) };
+    if (!get(db, 'SELECT 1 FROM accounts WHERE id = ?', id)) throw notFound(t('Compte introuvable', 'Account not found'));
+    const [rows, detail] = await Promise.all([
+      accountRows(),
+      memo(`admin:account:${id}`, 60_000, CACHE_STALE_MS, () => offload(db, 'adminAccountDetail', id)),
+    ]);
+    // An account created since the list was cached: its row alone (same query, one account).
+    const row = rows.find((r) => r.id === id) ?? (await offload(db, 'adminAccountRows')).find((r) => r.id === id);
+    if (!row) throw notFound(t('Compte introuvable', 'Account not found'));
+    return { account: publicRow(row), ...detail };
   });
 
   app.get('/admin/activity', { preHandler: guard }, async (request) => {
@@ -540,6 +587,23 @@ export async function adminRoutes(app: FastifyInstance, deps: Deps) {
 
   app.get('/admin/deliverability', { preHandler: guard }, async (request) => {
     const { days } = parse(daysSchema, request.query);
-    return deliverability(db, days);
+    const [data, rows] = await Promise.all([
+      memo(`admin:deliverability:${days}`, CACHE_MS, CACHE_STALE_MS, () => offload(db, 'adminDeliverability', days)),
+      accountRows(),
+    ]);
+    const risky_accounts = rows
+      .filter(isRisky)
+      .sort((a, b) => {
+        if (a.bounce_rate_30d !== b.bounce_rate_30d) {
+          if (a.bounce_rate_30d == null) return 1;
+          if (b.bounce_rate_30d == null) return -1;
+          return b.bounce_rate_30d - a.bounce_rate_30d;
+        }
+        if (a.emails_30d !== b.emails_30d) return b.emails_30d - a.emails_30d;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      })
+      .slice(0, 20)
+      .map(publicRow);
+    return { ...data, risky_accounts };
   });
 }

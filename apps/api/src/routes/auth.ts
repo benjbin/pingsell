@@ -7,7 +7,7 @@ import { currentLang, t } from '../i18n.js';
 import { bearerToken, createSession, hashPassword, publicAccount, publicUser, verifyPassword, type UserRow } from '../services/auth.js';
 import { normalizeEmail } from '../services/contacts.js';
 import { renderSystemEmail } from '../services/systemEmail.js';
-import { monthlyUsage } from '../services/stats.js';
+import { cachedMonthlyUsage } from '../services/stats.js';
 import { createPasswordReset, findResetUser, resetPassword, RESET_TTL_MINUTES } from '../services/passwordReset.js';
 
 const passwordSchema = z.string().min(8, zmsg('Le mot de passe doit contenir au moins 8 caractères', 'Password must be at least 8 characters')).max(200);
@@ -160,7 +160,7 @@ export async function accountRoutes(app: FastifyInstance, { db }: Deps) {
     if (!row) throw notFound(t('Compte introuvable', 'Account not found'));
     const user = request.userId ? get<UserRow>(db, 'SELECT * FROM users WHERE id = ?', request.userId) : undefined;
     if (user) run(db, 'UPDATE users SET last_seen_at = ? WHERE id = ?', now(), user.id);
-    return { account: publicAccount(row), user: user ? publicUser(user) : null, usage: monthlyUsage(db, row.id) };
+    return { account: publicAccount(row), user: user ? publicUser(user) : null, usage: await cachedMonthlyUsage(db, row.id) };
   });
 
   /** Own profile: name and login email. */

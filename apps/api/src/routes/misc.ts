@@ -6,8 +6,8 @@ import { badRequest, clampInt, parse, zmsg } from '../lib/http.js';
 import { t } from '../i18n.js';
 import { generateEmail } from '../services/templates.js';
 import { serializeMessage } from '../services/messages.js';
-import { overviewStats } from '../services/stats.js';
-import { analytics } from '../services/analytics.js';
+import { cachedOverviewStats } from '../services/stats.js';
+import { memo, offload } from '../lib/offload.js';
 
 const generateSchema = z.object({
   prompt: z.string().trim().min(3, zmsg('Décrivez l’email à générer', 'Describe the email to generate')).max(4000),
@@ -18,7 +18,7 @@ const generateSchema = z.object({
 export async function statsRoutes(app: FastifyInstance, { db }: Deps) {
   app.get('/stats/overview', async (request) => {
     const days = clampInt((request.query as Record<string, unknown>)?.days, 30, 1, 365);
-    return overviewStats(db, request.accountId, days);
+    return cachedOverviewStats(db, request.accountId, days);
   });
 
   /** Full analytics: ?from=YYYY-MM-DD&to=YYYY-MM-DD&tz=<getTimezoneOffset()>, or ?days=30. */
@@ -39,7 +39,8 @@ export async function statsRoutes(app: FastifyInstance, { db }: Deps) {
     }
     if (from > to) throw badRequest(t('La date de début doit précéder la date de fin', 'Start date must be before end date'));
     if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 366) throw badRequest(t('Période limitée à 1 an', 'Range is limited to 1 year'));
-    return analytics(db, request.accountId, { from, to, tz });
+    // Seconds of aggregation at millions of messages: off the main thread, cached one minute.
+    return memo(`analytics:${request.accountId}:${from}:${to}:${tz}`, 60_000, 15 * 60_000, () => offload(db, 'analytics', request.accountId, { from, to, tz }));
   });
 }
 
@@ -55,7 +56,8 @@ export async function outboxRoutes(app: FastifyInstance, { db, config }: Deps) {
     const limit = clampInt((request.query as Record<string, unknown>)?.limit, 20, 1, 100);
     const rows = all(
       db,
-      'SELECT * FROM messages WHERE account_id = ? ORDER BY created_at DESC LIMIT ?',
+      // `account_id || ''` is the expression of idx_messages_outbox (see db.ts): the newest first, no sort.
+      "SELECT * FROM messages WHERE (account_id || '') = ? ORDER BY created_at DESC LIMIT ?",
       request.accountId,
       limit,
     );

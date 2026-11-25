@@ -666,6 +666,48 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   UPDATE campaigns SET queued_at = COALESCE(sent_at, updated_at)
    WHERE EXISTS (SELECT 1 FROM messages m WHERE m.campaign_id = campaigns.id);
   `,
+  // [contacts/stats] Index « couvrants » pour les statistiques à des millions de messages (jamais de lecture
+  // des lignes, donc jamais du html), index manquants des suppressions de contact (ON DELETE CASCADE / SET NULL),
+  // nombre de contacts des segments mis en cache (recalculé en arrière-plan).
+  `
+  CREATE INDEX IF NOT EXISTS idx_messages_account_stats ON messages(account_id, sent_at, status, opened_at, clicked_at);
+  CREATE INDEX IF NOT EXISTS idx_messages_account_opened ON messages(account_id, opened_at, contact_id, campaign_id, automation_id) WHERE opened_at IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_messages_account_clicked ON messages(account_id, clicked_at, contact_id, campaign_id, automation_id) WHERE clicked_at IS NOT NULL;
+  -- « Envoi » (outbox) : index sur une EXPRESSION, utilisé seulement par la requête qui l'écrit à l'identique
+  -- (routes/misc.ts). Un index (account_id, created_at) ordinaire attirerait le planificateur sur d'autres requêtes
+  -- (file d'envoi du worker, fiche contact) et lui ferait parcourir tous les messages du compte.
+  CREATE INDEX IF NOT EXISTS idx_messages_outbox ON messages((account_id || ''), created_at);
+  CREATE INDEX IF NOT EXISTS idx_messages_campaign_stats ON messages(campaign_id, status, opened_at, clicked_at);
+  CREATE INDEX IF NOT EXISTS idx_messages_automation_stats ON messages(automation_id, sent_at, status, opened_at, clicked_at);
+  CREATE INDEX IF NOT EXISTS idx_push_messages_account_sent ON push_messages(account_id, sent_at, status, opened_at);
+  CREATE INDEX IF NOT EXISTS idx_push_messages_account_opened ON push_messages(account_id, opened_at) WHERE opened_at IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_push_messages_automation ON push_messages(automation_id, sent_at, status, opened_at);
+  CREATE INDEX IF NOT EXISTS idx_contacts_account_status_created ON contacts(account_id, status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_runs_contact ON automation_runs(contact_id, status);
+  CREATE INDEX IF NOT EXISTS idx_runs_automation_created ON automation_runs(automation_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_app_inbox_contact_only ON app_inbox(contact_id);
+  CREATE INDEX IF NOT EXISTS idx_app_users_contact ON app_users(contact_id);
+  ALTER TABLE segments ADD COLUMN contacts_count INTEGER;
+  ALTER TABLE segments ADD COLUMN counted_at TEXT;
+
+  -- Recherche de contacts « contient » sans parcourir 2 M de lignes : index trigrammes (FTS5) de l'email et du
+  -- nom, rowid = rowid du contact, tenu à jour par des triggers. Les contacts déjà là sont indexés en arrière-plan
+  -- par petits lots (services/contacts.ts, startContactSearchBackfill) : rien n'est réécrit au démarrage.
+  CREATE VIRTUAL TABLE contacts_fts USING fts5(email, name, content='', contentless_delete=1, tokenize='trigram');
+  CREATE TABLE contacts_fts_state (id INTEGER PRIMARY KEY CHECK (id = 1), cursor INTEGER NOT NULL, done INTEGER NOT NULL);
+  INSERT INTO contacts_fts_state (id, cursor, done) VALUES (1, 0, 0);
+  CREATE TRIGGER contacts_fts_insert AFTER INSERT ON contacts BEGIN
+    INSERT OR REPLACE INTO contacts_fts (rowid, email, name)
+      VALUES (new.rowid, new.email, COALESCE(new.first_name, '') || ' ' || COALESCE(new.last_name, ''));
+  END;
+  CREATE TRIGGER contacts_fts_update AFTER UPDATE OF email, first_name, last_name ON contacts BEGIN
+    INSERT OR REPLACE INTO contacts_fts (rowid, email, name)
+      VALUES (new.rowid, new.email, COALESCE(new.first_name, '') || ' ' || COALESCE(new.last_name, ''));
+  END;
+  CREATE TRIGGER contacts_fts_delete AFTER DELETE ON contacts BEGIN
+    DELETE FROM contacts_fts WHERE rowid = old.rowid;
+  END;
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {
