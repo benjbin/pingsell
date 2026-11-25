@@ -1,6 +1,7 @@
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { runInDbThread } from './services/dbThread.js';
 
 export type { DatabaseSync, SQLInputValue };
 export type Row = Record<string, unknown>;
@@ -668,12 +669,22 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   `,
 ];
 
+const BUSY_TIMEOUT_MS = 1000;
+
 export function openDatabase(path: string): DatabaseSync {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA foreign_keys = ON;');
-  db.exec('PRAGMA busy_timeout = 5000;');
+  // Une seule connexion sert tout le HTTP : attendre un verrou plus d'une seconde, c'est figer l'API.
+  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS};`);
+  // WAL + NORMAL : pas de fsync à chaque commit (sûr en WAL, au pire on perd les derniers commits sur coupure de courant).
+  db.exec('PRAGMA synchronous = NORMAL;');
+  // Le fichier -wal est ramené à 64 Mo après chaque remise à zéro (sinon il garde sa taille maximale pour toujours).
+  db.exec('PRAGMA journal_size_limit = 67108864;');
+  db.exec('PRAGMA cache_size = -262144;'); // 256 Mo de cache de pages
+  db.exec('PRAGMA temp_store = MEMORY;');
+  db.exec('PRAGMA mmap_size = 268435456;'); // 256 Mo lus via mmap (cache du noyau, partagé)
   // SQLite's LOWER() only folds ASCII: « Émile » must match « émile ».
   db.function('ulower', { deterministic: true }, (s) => (s == null ? null : String(s).toLowerCase()));
   migrate(db);
@@ -684,6 +695,7 @@ export function migrate(db: DatabaseSync): void {
   const current = Number((db.prepare('PRAGMA user_version').get() as Row).user_version ?? 0);
   for (let version = current; version < MIGRATIONS.length; version++) {
     const migration = MIGRATIONS[version];
+    const startedAt = performance.now();
     const { sql, foreignKeysOff } = typeof migration === 'string' ? { sql: migration, foreignKeysOff: false } : migration;
     // Table rebuilds (SQLite's 12-step ALTER) need foreign keys off, which only works outside a transaction.
     if (foreignKeysOff) db.exec('PRAGMA foreign_keys = OFF');
@@ -699,6 +711,67 @@ export function migrate(db: DatabaseSync): void {
     } finally {
       if (foreignKeysOff) db.exec('PRAGMA foreign_keys = ON');
     }
+    // Les migrations tournent au démarrage, avant le HTTP : une migration lente se voit ici.
+    if (db.location()) console.info(`[db] migration ${version + 1}/${MIGRATIONS.length} : ${Math.round(performance.now() - startedAt)} ms`);
+  }
+}
+
+export interface CheckpointResult {
+  /** 1 si un lecteur (une sauvegarde en cours…) a empêché de vider complètement le WAL. */
+  busy: number;
+  /** Pages dans le WAL / pages recopiées dans la base, après la passe finale. */
+  log: number;
+  checkpointed: number;
+  /** Taille du fichier -wal avant / après, en octets. */
+  walBefore: number;
+  walAfter: number;
+  ms: number;
+}
+
+/** Taille du fichier -wal de la base (0 pour une base en mémoire ou sans WAL). */
+export function walSizeBytes(db: DatabaseSync): number {
+  const path = db.location();
+  if (!path) return 0;
+  try {
+    return statSync(`${path}-wal`).size;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Vide le WAL dans la base puis le ramène à zéro (PRAGMA wal_checkpoint(TRUNCATE)), sans bloquer le HTTP :
+ *  1. le gros du travail (recopier les pages) se fait en mode PASSIVE dans un thread avec sa propre connexion ;
+ *  2. la passe finale TRUNCATE, sur la connexion principale, n'a plus que quelques pages à recopier et
+ *     n'attend aucun lecteur (busy_timeout 0) : si une sauvegarde lit encore, on réessaiera plus tard.
+ * Ne rejette jamais (renvoie null en cas d'échec) : on peut l'appeler sans await.
+ */
+export async function checkpointWal(db: DatabaseSync): Promise<CheckpointResult | null> {
+  const path = db.location();
+  if (!path) return null;
+  const startedAt = performance.now();
+  const walBefore = walSizeBytes(db);
+  try {
+    if (walBefore > 0) await runInDbThread(path, { op: 'checkpoint-passive' });
+    if (!db.isOpen || db.isTransaction) return null;
+    db.exec('PRAGMA busy_timeout = 0');
+    let row: Row | undefined;
+    try {
+      row = db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as Row | undefined;
+    } finally {
+      db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
+    }
+    return {
+      busy: Number(row?.busy ?? 0),
+      log: Number(row?.log ?? 0),
+      checkpointed: Number(row?.checkpointed ?? 0),
+      walBefore,
+      walAfter: walSizeBytes(db),
+      ms: Math.round(performance.now() - startedAt),
+    };
+  } catch (err) {
+    console.error(`[db] checkpoint du WAL : ${err instanceof Error ? err.message : String(err)}`);
+    return null;
   }
 }
 

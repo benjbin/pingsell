@@ -7,8 +7,9 @@ DB_DIR="$(dirname "${DATABASE_PATH:-/data/pingsell.db}")"
 mkdir -p "$DB_DIR" "${UPLOAD_DIR:-/data/uploads}"
 
 if [ "$(id -u)" = "0" ]; then
-  # Coolify mounts volumes owned by root: hand them to the unprivileged user.
-  chown -R node:node "$DB_DIR" "${UPLOAD_DIR:-/data/uploads}"
+  # Coolify mounts volumes owned by root: hand them to the unprivileged user. Only the files that need it:
+  # a blanket `chown -R` rewrites the metadata of every upload and backup on each start (slow on a big volume).
+  find "$DB_DIR" "${UPLOAD_DIR:-/data/uploads}" -xdev \( ! -user node -o ! -group node \) -exec chown node:node {} +
   exec su-exec node "$@"
 fi
 
