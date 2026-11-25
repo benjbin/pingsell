@@ -221,6 +221,13 @@ export function audienceCount(db: DatabaseSync, accountId: string, segmentId: st
   return scalar(db, `SELECT COUNT(*) FROM contacts WHERE account_id = ? AND ${filter.sql}`, accountId, ...filter.params);
 }
 
+/** Whether the audience has at least one subscribed contact: stops at the first one instead of counting 2 M rows. */
+export function audienceExists(db: DatabaseSync, accountId: string, segmentId: string | null, contactIds?: string[] | null): boolean {
+  const filter = audienceFilter(db, accountId, segmentId, contactIds);
+  if (!filter) return false;
+  return !!get(db, `SELECT 1 AS x FROM contacts WHERE account_id = ? AND ${filter.sql} LIMIT 1`, accountId, ...filter.params);
+}
+
 /** Longest stretch the queueing may hold the event loop before letting requests through. */
 const QUEUE_SLICE_MS = 40;
 /** Chosen contacts are read by chunks of this many ids. */
@@ -373,7 +380,8 @@ function parseCursor(v: unknown): AudienceCursor | null {
 
 /** Is there still something to send for this campaign? (index probe on the queue) */
 export function hasQueue(db: DatabaseSync, campaignId: string): boolean {
-  return !!get(db, 'SELECT 1 AS x FROM messages WHERE in_queue = 1 AND campaign_id = ? LIMIT 1', campaignId);
+  // INDEXED BY: otherwise idx_messages_campaign walks every message the campaign already sent (see worker.ts, COLS).
+  return !!get(db, 'SELECT 1 AS x FROM messages INDEXED BY idx_messages_queue WHERE in_queue = 1 AND campaign_id = ? LIMIT 1', campaignId);
 }
 
 /** Whether at least one email of the campaign left (sent, or sent then bounced). */
@@ -430,7 +438,7 @@ export async function purgeStoppedQueues(db: DatabaseSync, budgetMs = 200): Prom
     for (;;) {
       const t = Date.now();
       const done = transaction(db, () => {
-        const rows = all<{ rid: number }>(db, 'SELECT rowid AS rid FROM messages WHERE in_queue = 1 AND campaign_id = ? LIMIT ?', c.id, chunk);
+        const rows = all<{ rid: number }>(db, 'SELECT rowid AS rid FROM messages INDEXED BY idx_messages_queue WHERE in_queue = 1 AND campaign_id = ? LIMIT ?', c.id, chunk);
         if (!rows.length) {
           run(db, 'UPDATE campaigns SET purge_pending = 0 WHERE id = ?', c.id);
           return true;

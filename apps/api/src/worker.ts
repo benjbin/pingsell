@@ -444,8 +444,12 @@ export class SendingWorker {
     return allowed;
   }
 
+  // Every queue read goes through the queue's own partial index. Left to itself, the planner picks
+  // idx_messages_campaign (campaign_id = ? / IS NULL) and walks every message already sent by the campaign, or every
+  // automation email ever sent (campaign_id IS NULL), to find the few still queued: 100–300 ms per tick at 2 M
+  // messages, more as a big campaign progresses. INDEXED BY makes it an index range over queued messages only.
   private static readonly COLS = `SELECT rowid AS rid, id, account_id, campaign_id, automation_id, contact_id, to_email, subject, html, attempts
-    FROM messages`;
+    FROM messages INDEXED BY idx_messages_queue`;
   private static readonly DUE = '(next_attempt_at IS NULL OR next_attempt_at <= ?)';
 
   /** Next due messages of one campaign: an index range on the queue, whatever the campaign size. */

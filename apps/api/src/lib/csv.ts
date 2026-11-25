@@ -1,14 +1,24 @@
 import { detectColumns, isEmptyCell, splitFullName, type ContactField } from './csvColumns.js';
 
+/** A cell longer than this, or a row with more cells, is not a contact list: the file is rejected at once. */
+export const CSV_MAX_FIELD_CHARS = 100_000;
+export const CSV_MAX_CELLS = 1_000;
+
+/** Thrown by parseCsv on a file no spreadsheet produces (one 20 MB cell, a million columns…). */
+export class CsvLimitError extends Error {}
+
 /**
  * Minimal RFC 4180 CSV parser (quoted fields, escaped quotes, CRLF) with
  * delimiter auto-detection (`,` `;` or tab — French Excel exports use `;`).
  * Stops once `maxRows` non-blank rows are read: a 20 MB file of short lines is never fully materialised
- * (millions of small arrays) just to be rejected by the row cap afterwards.
+ * (millions of small arrays) just to be rejected by the row cap afterwards. Throws CsvLimitError on a cell longer
+ * than CSV_MAX_FIELD_CHARS or a row of more than CSV_MAX_CELLS cells.
  */
 export function parseCsv(input: string, maxRows = Infinity): string[][] {
   const text = input.replace(/^﻿/, '');
-  const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
+  // Delimiter guessed from the start of the first line only: a 20 MB line without a newline would otherwise be
+  // split three times into millions of pieces on the event loop.
+  const firstLine = text.slice(0, 64 * 1024).split(/\r?\n/, 1)[0] ?? '';
   const delimiter = [',', ';', '\t'].reduce((best, d) =>
     firstLine.split(d).length > firstLine.split(best).length ? d : best,
   );
@@ -33,6 +43,7 @@ export function parseCsv(input: string, maxRows = Infinity): string[][] {
         }
       } else {
         field += ch;
+        if (field.length > CSV_MAX_FIELD_CHARS) throw new CsvLimitError('field');
       }
       continue;
     }
@@ -40,6 +51,7 @@ export function parseCsv(input: string, maxRows = Infinity): string[][] {
     else if (ch === delimiter) {
       row.push(field);
       field = '';
+      if (row.length > CSV_MAX_CELLS) throw new CsvLimitError('cells');
     } else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && text[i + 1] === '\n') i++;
       row.push(field);
@@ -47,7 +59,10 @@ export function parseCsv(input: string, maxRows = Infinity): string[][] {
       row = [];
       field = '';
       if (rows.length >= maxRows) return rows;
-    } else field += ch;
+    } else {
+      field += ch;
+      if (field.length > CSV_MAX_FIELD_CHARS) throw new CsvLimitError('field');
+    }
   }
   if (field !== '' || row.length) {
     row.push(field);

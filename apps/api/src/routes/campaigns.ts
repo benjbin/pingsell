@@ -6,7 +6,7 @@ import type { Deps } from '../deps.js';
 import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString, zmsg } from '../lib/http.js';
 import {
   CAMPAIGN_STATUSES,
-  audienceCount,
+  audienceExists,
   campaignStatsDetail,
   campaignStatsMap,
   campaignStatsSummary,
@@ -61,7 +61,8 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     if (!campaign.subject.trim()) throw badRequest(t("L'objet de la campagne est requis", 'Campaign subject is required'));
     if (!campaign.html?.trim()) throw badRequest(t('Le contenu HTML de la campagne est requis', 'Campaign HTML content is required'));
     if (campaign.segment_id) assertSegment(campaign.account_id, campaign.segment_id);
-    if (audienceCount(db, campaign.account_id, campaign.segment_id, campaign.contact_ids) === 0) {
+    // Synchronous on the event loop: an existence probe, not a COUNT of the whole audience (~0.6 s at 2 M contacts).
+    if (!audienceExists(db, campaign.account_id, campaign.segment_id, campaign.contact_ids)) {
       throw badRequest(t('Aucun destinataire abonné ne correspond à cette audience', 'No subscribed recipients match this audience'));
     }
   };

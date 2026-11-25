@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { all, parseJson, run, scalar, transaction, type SQLInputValue } from '../db.js';
 import type { Deps } from '../deps.js';
-import { csvToContactsWithColumns } from '../lib/csv.js';
+import { CsvLimitError, csvToContactsWithColumns } from '../lib/csv.js';
 import { badRequest, conflict, listResponse, notFound, pagination, parse, queryString } from '../lib/http.js';
 import { cancelRunsForContact } from '../services/automations.js';
 import { contactVisits } from '../services/webTracking.js';
@@ -264,7 +264,18 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
     const triggers = body.trigger_automations === true;
     let inputs: { row: number; data: Record<string, unknown> }[];
     if ('csv' in body) {
-      const file = csvToContactsWithColumns(body.csv, IMPORT_MAX_ROWS);
+      let file: ReturnType<typeof csvToContactsWithColumns>;
+      try {
+        file = csvToContactsWithColumns(body.csv, IMPORT_MAX_ROWS);
+      } catch (err) {
+        if (!(err instanceof CsvLimitError)) throw err;
+        throw badRequest(
+          t(
+            "Ce fichier n'est pas une liste de contacts lisible (une cellule ou une ligne beaucoup trop longue). Exportez-le à nouveau en CSV.",
+            'This file is not a readable contact list (a cell or a row is far too long). Export it again as CSV.',
+          ),
+        );
+      }
       if (file.tooMany) throw badRequest(tooManyRows());
       if (file.rows.length && !file.hasEmail)
         throw badRequest(
@@ -295,7 +306,8 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       if (!parsed.success) {
         errorDetails.push({
           row,
-          email: typeof data.email === 'string' ? data.email : null,
+          // Echoed back in the response: a huge invalid cell must not come back whole.
+          email: typeof data.email === 'string' ? data.email.slice(0, 320) : null,
           error: parsed.error.issues[0]?.message ?? t('Ligne invalide', 'Invalid row'),
         });
         return;
