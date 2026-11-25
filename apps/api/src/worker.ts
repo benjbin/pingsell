@@ -41,6 +41,7 @@ export class SendingWorker {
   private maintenanceAt = 0;
   private backupRunning = false;
   private backupWarned = false;
+  private queueing = false;
 
   constructor(
     private readonly db: DatabaseSync,
@@ -103,7 +104,7 @@ export class SendingWorker {
       do {
         this.rerun = false;
         this.promoteScheduled();
-        await this.queueSendingCampaigns();
+        this.queueSendingCampaigns();
         processAbandonedCarts(this.db);
         processScheduledTriggers(this.db);
         processTracking(this.db);
@@ -139,26 +140,43 @@ export class SendingWorker {
     if (changed) this.log.info(`[worker] ${changed} campagne(s) programmée(s) démarrée(s)`);
   }
 
-  private async queueSendingCampaigns(): Promise<void> {
-    const campaigns = all<{ id: string; name: string; account_id: string; html: string | null }>(
+  /**
+   * Queues campaigns that just started sending. Runs in the background (one at a time) so a large
+   * campaign never holds up the rest of the worker; sending starts as soon as the first messages are in.
+   */
+  private queueSendingCampaigns(): void {
+    if (this.queueing) return;
+    const campaigns = all<{ id: string; name: string; account_id: string; html: string | null; started: number }>(
       this.db,
-      `SELECT c.id, c.name, c.account_id, c.html FROM campaigns c
-        WHERE c.status = 'sending' AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.campaign_id = c.id)`,
+      `SELECT c.id, c.name, c.account_id, c.html,
+              EXISTS (SELECT 1 FROM messages m WHERE m.campaign_id = c.id) AS started
+         FROM campaigns c WHERE c.status = 'sending' AND c.queued_at IS NULL`,
     );
-    for (const c of campaigns) {
-      // Pictures Gmail can't show (SVG, WebP) become PNG/JPG first, so every recipient gets the same email.
-      if (c.html) {
+    if (!campaigns.length) return;
+    this.queueing = true;
+    void (async () => {
+      for (const c of campaigns) {
         try {
-          const res = await convertEmailImages(this.db, this.config, c.account_id, c.html);
-          if (res.converted) run(this.db, 'UPDATE campaigns SET html = ? WHERE id = ?', res.html, c.id);
-          if (res.converted || res.failed.length) this.log.info(`[worker] campagne « ${c.name} » : ${res.converted} image(s) convertie(s)${res.failed.length ? `, échecs : ${res.failed.join(' ; ')}` : ''}`);
+          // Pictures Gmail can't show (SVG, WebP) become PNG/JPG first, so every recipient gets the same email.
+          if (c.html && !Number(c.started)) {
+            try {
+              const res = await convertEmailImages(this.db, this.config, c.account_id, c.html);
+              if (res.converted) run(this.db, 'UPDATE campaigns SET html = ? WHERE id = ?', res.html, c.id);
+              if (res.converted || res.failed.length) this.log.info(`[worker] campagne « ${c.name} » : ${res.converted} image(s) convertie(s)${res.failed.length ? `, échecs : ${res.failed.join(' ; ')}` : ''}`);
+            } catch (err) {
+              this.log.error(`[worker] conversion des images de « ${c.name} » : ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+          const t = Date.now();
+          const queued = await queueCampaign(this.db, this.config, c.id);
+          this.log.info(`[worker] campagne « ${c.name} » : ${queued} message(s) en file (${Math.round((Date.now() - t) / 1000)} s)`);
         } catch (err) {
-          this.log.error(`[worker] conversion des images de « ${c.name} » : ${err instanceof Error ? err.message : String(err)}`);
+          this.log.error(`[worker] mise en file de « ${c.name} » : ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
         }
       }
-      const queued = queueCampaign(this.db, this.config, c.id);
-      this.log.info(`[worker] campagne « ${c.name} » : ${queued} message(s) en file`);
-    }
+    })().finally(() => {
+      this.queueing = false;
+    });
   }
 
   /** Emails handed to the provider today (UTC), cached and bumped as we send. */

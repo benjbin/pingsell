@@ -176,44 +176,62 @@ export function audienceCount(db: DatabaseSync, accountId: string, segmentId: st
   return scalar(db, `SELECT COUNT(*) FROM contacts WHERE account_id = ? AND ${filter.sql}`, accountId, ...filter.params);
 }
 
+/** Longest stretch the queueing may hold the event loop before letting requests through. */
+const QUEUE_SLICE_MS = 50;
+
 /**
- * Creates one queued message per recipient for a campaign in `sending` state.
- * Idempotent: a campaign that already has messages is not queued again.
+ * Creates one queued message per recipient for a campaign in `sending` state, in short transactions
+ * that yield to the event loop between them, so the API keeps answering while a large campaign is queued.
+ * Resumable: recipients that already have a message are skipped, and `queued_at` marks the end.
  */
-export function queueCampaign(db: DatabaseSync, config: AppConfig, campaignId: string): number {
-  return transaction(db, () => {
-    const row = get(db, "SELECT * FROM campaigns WHERE id = ? AND status = 'sending'", campaignId);
-    if (!row) return 0;
-    const campaign = serializeCampaign(row);
-    if (scalar(db, 'SELECT COUNT(*) FROM messages WHERE campaign_id = ?', campaignId) > 0) return 0;
+export async function queueCampaign(db: DatabaseSync, config: AppConfig, campaignId: string): Promise<number> {
+  const row = get(db, "SELECT * FROM campaigns WHERE id = ? AND status = 'sending' AND queued_at IS NULL", campaignId);
+  if (!row) return 0;
+  const campaign = serializeCampaign(row);
 
-    const filter = audienceFilter(db, campaign.account_id, campaign.segment_id, campaign.contact_ids);
-    // Engaged contacts first, mailbox providers interleaved, long-inactive contacts left out
-    // (except when chosen by hand: then the merchant decided).
-    const { recipients, skipped } = filter
-      ? orderedRecipients(db, campaign.account_id, filter, { sunset: !campaign.contact_ids?.length })
-      : { recipients: [], skipped: 0 };
-    run(db, 'UPDATE campaigns SET skipped_inactive = ? WHERE id = ?', skipped, campaignId);
+  const filter = audienceFilter(db, campaign.account_id, campaign.segment_id, campaign.contact_ids);
+  // Engaged contacts first, mailbox providers interleaved, long-inactive contacts left out
+  // (except when chosen by hand: then the merchant decided).
+  const { recipients, skipped } = filter
+    ? orderedRecipients(db, campaign.account_id, filter, { sunset: !campaign.contact_ids?.length })
+    : { recipients: [], skipped: 0 };
+  run(db, 'UPDATE campaigns SET skipped_inactive = ? WHERE id = ?', skipped, campaignId);
 
-    if (!recipients.length) {
-      run(db, "UPDATE campaigns SET status = 'failed', updated_at = ? WHERE id = ?", now(), campaignId);
-      return 0;
-    }
-    const senderName = campaign.from_name || accountSender(db, config, campaign.account_id).name;
-    for (const contact of recipients) {
-      createMessage(db, config, {
-        accountId: campaign.account_id,
-        campaignId,
-        contactId: contact.id,
-        contact,
-        subject: campaign.subject,
-        html: campaign.html ?? '',
-        preheader: campaign.preheader,
-        senderName,
-      });
-    }
-    return recipients.length;
-  });
+  const done = new Set(
+    all<{ contact_id: string | null }>(db, 'SELECT contact_id FROM messages WHERE campaign_id = ?', campaignId).map((r) => r.contact_id),
+  );
+  if (!recipients.length && !done.size) {
+    run(db, "UPDATE campaigns SET status = 'failed', queued_at = ?, updated_at = ? WHERE id = ?", now(), now(), campaignId);
+    return 0;
+  }
+  const senderName = campaign.from_name || accountSender(db, config, campaign.account_id).name;
+  let queued = 0;
+  let i = 0;
+  while (i < recipients.length) {
+    // Stop if the campaign was cancelled or deleted meanwhile.
+    if (!get(db, "SELECT 1 AS ok FROM campaigns WHERE id = ? AND status = 'sending'", campaignId)) return queued;
+    transaction(db, () => {
+      const until = Date.now() + QUEUE_SLICE_MS;
+      do {
+        const contact = recipients[i++];
+        if (done.has(contact.id)) continue;
+        createMessage(db, config, {
+          accountId: campaign.account_id,
+          campaignId,
+          contactId: contact.id,
+          contact,
+          subject: campaign.subject,
+          html: campaign.html ?? '',
+          preheader: campaign.preheader,
+          senderName,
+        });
+        queued++;
+      } while (i < recipients.length && Date.now() < until);
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  run(db, 'UPDATE campaigns SET queued_at = ? WHERE id = ?', now(), campaignId);
+  return queued;
 }
 
 /** Marks `sending` campaigns as `sent` (or `failed`) once no message is left in the queue. */
@@ -225,7 +243,7 @@ export function finalizeCampaigns(db: DatabaseSync): void {
             SUM(CASE WHEN m.status = 'queued' THEN 1 ELSE 0 END) AS queued,
             SUM(CASE WHEN m.status = 'sent' THEN 1 ELSE 0 END) AS sent
        FROM campaigns c JOIN messages m ON m.campaign_id = c.id
-      WHERE c.status = 'sending'
+      WHERE c.status = 'sending' AND c.queued_at IS NOT NULL
       GROUP BY c.id`,
   );
   const timestamp = now();

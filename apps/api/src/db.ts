@@ -660,6 +660,12 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   CREATE INDEX idx_data_access_account ON data_access_log(account_id, created_at);
   CREATE INDEX idx_data_access_created ON data_access_log(created_at);
   `,
+  // Mise en file des campagnes par petits lots : queued_at est posé quand tous les destinataires sont en file.
+  `
+  ALTER TABLE campaigns ADD COLUMN queued_at TEXT;
+  UPDATE campaigns SET queued_at = COALESCE(sent_at, updated_at)
+   WHERE EXISTS (SELECT 1 FROM messages m WHERE m.campaign_id = campaigns.id);
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {
