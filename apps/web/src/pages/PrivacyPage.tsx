@@ -5,8 +5,8 @@ import { LanguageToggle } from "../components/layout/LanguageToggle";
 import { useAuth } from "../lib/auth";
 import { t } from "../lib/i18n";
 
-// TODO confirm: publisher contact address, to be confirmed with the owner.
-const CONTACT_EMAIL = "contact@pingsell.fr";
+// Publisher contact address.
+const CONTACT_EMAIL = "contact@neokrome.tech";
 
 const UPDATED = t("19 novembre 2026", "November 19, 2026");
 
