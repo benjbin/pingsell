@@ -21,7 +21,8 @@ async function main() {
     if (closing) return;
     closing = true;
     app.log.info(`${signal} reçu, arrêt en cours…`);
-    worker.stop();
+    // Lets the email being handed to the provider finish, so it is marked sent and not sent twice after restart.
+    await worker.stopAndWait(10_000);
     try {
       await app.close();
     } finally {

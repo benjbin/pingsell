@@ -1,4 +1,5 @@
-import { get, run, transaction, type DatabaseSync } from '../db.js';
+import { run, transaction, type DatabaseSync } from '../db.js';
+import { markBounced, markComplained, markSoftBounced, messageMeta } from './messages.js';
 
 /**
  * Bounce and complaint handling for self-hosted sending (apps/mta).
@@ -66,13 +67,14 @@ export function parseBounce(raw: string, recipient: string | null): BounceReport
 /** Applies a report: marks the message and, for hard bounces / complaints, stops mailing the contact. */
 export function applyBounce(db: DatabaseSync, report: BounceReport): { contactId: string | null } {
   if (!report.messageId || report.kind === 'ignored') return { contactId: null };
-  const msg = get<{ id: string; contact_id: string | null }>(db, 'SELECT id, contact_id FROM messages WHERE id = ?', report.messageId);
+  const msg = messageMeta(db, report.messageId);
   if (!msg) return { contactId: null };
   const error = [report.status, report.diagnostic].filter(Boolean).join(' ').slice(0, 1000) || null;
 
+  // The campaign counters (statistics, guard) follow each change: see messages.ts.
   transaction(db, () => {
     if (report.kind === 'hard') {
-      run(db, "UPDATE messages SET status = 'bounced', error = ? WHERE id = ?", error, msg.id);
+      markBounced(db, msg, error);
       if (msg.contact_id) {
         run(
           db,
@@ -82,11 +84,48 @@ export function applyBounce(db: DatabaseSync, report: BounceReport): { contactId
         );
       }
     } else if (report.kind === 'soft') {
-      run(db, "UPDATE messages SET status = 'failed', error = ? WHERE id = ? AND status = 'sent'", error, msg.id);
+      markSoftBounced(db, msg, error);
     } else if (report.kind === 'complaint') {
-      run(db, 'UPDATE messages SET complained_at = COALESCE(complained_at, ?) WHERE id = ?', new Date().toISOString(), msg.id);
+      markComplained(db, msg);
       if (msg.contact_id) run(db, "UPDATE contacts SET status = 'complained', updated_at = ? WHERE id = ?", new Date().toISOString(), msg.contact_id);
     }
   });
   return { contactId: msg.contact_id };
+}
+
+/* ------------------------------------------------------------ Amazon SES (via SNS) */
+
+interface SesEvent {
+  notificationType?: string;
+  eventType?: string;
+  bounce?: { bounceType?: string; bounceSubType?: string; bouncedRecipients?: Array<{ status?: string; diagnosticCode?: string }> };
+  complaint?: { complaintFeedbackType?: string };
+  mail?: { messageId?: string; tags?: Record<string, string[] | undefined>; headers?: Array<{ name?: string; value?: string }> };
+}
+
+/**
+ * Turns an SES bounce / complaint notification (the `Message` of an SNS notification) into a report.
+ * The message is found from the `pingsell_message_id` email tag (SES event publishing through a
+ * configuration set) or from the X-Pingsell-Message header (identity notifications with original headers).
+ */
+export function parseSesNotification(message: unknown): BounceReport {
+  const e = (message ?? {}) as SesEvent;
+  const type = String(e.eventType ?? e.notificationType ?? '');
+  const tag = e.mail?.tags?.pingsell_message_id?.[0];
+  const header = e.mail?.headers?.find((h) => (h.name ?? '').toLowerCase() === 'x-pingsell-message')?.value;
+  const raw = [tag, header].find((v): v is string => typeof v === 'string' && ID.test(v));
+  const messageId = raw ? ID.exec(raw)![0].toLowerCase() : null;
+  if (type === 'Bounce') {
+    const rcpt = e.bounce?.bouncedRecipients?.[0];
+    const status = /\d\.\d{1,3}\.\d{1,3}/.exec(rcpt?.status ?? '')?.[0] ?? null;
+    const diagnostic =
+      (rcpt?.diagnosticCode ?? `${e.bounce?.bounceType ?? ''} ${e.bounce?.bounceSubType ?? ''}`.trim()).replace(/^smtp;\s*/i, '').slice(0, 500) || null;
+    // Permanent = the address does not exist (or SES suppressed it); Transient / Undetermined = mailbox full, etc.
+    return { kind: e.bounce?.bounceType === 'Permanent' ? 'hard' : 'soft', messageId, status, diagnostic };
+  }
+  if (type === 'Complaint') {
+    const feedback = (e.complaint?.complaintFeedbackType ?? 'abuse').toLowerCase();
+    return { kind: feedback === 'not-spam' ? 'ignored' : 'complaint', messageId, status: null, diagnostic: `feedback: ${feedback}` };
+  }
+  return { kind: 'ignored', messageId, status: null, diagnostic: null }; // Delivery, Send, Open…
 }

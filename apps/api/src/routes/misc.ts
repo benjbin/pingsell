@@ -5,7 +5,7 @@ import type { Deps } from '../deps.js';
 import { badRequest, clampInt, parse, zmsg } from '../lib/http.js';
 import { t } from '../i18n.js';
 import { generateEmail } from '../services/templates.js';
-import { serializeMessage } from '../services/messages.js';
+import { messageHtml, serializeMessage } from '../services/messages.js';
 import { overviewStats } from '../services/stats.js';
 import { analytics } from '../services/analytics.js';
 
@@ -59,7 +59,13 @@ export async function outboxRoutes(app: FastifyInstance, { db, config }: Deps) {
       request.accountId,
       limit,
     );
-    return { data: rows.map((m) => serializeMessage(m, true)), provider: config.emailProvider };
+    // Campaign emails store no HTML: each one is rendered again, with a yield in between (a few ms each).
+    const data = [];
+    for (const m of rows) {
+      data.push(serializeMessage(m, true, messageHtml(db, config, m)));
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    return { data, provider: config.emailProvider };
   });
 }
 
