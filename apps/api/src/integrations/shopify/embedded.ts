@@ -51,11 +51,27 @@ export function embeddedPage(opts: { apiKey: string; apiBase: string; webUrl: st
   var FR = ${fr ? 'true' : 'false'};
   var t = function (a, b) { return FR ? a : b; };
   var root = document.getElementById('root');
+  // Back from Shopify's plan page (plan_handle in the URL): read the plan again instead of the cached one.
+  var REFRESH = /[?&]plan_handle=/.test(location.search);
   var nf = new Intl.NumberFormat(FR ? 'fr-FR' : 'en-US');
   function money(v, cur) { try { return new Intl.NumberFormat(FR ? 'fr-FR' : 'en-US', { style: 'currency', currency: cur || 'EUR', maximumFractionDigits: 0 }).format(v || 0); } catch (e) { return nf.format(v || 0); } }
   function h(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function open(url) { window.open(url, '_blank', 'noopener'); }
+  // Shopify's plan page lives outside the app frame: open it in the whole admin window.
+  function top(url) { window.open(url, '_top'); }
   window.__open = open;
+  window.__top = top;
+  var PLANS = { free: t('Gratuit', 'Free'), pro: 'Pro', business: 'Business' };
+  function date(v) { try { return new Date(v).toLocaleDateString(FR ? 'fr-FR' : 'en-US', { day: 'numeric', month: 'long' }); } catch (e) { return ''; } }
+  function planCard(p) {
+    if (!p) return '';
+    var name = p.id ? PLANS[p.id] || p.id : t('indisponible pour le moment', 'unavailable right now');
+    var note = p.trial_ends_at ? t('Essai gratuit jusqu’au ', 'Free trial until ') + date(p.trial_ends_at) + '.'
+      : p.cancel_at_end ? t('Changement prévu à la fin de la période en cours.', 'Change scheduled at the end of the current period.') : '';
+    return '<div class="card"><h2>' + t('Votre formule : ', 'Your plan: ') + h(name) + '</h2>' +
+      (note ? '<p class="muted">' + h(note) + '</p>' : '<p class="muted">' + t('Facturée par Shopify, sur votre facture Shopify.', 'Billed by Shopify, on your Shopify bill.') + '</p>') +
+      '<div class="row"><button onclick="__top(\\'' + h(p.pricing_url) + '\\')">' + t('Changer de formule', 'Change plan') + '</button></div></div>';
+  }
 
   function render(d) {
     if (d.state === 'connected') {
@@ -73,8 +89,18 @@ export function embeddedPage(opts: { apiKey: string; apiBase: string; webUrl: st
         '<div class="row"><button class="primary" onclick="__open(\\'' + h(d.links.campaigns) + '\\')">' + t('Créer une campagne', 'Create a campaign') + '</button>' +
         '<button onclick="__open(\\'' + h(d.links.automations) + '\\')">' + t('Automatisations', 'Automations') + '</button>' +
         '<button onclick="__open(\\'' + h(d.links.home) + '\\')">' + t('Ouvrir Pingsell', 'Open Pingsell') + '</button></div></div>' +
+        planCard(d.plan) +
         (d.sync && d.sync.running ? '<div class="card muted">' + t('Synchronisation en cours… les chiffres se mettent à jour.', 'Syncing… numbers are updating.') + '</div>' : '');
       if (d.sync && d.sync.running) setTimeout(load, 5000);
+      return;
+    }
+    if (d.state === 'choose_plan') {
+      root.innerHTML =
+        '<div class="card"><span class="badge warn">● ' + t('Dernière étape', 'Last step') + '</span>' +
+        '<h2 style="margin-top:10px">' + t('Choisissez votre formule Pingsell', 'Choose your Pingsell plan') + '</h2>' +
+        '<p class="muted">' + t('La formule est facturée par Shopify. Vous pouvez en changer à tout moment.', 'Your plan is billed by Shopify. You can change it at any time.') + '</p>' +
+        '<div class="row"><button class="primary" onclick="__top(\\'' + h(d.pricing_url) + '\\')">' + t('Voir les formules', 'See plans') + '</button></div></div>';
+      top(d.pricing_url);
       return;
     }
     if (d.state === 'claim') {
@@ -95,7 +121,8 @@ export function embeddedPage(opts: { apiKey: string; apiBase: string; webUrl: st
   async function load() {
     try {
       var token = await shopify.idToken();
-      var res = await fetch(${JSON.stringify(apiBase)} + '/integrations/shopify/embedded', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+      var res = await fetch(${JSON.stringify(apiBase)} + '/integrations/shopify/embedded', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh: REFRESH }) });
+      REFRESH = false;
       var data = await res.json().catch(function () { return {}; });
       render(res.ok ? data : { state: 'error', error: data.error || ('HTTP ' + res.status) });
     } catch (e) {

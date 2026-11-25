@@ -221,6 +221,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       publicUrl: config.publicUrl,
       shopifyApiKey: config.shopifyApiKey,
       shopifyApiSecret: config.shopifyApiSecret,
+      shopifyBilling: config.shopifyBilling,
     },
   };
   await registerShopify(app, ctx);

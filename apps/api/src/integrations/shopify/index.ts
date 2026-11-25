@@ -10,6 +10,7 @@ import { buildInstallUrl, consumeState, createState } from './oauth.js';
 import { verifySessionToken } from './sessionToken.js';
 import { embeddedPage } from './embedded.js';
 import { getShopifyRevenue } from './revenue.js';
+import { pricingUrl, storePlan } from './billing.js';
 import {
   clientFor,
   deleteIntegration,
@@ -354,7 +355,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
    * the store has no access token yet: it is obtained with the token exchange (expiring offline token).
    * Answers what the page shows: the store's numbers, or the link that attaches it to a Pingsell account.
    */
-  app.post(`${base}/integrations/shopify/embedded`, async (request, reply) => {
+  app.post<{ Body: { refresh?: unknown } }>(`${base}/integrations/shopify/embedded`, async (request, reply) => {
     try {
       const { shopifyApiKey, shopifyApiSecret } = ctx.config;
       if (!shopifyApiKey || !shopifyApiSecret) throw new HttpError(400, t('App Shopify non configurée', 'Shopify app isn’t configured'));
@@ -410,6 +411,23 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
       } catch {
         cfg = {};
       }
+      // Shopify App Pricing: no plan yet → Shopify's plan selection page; otherwise the plan is shown on the page.
+      const billingCfg = ctx.config.shopifyBilling;
+      let plan: Record<string, unknown> | null = null;
+      if (billingCfg) {
+        const url = pricingUrl(shop, billingCfg.appHandle);
+        try {
+          const billing = await storePlan(ctx.db, accountId, billingCfg, { refresh: request.body?.refresh === true });
+          if (billing && !billing.plan) return { state: 'choose_plan', shop_domain: shop, shop_name: cfg.shop_name ?? shop, pricing_url: url };
+          if (billing) {
+            plan = { id: billing.plan, trial_ends_at: billing.trial_ends_at ?? null, cancel_at_end: Boolean(billing.cancel_at_end), pricing_url: url };
+          }
+        } catch (err) {
+          // Partner API down: never lock the merchant out, show the page without the plan.
+          request.log.warn({ err, shop }, 'Shopify : formule illisible (Partner API)');
+          plan = { id: null, pricing_url: url };
+        }
+      }
       const account = ctx.db.prepare('SELECT name FROM accounts WHERE id = ?').get(accountId) as { name?: string } | undefined;
       const count = (sql: string, ...params: string[]) => Number((ctx.db.prepare(sql).get(...params) as { n?: number } | undefined)?.n ?? 0);
       const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
@@ -426,6 +444,7 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
           campaigns: count("SELECT COUNT(*) AS n FROM campaigns WHERE account_id = ? AND status = 'sent' AND sent_at >= ?", accountId, since),
         },
         sync: { running: isSyncRunning(accountId) },
+        plan,
         links: { home: `${webUrl}/`, campaigns: `${webUrl}/campagnes/nouvelle`, automations: `${webUrl}/automatisations` },
       };
     } catch (err) {

@@ -203,7 +203,7 @@ export function handleAppUninstalled(ctx: IntegrationContext, accountId: string)
   updateIntegration(
     ctx.db,
     accountId,
-    { error: t('Application désinstallée depuis Shopify : reconnectez la boutique.', 'App uninstalled from Shopify: reconnect the store.'), uninstalled_at: new Date().toISOString(), webhooks: [] },
+    { error: t('Application désinstallée depuis Shopify : reconnectez la boutique.', 'App uninstalled from Shopify: reconnect the store.'), uninstalled_at: new Date().toISOString(), webhooks: [], billing: undefined },
     { status: 'error', access_token: '' },
   );
   forgetTokens(ctx.db, accountId);

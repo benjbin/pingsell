@@ -99,6 +99,27 @@ Déclarés dans `shopify.app.toml` (`compliance_topics`), signés avec `SHOPIFY_
    l'endpoint de simulation. Sans URL publique, `config.webhooks_error` explique pourquoi.
 4. La synchronisation initiale démarre en arrière-plan. L'état est suivi dans `config.sync`.
 
+## Formules payantes (Shopify App Pricing)
+
+Sur le Shopify App Store, l'abonnement est vendu et facturé par Shopify. Les formules se créent dans le
+**Partner Dashboard** (app → Distribution → fiche App Store → Pricing content), pas dans le code.
+
+- **Lire la formule** : `billing.ts` interroge la Partner API (`activeSubscription`) avec l'identifiant de la
+  boutique (`shop { id }`). La réponse est gardée 5 minutes dans `integrations.config.billing`, puis relue
+  à la prochaine ouverture de Pingsell (Shopify n'envoie plus de webhook de changement de formule depuis
+  avril 2026). Au retour de la page des formules (`plan_handle` dans l'URL), elle est relue tout de suite.
+- **Pas de formule** : la page intégrée renvoie le marchand vers la page des formules de Shopify
+  (`admin.shopify.com/store/<boutique>/charges/<handle>/pricing_plans`, ouverte hors du cadre de l'app).
+- **Correspondance** : un identifiant de formule (handle) qui contient `business` donne Business, `pro` donne Pro,
+  tout le reste donne Gratuit.
+- **Partner API injoignable** : la page s'affiche quand même, sans la formule (le marchand n'est jamais bloqué).
+- **Désinstallation** : la formule en cache est oubliée.
+- Les limites des formules ne sont pas encore appliquées dans Pingsell.
+
+Variables (sur le service api) : `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_TOKEN` (client Partner API
+avec l'autorisation « Manage apps »), `SHOPIFY_APP_ID` (nombre dans l'URL de l'app du Partner Dashboard),
+`SHOPIFY_APP_HANDLE` (défaut `pingsell`). Sans les trois premières, la facturation est coupée et tout reste gratuit.
+
 ## Endpoints
 
 | Méthode | Route | Rôle |

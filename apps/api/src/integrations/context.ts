@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { preHandlerHookHandler } from 'fastify';
+import type { AppConfig } from '../config.js';
 
 /**
  * Contract between the core API and integration modules (see SPEC.md
@@ -31,7 +32,7 @@ export interface IntegrationContext {
     trigger: 'contact_created' | 'tag_added' | 'order_created' | 'cart_abandoned' | 'order_fulfilled',
     data?: object,
   ): void;
-  config: { publicUrl: string; shopifyApiKey?: string; shopifyApiSecret?: string };
+  config: { publicUrl: string; shopifyApiKey?: string; shopifyApiSecret?: string; shopifyBilling?: AppConfig['shopifyBilling'] };
 }
 
 declare module 'fastify' {

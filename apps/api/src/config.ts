@@ -58,6 +58,11 @@ export interface AppConfig {
   sendWindow: { startHour: number; endHour: number; timeZone: string };
   shopifyApiKey?: string;
   shopifyApiSecret?: string;
+  /**
+   * Shopify App Pricing (plans sold on the App Store, billed by Shopify). The plan of a store is read from the
+   * Partner API; unset = billing off, every store is on the free plan.
+   */
+  shopifyBilling?: { orgId: string; token: string; appId: string; appHandle: string };
   push: {
     /** 'live' (default) = real FCM / APNs / Expo calls, 'log' = nothing leaves the machine (local tests). */
     mode: 'log' | 'live';
@@ -105,6 +110,15 @@ function loadConfig(): AppConfig {
       : undefined,
     shopifyApiKey: optional('SHOPIFY_API_KEY'),
     shopifyApiSecret: optional('SHOPIFY_API_SECRET'),
+    shopifyBilling:
+      optional('SHOPIFY_PARTNER_ORG_ID') && optional('SHOPIFY_PARTNER_API_TOKEN') && optional('SHOPIFY_APP_ID')
+        ? {
+            orgId: str('SHOPIFY_PARTNER_ORG_ID', ''),
+            token: str('SHOPIFY_PARTNER_API_TOKEN', ''),
+            appId: str('SHOPIFY_APP_ID', '').replace(/^gid:\/\/shopify\/App\//, ''),
+            appHandle: str('SHOPIFY_APP_HANDLE', 'pingsell'),
+          }
+        : undefined,
     push: {
       mode: str('PUSH_MODE', 'live').toLowerCase() === 'log' ? 'log' : 'live',
       fcmUrl: str('PUSH_FCM_URL', 'https://fcm.googleapis.com').replace(/\/+$/, ''),

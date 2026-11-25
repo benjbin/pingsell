@@ -53,6 +53,23 @@ export interface ShopifyConfig {
   };
   error?: string | null;
   uninstalled_at?: string;
+  /** Shopify App Pricing: last plan read from the Partner API (see billing.ts). */
+  billing?: StoreBilling;
+}
+
+export type PlanId = 'free' | 'pro' | 'business';
+
+export interface StoreBilling {
+  /** Shop GID (gid://shopify/Shop/…), needed by the Partner API. */
+  shop_gid?: string;
+  /** null = no active subscription: the merchant must pick a plan. */
+  plan: PlanId | null;
+  handles: string[];
+  billing_period?: string | null;
+  trial_ends_at?: string | null;
+  period_ends_at?: string | null;
+  cancel_at_end?: boolean;
+  checked_at: string;
 }
 
 /** Public representation returned to clients (never the token). */
