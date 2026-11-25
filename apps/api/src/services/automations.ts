@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
-import { all, get, newId, now, parseJson, run, scalar, transaction, type DatabaseSync, type Row } from '../db.js';
+import { all, get, newId, now, parseJson, run, scalar, transaction, type DatabaseSync, type Row, type SQLInputValue } from '../db.js';
 import { accountSender, createMessage } from './messages.js';
 import { queuePushForContact } from './push.js';
 import { locale } from '../i18n.js';
 import { recordEvent, updateContactColumns } from './contacts.js';
 import { compileRules, loadSegmentRules } from './segments.js';
+import { claimWebhooks, enqueueWebhook, type WebhookItem } from './automationOutbox.js';
 import { createHash } from 'node:crypto';
+import { AdaptiveBatch } from './timeSlice.js';
 
 export const TRIGGERS = [
   'contact_created',
@@ -482,9 +484,18 @@ export function cancelRunsForContact(db: DatabaseSync, contactId: string): void 
   run(db, "UPDATE automation_runs SET status = 'cancelled' WHERE contact_id = ? AND status = 'pending'", contactId);
 }
 
-/** Webhook calls produced by runs, sent by the worker outside the database transaction. */
-const webhookQueue: Array<{ url: string; payload: unknown }> = [];
-export const takeWebhooks = () => webhookQueue.splice(0, webhookQueue.length);
+/** Database the worker drives, remembered by processDueRuns for `takeWebhooks()` (called without arguments). */
+let workerDb: DatabaseSync | undefined;
+
+/**
+ * Webhook calls produced by runs: written to the `webhook_outbox` table in the run's own transaction, claimed
+ * here and sent by the worker outside any transaction (see automationOutbox.ts).
+ */
+export const takeWebhooks = (db: DatabaseSync | undefined = workerDb): WebhookItem[] => (db ? claimWebhooks(db) : []);
+
+/** Longest stretch a worker entry point keeps the event loop (the API answers on the same thread). */
+const TICK_BUDGET_MS = 50;
+const pastDeadline = (deadline: number) => Date.now() >= deadline;
 
 /** Paris wall-clock parts of an instant. */
 function parisParts(t: number) {
@@ -601,215 +612,301 @@ const fillContactTags = (
     (_m, k: 'first_name' | 'last_name' | 'email', fb?: string) => contact[k] || fb || '',
   );
 
+interface DueRun {
+  id: string;
+  automation_id: string;
+  contact_id: string;
+  step_index: number;
+  created_at: string;
+  data: string | null;
+  attempts: number;
+}
+type AutomationRecord = ReturnType<typeof serializeAutomation>;
+
+/** Due runs read per query; those of a paused automation are parked in the same pass. */
+const DUE_BATCH = 500;
+/** A run that keeps failing is retried with back-off (2, 4, 8, 16 min), then cancelled with its error. */
+const MAX_RUN_ATTEMPTS = 5;
+const UNPARK_BATCH = 2000;
+let lastUnpark = 0;
+
+/** Resumed automations: their parked runs go back to the due queue, a few thousand per call. */
+function unparkResumed(db: DatabaseSync, deadline: number): void {
+  const resumed = all<{ id: string }>(
+    db,
+    `SELECT a.id FROM automations a
+      WHERE a.status = 'active' AND EXISTS (SELECT 1 FROM automation_runs r WHERE r.automation_id = a.id AND r.parked_at IS NOT NULL)`,
+  );
+  for (const a of resumed) {
+    if (pastDeadline(deadline)) return;
+    run(
+      db,
+      'UPDATE automation_runs SET parked_at = NULL WHERE rowid IN (SELECT rowid FROM automation_runs WHERE automation_id = ? AND parked_at IS NOT NULL LIMIT ?)',
+      a.id,
+      UNPARK_BATCH,
+    );
+  }
+}
+
 /**
  * Advances due automation runs: consecutive email / push / tag… steps run immediately,
- * waits reschedule the run, branches jump. Paused automations keep their runs pending.
+ * waits reschedule the run, branches jump. Paused automations keep their runs pending, « parked »
+ * (parked_at) so that the scan never reads them again until the automation is resumed.
+ * Bounded to ~50 ms per call (the rest waits for the next tick); a failing run never blocks the others.
  */
 export function processDueRuns(db: DatabaseSync, config: AppConfig, limit = 200): number {
-  const due = all<{
-    id: string;
-    automation_id: string;
-    contact_id: string;
-    step_index: number;
-    created_at: string;
-    data: string | null;
-  }>(
-    db,
-    `SELECT r.id, r.automation_id, r.contact_id, r.step_index, r.created_at, r.data
-       FROM automation_runs r JOIN automations a ON a.id = r.automation_id
-      WHERE r.status = 'pending' AND r.next_run_at <= ? AND a.status = 'active'
-      ORDER BY r.next_run_at LIMIT ?`,
-    now(),
-    limit,
-  );
-
-  for (const runRow of due) {
-    transaction(db, () => {
-      const automation = serializeAutomation(get(db, 'SELECT * FROM automations WHERE id = ?', runRow.automation_id)!);
-      const contact = get<{
-        id: string;
-        email: string;
-        first_name: string | null;
-        last_name: string | null;
-        status: string;
-        tags: string;
-        phone: string | null;
-      }>(db, 'SELECT id, email, first_name, last_name, status, tags, phone FROM contacts WHERE id = ?', runRow.contact_id);
-      const eventData = parseJson<Record<string, unknown> | null>(runRow.data, null);
-      if (!contact || !reachable(automation.trigger, contact.status, eventData)) {
-        run(db, "UPDATE automation_runs SET status = 'cancelled' WHERE id = ?", runRow.id);
-        return;
+  workerDb = db;
+  const deadline = Date.now() + TICK_BUDGET_MS;
+  if (Date.now() - lastUnpark > 30_000) {
+    lastUnpark = Date.now();
+    unparkResumed(db, deadline);
+  }
+  const automations = new Map<string, AutomationRecord | null>();
+  let processed = 0;
+  while (processed < limit && !pastDeadline(deadline)) {
+    const due = all<DueRun>(
+      db,
+      `SELECT id, automation_id, contact_id, step_index, created_at, data, attempts
+         FROM automation_runs INDEXED BY idx_runs_due_live
+        WHERE status = 'pending' AND parked_at IS NULL AND next_run_at <= ?
+        ORDER BY next_run_at LIMIT ?`,
+      now(),
+      DUE_BATCH,
+    );
+    if (!due.length) break;
+    const park: string[] = [];
+    let stopped = false;
+    for (const runRow of due) {
+      let automation = automations.get(runRow.automation_id);
+      if (automation === undefined) {
+        const row = get(db, 'SELECT * FROM automations WHERE id = ?', runRow.automation_id);
+        automation = row ? serializeAutomation(row) : null;
+        automations.set(runRow.automation_id, automation);
       }
-
-      const ops = flattenSteps(automation.steps);
-      const ctx = {
-        automationId: automation.id,
-        accountId: automation.account_id,
-        contactId: contact.id,
-        since: String(runRow.created_at),
-        data: eventData,
-      };
-      let index = Number(runRow.step_index);
-      let nextRunAt = now();
-      let waiting = false;
-      let exited = false;
-      let guard = 0;
-      const senderName = accountSender(db, config, automation.account_id).name;
-      while (index < ops.length && guard++ < 500) {
-        const step = ops[index];
-        index++;
-        if (step.type === 'jump') {
-          index = step.target;
-          continue;
-        }
-        if (step.type === 'jump_unless') {
-          if (!evalCondition(db, step.condition, ctx)) index = step.target;
-          continue;
-        }
-        if (step.type === 'split_jump') {
-          if (!inFirstPath(runRow.id, step.percent)) index = step.target;
-          continue;
-        }
-        if (step.type === 'wait') {
-          nextRunAt = new Date(Date.now() + step.hours * 3_600_000).toISOString();
-          waiting = true;
-          break;
-        }
-        if (step.type === 'wait_until') {
-          const date = typeof eventData?.date === 'string' ? Date.parse(eventData.date) : NaN;
-          // No date, or the moment already passed (booking made at the last minute): go on right away.
-          if (Number.isNaN(date)) continue;
-          const at = date + (step.direction === 'before' ? -1 : 1) * step.hours * 3_600_000;
-          if (at <= Date.now()) continue;
-          nextRunAt = new Date(at).toISOString();
-          waiting = true;
-          break;
-        }
-        if (step.type === 'send_window') {
-          const at = nextWindowStart(step);
-          if (at === null) continue;
-          nextRunAt = new Date(at).toISOString();
-          waiting = true;
-          break;
-        }
-        if (step.type === 'exit_if') {
-          if (exitConditionMet(db, automation.id, contact.id, step.condition, String(runRow.created_at))) {
-            exited = true;
-            break;
-          }
-          continue;
-        }
-        if (step.type === 'tag') {
-          const tags = parseJson<string[]>(
-            get<{ tags: string }>(db, 'SELECT tags FROM contacts WHERE id = ?', contact.id)?.tags ?? '[]',
-            [],
-          );
-          const has = tags.includes(step.tag);
-          if (step.action === 'add' && !has) {
-            updateContactColumns(db, contact.id, {
-              tags: JSON.stringify([...tags, step.tag]),
-            });
-            recordEvent(db, automation.account_id, contact.id, 'tag_added', {
-              tag: step.tag,
-              source: 'automation',
-            });
-            fireTrigger(db, automation.account_id, contact.id, 'tag_added', {
-              tag: step.tag,
-            });
-          } else if (step.action === 'remove' && has) {
-            updateContactColumns(db, contact.id, {
-              tags: JSON.stringify(tags.filter((x) => x !== step.tag)),
-            });
-          }
-          continue;
-        }
-        if (step.type === 'webhook') {
-          const c = get<Record<string, unknown>>(
-            db,
-            'SELECT id, email, first_name, last_name, phone, tags, attributes, status, total_spent, orders_count, last_order_at, created_at FROM contacts WHERE id = ?',
-            contact.id,
-          )!;
-          webhookQueue.push({
-            url: step.url,
-            payload: {
-              automation: {
-                id: automation.id,
-                name: automation.name,
-                trigger: automation.trigger,
-              },
-              contact: {
-                ...c,
-                tags: parseJson(String(c.tags ?? '[]'), []),
-                attributes: parseJson(String(c.attributes ?? '{}'), {}),
-              },
-              event: eventData,
-              sent_at: now(),
-            },
-          });
-          continue;
-        }
-        if (step.type === 'notify') {
-          const owner = get<{ email: string }>(db, 'SELECT email FROM accounts WHERE id = ?', automation.account_id);
-          const to = (step.to?.trim() || owner?.email || '').slice(0, 500);
-          if (to) {
-            const fill = (x: string) => fillContactTags(fillEventTags(x, eventData), contact);
-            run(
-              db,
-              `INSERT INTO team_notifications (id, account_id, automation_id, contact_id, to_email, subject, message, data, status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
-              newId(),
-              automation.account_id,
-              automation.id,
-              contact.id,
-              to,
-              fill(step.subject),
-              fill(step.message ?? ''),
-              runRow.data,
-              now(),
-            );
-          }
-          continue;
-        }
-        if (step.type === 'push') {
-          // Contacts without the app simply skip this step.
-          queuePushForContact(
-            db,
-            automation.account_id,
-            contact.id,
-            {
-              ...step,
-              title: fillEventTags(step.title, eventData),
-              body: fillEventTags(step.body, eventData),
-            },
-            automation.id,
-            step.in_app === false ? ['push'] : ['push', 'in_app'],
-          );
-          continue;
-        }
-        createMessage(db, config, {
-          accountId: automation.account_id,
-          automationId: automation.id,
-          contactId: contact.id,
-          contact,
-          subject: fillEventTags(step.subject, eventData),
-          html: fillEventTags(step.html, eventData, true),
-          preheader: step.preheader ? fillEventTags(step.preheader, eventData) : step.preheader,
-          senderName,
-        });
+      if (!automation || automation.status !== 'active') {
+        park.push(runRow.id);
+        continue;
       }
+      if (processed >= limit || pastDeadline(deadline)) {
+        stopped = true;
+        break;
+      }
+      advanceRunSafely(db, config, runRow, automation);
+      processed++;
+    }
+    if (park.length) run(db, 'UPDATE automation_runs SET parked_at = ? WHERE id IN (SELECT value FROM json_each(?))', now(), JSON.stringify(park));
+    if (stopped || due.length < DUE_BATCH) break;
+  }
+  return processed;
+}
 
-      const finished = exited || (!waiting && index >= ops.length);
+function advanceRunSafely(db: DatabaseSync, config: AppConfig, runRow: DueRun, automation: AutomationRecord): void {
+  try {
+    transaction(db, () => advanceRun(db, config, runRow, automation));
+  } catch (err) {
+    const attempts = Number(runRow.attempts ?? 0) + 1;
+    const message = (err instanceof Error ? err.message : String(err)).slice(0, 500);
+    console.error(`[worker] automatisation ${automation.id}, parcours ${runRow.id} (essai ${attempts}) : ${message}`);
+    if (attempts >= MAX_RUN_ATTEMPTS) {
+      run(db, "UPDATE automation_runs SET status = 'cancelled', attempts = ?, error = ? WHERE id = ?", attempts, message, runRow.id);
+    } else {
       run(
         db,
-        'UPDATE automation_runs SET step_index = ?, next_run_at = ?, status = ? WHERE id = ?',
-        index,
-        nextRunAt,
-        finished ? 'done' : 'pending',
+        'UPDATE automation_runs SET attempts = ?, error = ?, next_run_at = ? WHERE id = ?',
+        attempts,
+        message,
+        new Date(Date.now() + 60_000 * 2 ** attempts).toISOString(),
         runRow.id,
       );
+    }
+  }
+}
+
+function advanceRun(db: DatabaseSync, config: AppConfig, runRow: DueRun, automation: AutomationRecord): void {
+  const contact = get<{
+    id: string;
+    email: string;
+    first_name: string | null;
+    last_name: string | null;
+    status: string;
+    tags: string;
+    phone: string | null;
+  }>(db, 'SELECT id, email, first_name, last_name, status, tags, phone FROM contacts WHERE id = ?', runRow.contact_id);
+  const eventData = parseJson<Record<string, unknown> | null>(runRow.data, null);
+  if (!contact || !reachable(automation.trigger, contact.status, eventData)) {
+    run(db, "UPDATE automation_runs SET status = 'cancelled' WHERE id = ?", runRow.id);
+    return;
+  }
+
+  const ops = flattenSteps(automation.steps);
+  const ctx = {
+    automationId: automation.id,
+    accountId: automation.account_id,
+    contactId: contact.id,
+    since: String(runRow.created_at),
+    data: eventData,
+  };
+  let index = Number(runRow.step_index);
+  let nextRunAt = now();
+  let waiting = false;
+  let exited = false;
+  let guard = 0;
+  const senderName = accountSender(db, config, automation.account_id).name;
+  while (index < ops.length && guard++ < 500) {
+    const step = ops[index];
+    index++;
+    if (step.type === 'jump') {
+      index = step.target;
+      continue;
+    }
+    if (step.type === 'jump_unless') {
+      if (!evalCondition(db, step.condition, ctx)) index = step.target;
+      continue;
+    }
+    if (step.type === 'split_jump') {
+      if (!inFirstPath(runRow.id, step.percent)) index = step.target;
+      continue;
+    }
+    if (step.type === 'wait') {
+      nextRunAt = new Date(Date.now() + step.hours * 3_600_000).toISOString();
+      waiting = true;
+      break;
+    }
+    if (step.type === 'wait_until') {
+      const date = typeof eventData?.date === 'string' ? Date.parse(eventData.date) : NaN;
+      // No date, or the moment already passed (booking made at the last minute): go on right away.
+      if (Number.isNaN(date)) continue;
+      const at = date + (step.direction === 'before' ? -1 : 1) * step.hours * 3_600_000;
+      if (at <= Date.now()) continue;
+      nextRunAt = new Date(at).toISOString();
+      waiting = true;
+      break;
+    }
+    if (step.type === 'send_window') {
+      const at = nextWindowStart(step);
+      if (at === null) continue;
+      nextRunAt = new Date(at).toISOString();
+      waiting = true;
+      break;
+    }
+    if (step.type === 'exit_if') {
+      if (exitConditionMet(db, automation.id, contact.id, step.condition, String(runRow.created_at))) {
+        exited = true;
+        break;
+      }
+      continue;
+    }
+    if (step.type === 'tag') {
+      const tags = parseJson<string[]>(
+        get<{ tags: string }>(db, 'SELECT tags FROM contacts WHERE id = ?', contact.id)?.tags ?? '[]',
+        [],
+      );
+      const has = tags.includes(step.tag);
+      if (step.action === 'add' && !has) {
+        updateContactColumns(db, contact.id, {
+          tags: JSON.stringify([...tags, step.tag]),
+        });
+        recordEvent(db, automation.account_id, contact.id, 'tag_added', {
+          tag: step.tag,
+          source: 'automation',
+        });
+        fireTrigger(db, automation.account_id, contact.id, 'tag_added', {
+          tag: step.tag,
+        });
+      } else if (step.action === 'remove' && has) {
+        updateContactColumns(db, contact.id, {
+          tags: JSON.stringify(tags.filter((x) => x !== step.tag)),
+        });
+      }
+      continue;
+    }
+    if (step.type === 'webhook') {
+      const c = get<Record<string, unknown>>(
+        db,
+        'SELECT id, email, first_name, last_name, phone, tags, attributes, status, total_spent, orders_count, last_order_at, created_at FROM contacts WHERE id = ?',
+        contact.id,
+      )!;
+      enqueueWebhook(db, {
+        accountId: automation.account_id,
+        automationId: automation.id,
+        contactId: contact.id,
+        url: step.url,
+        payload: {
+          automation: {
+            id: automation.id,
+            name: automation.name,
+            trigger: automation.trigger,
+          },
+          contact: {
+            ...c,
+            tags: parseJson(String(c.tags ?? '[]'), []),
+            attributes: parseJson(String(c.attributes ?? '{}'), {}),
+          },
+          event: eventData,
+          sent_at: now(),
+        },
+      });
+      continue;
+    }
+    if (step.type === 'notify') {
+      const owner = get<{ email: string }>(db, 'SELECT email FROM accounts WHERE id = ?', automation.account_id);
+      const to = (step.to?.trim() || owner?.email || '').slice(0, 500);
+      if (to) {
+        const fill = (x: string) => fillContactTags(fillEventTags(x, eventData), contact);
+        run(
+          db,
+          `INSERT INTO team_notifications (id, account_id, automation_id, contact_id, to_email, subject, message, data, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
+          newId(),
+          automation.account_id,
+          automation.id,
+          contact.id,
+          to,
+          fill(step.subject),
+          fill(step.message ?? ''),
+          runRow.data,
+          now(),
+        );
+      }
+      continue;
+    }
+    if (step.type === 'push') {
+      // Contacts without the app simply skip this step.
+      queuePushForContact(
+        db,
+        automation.account_id,
+        contact.id,
+        {
+          ...step,
+          title: fillEventTags(step.title, eventData),
+          body: fillEventTags(step.body, eventData),
+        },
+        automation.id,
+        step.in_app === false ? ['push'] : ['push', 'in_app'],
+      );
+      continue;
+    }
+    createMessage(db, config, {
+      accountId: automation.account_id,
+      automationId: automation.id,
+      contactId: contact.id,
+      contact,
+      subject: fillEventTags(step.subject, eventData),
+      html: fillEventTags(step.html, eventData, true),
+      preheader: step.preheader ? fillEventTags(step.preheader, eventData) : step.preheader,
+      senderName,
     });
   }
-  return due.length;
+
+  const finished = exited || (!waiting && index >= ops.length);
+  run(
+    db,
+    'UPDATE automation_runs SET step_index = ?, next_run_at = ?, status = ? WHERE id = ?',
+    index,
+    nextRunAt,
+    finished ? 'done' : 'pending',
+    runRow.id,
+  );
 }
 
 /** True when the goal of the automation is already reached for this run (stop sending). */
@@ -936,114 +1033,199 @@ function monthDay(v: unknown): [number, number, number | null] | null {
   return null;
 }
 
-let lastScheduledRun = 0;
+/** Contacts read per step of a scheduled pass: one short transaction each, sized for ~20 ms (COMMIT included). */
+const SCAN_WINDOW = 500;
+
 /**
- * Birthdays / anniversaries, inactive customers, segment entries: checked every few minutes by the worker.
- * Each automation starts at most once per customer per occurrence (`automation_seen`).
+ * One pass of a time-based automation over the account's subscribed contacts, in rowid windows (keyset), so
+ * that 2 M contacts are read a little at a time: a pass resumes on the next worker tick where it stopped.
  */
-export function processScheduledTriggers(db: DatabaseSync, nowMs = Date.now(), force = false): number {
-  const every = Number(process.env.SCHEDULED_TRIGGERS_MS ?? 300_000);
-  if (!force && nowMs - lastScheduledRun < every) return 0;
-  lastScheduledRun = nowMs;
-  let started = 0;
-  const automations = all(
+interface ScheduledPass {
+  automation: AutomationRecord;
+  /** Instant the pass reasons about (target date of birthdays, inactivity cutoff). */
+  nowMs: number;
+  /** Last contact rowid read (« enter » phase) / last automation_seen contact id (« leave » phase). */
+  cursor: number;
+  leaveCursor: string;
+  phase: 'enter' | 'leave';
+  /** segment_entered: compiled rules and whether the baseline was already recorded. */
+  segment?: { sql: string; params: SQLInputValue[]; seeded: boolean } | null;
+  /** Window size of this pass (a pass that starts many journeys per window gets smaller windows). */
+  batch: AdaptiveBatch;
+}
+
+const passes = new Map<string, ScheduledPass>();
+let lastScheduledRun = 0;
+
+/** Upper rowid of the next window of subscribed contacts after `after` (Infinity for the last window). */
+function contactWindow(db: DatabaseSync, accountId: string, after: number, size: number): number {
+  const row = get<{ r: number }>(
     db,
-    "SELECT * FROM automations WHERE status = 'active' AND trigger IN ('date_anniversary','inactive','segment_entered')",
-  ).map(serializeAutomation);
-  for (const a of automations) {
-    transaction(db, () => {
-      const cfg = a.trigger_config;
-      if (a.trigger === 'date_anniversary') {
-        const field = cfg.field || 'birthday';
-        const target = parisParts(nowMs + (cfg.days_before ?? 0) * 86_400_000);
-        const rows = all<{
-          id: string;
-          v: string | null;
-          created_at: string;
-          status: string;
-        }>(
+    "SELECT rowid AS r FROM contacts WHERE account_id = ? AND status = 'subscribed' AND rowid > ? ORDER BY rowid LIMIT 1 OFFSET ?",
+    accountId,
+    after,
+    size - 1,
+  );
+  return row ? Number(row.r) : Number.MAX_SAFE_INTEGER;
+}
+
+/** Runs one window of a pass. Returns [journeys started, pass finished]. */
+function stepPass(db: DatabaseSync, pass: ScheduledPass): [number, boolean] {
+  const a = pass.automation;
+  const cfg = a.trigger_config;
+  const size = pass.batch.size;
+  return pass.batch.measure(() => transaction(db, (): [number, boolean] => {
+    // Paused or deleted since the pass started: stop here.
+    if (get<{ status: string }>(db, 'SELECT status FROM automations WHERE id = ?', a.id)?.status !== 'active') return [0, true];
+    let started = 0;
+    if (a.trigger === 'segment_entered') {
+      if (pass.segment === undefined) {
+        const rules = cfg.segment_id ? loadSegmentRules(db, a.account_id, cfg.segment_id) : undefined;
+        const compiled = rules ? compileRules(rules) : null;
+        pass.segment = compiled && {
+          ...compiled,
+          seeded: scalar(db, "SELECT COUNT(*) FROM automation_seen WHERE automation_id = ? AND contact_id = '' AND key = 'seg:seed'", a.id) > 0,
+        };
+      }
+      const seg = pass.segment;
+      if (!seg) return [0, true];
+      if (pass.phase === 'leave') {
+        // Left the segment (or unsubscribed): may enter again later.
+        const seen = all<{ contact_id: string }>(
           db,
-          field === 'created_at'
-            ? 'SELECT id, created_at AS v, created_at, status FROM contacts WHERE account_id = ?'
-            : `SELECT id, json_extract(attributes, '$.' || ?) AS v, created_at, status FROM contacts WHERE account_id = ? AND json_extract(attributes, '$.' || ?) IS NOT NULL`,
-          ...(field === 'created_at' ? [a.account_id] : [field, a.account_id, field]),
-        );
-        for (const c of rows) {
-          if (c.status !== 'subscribed') continue;
-          const md = monthDay(c.v);
-          if (!md || md[0] !== target.m || md[1] !== target.d) continue;
-          if (field === 'created_at' && md[2] === target.y) continue; // signed up this year: not an anniversary yet
-          const date = `${target.y}-${String(target.m).padStart(2, '0')}-${String(target.d).padStart(2, '0')}`;
-          const years = md[2] ? target.y - md[2] : null;
-          if (
-            startOnce(db, a.id, c.id, `anniv:${target.y}`, {
-              date,
-              years,
-              field,
-            })
-          )
-            started++;
-        }
-      } else if (a.trigger === 'inactive') {
-        const days = cfg.days ?? 90;
-        const cutoff = new Date(nowMs - days * 86_400_000).toISOString();
-        const rows = all<{ id: string; last_order_at: string }>(
-          db,
-          "SELECT id, last_order_at FROM contacts WHERE account_id = ? AND status = 'subscribed' AND orders_count > 0 AND last_order_at IS NOT NULL AND last_order_at <= ?",
-          a.account_id,
-          cutoff,
-        );
-        for (const c of rows)
-          if (
-            startOnce(db, a.id, c.id, `inactive:${c.last_order_at}`, {
-              last_order_at: c.last_order_at,
-              days,
-            })
-          )
-            started++;
-      } else if (a.trigger === 'segment_entered' && cfg.segment_id) {
-        const rules = loadSegmentRules(db, a.account_id, cfg.segment_id);
-        if (!rules) return;
-        const compiled = compileRules(rules);
+          "SELECT contact_id FROM automation_seen WHERE automation_id = ? AND key = 'seg' AND contact_id > ? ORDER BY contact_id LIMIT ?",
+          a.id,
+          pass.leaveCursor,
+          size,
+        ).map((r) => r.contact_id);
+        if (!seen.length) return [0, true];
+        pass.leaveCursor = seen[seen.length - 1]!;
         const members = new Set(
           all<{ id: string }>(
             db,
-            `SELECT id FROM contacts WHERE account_id = ? AND status = 'subscribed' AND ${compiled.sql}`,
+            `SELECT id FROM contacts WHERE id IN (SELECT value FROM json_each(?)) AND account_id = ? AND status = 'subscribed' AND ${seg.sql}`,
+            JSON.stringify(seen),
             a.account_id,
-            ...compiled.params,
+            ...seg.params,
           ).map((r) => r.id),
         );
-        // First look: today's members are the baseline, only newcomers start the journey.
-        const seeded =
-          scalar(db, "SELECT COUNT(*) FROM automation_seen WHERE automation_id = ? AND contact_id = '' AND key = 'seg:seed'", a.id) > 0;
-        const seen = new Set(
-          all<{ contact_id: string }>(db, "SELECT contact_id FROM automation_seen WHERE automation_id = ? AND key = 'seg'", a.id).map(
-            (r) => r.contact_id,
-          ),
-        );
-        if (!seeded) {
-          run(
-            db,
-            "INSERT OR IGNORE INTO automation_seen (automation_id, contact_id, key, created_at) VALUES (?, '', 'seg:seed', ?)",
-            a.id,
-            now(),
-          );
-          for (const id of members)
-            run(
-              db,
-              "INSERT OR IGNORE INTO automation_seen (automation_id, contact_id, key, created_at) VALUES (?, ?, 'seg', ?)",
-              a.id,
-              id,
-              now(),
-            );
-          return;
-        }
-        for (const id of members) if (!seen.has(id) && startOnce(db, a.id, id, 'seg', { segment_id: cfg.segment_id })) started++;
-        // Left the segment: may enter again later.
-        for (const id of seen)
-          if (!members.has(id)) run(db, "DELETE FROM automation_seen WHERE automation_id = ? AND contact_id = ? AND key = 'seg'", a.id, id);
+        for (const id of seen) if (!members.has(id)) run(db, "DELETE FROM automation_seen WHERE automation_id = ? AND contact_id = ? AND key = 'seg'", a.id, id);
+        return [0, seen.length < size];
       }
-    });
+      const end = contactWindow(db, a.account_id, pass.cursor, size);
+      const newcomers = all<{ id: string; r: number }>(
+        db,
+        `SELECT id, rowid AS r FROM contacts
+          WHERE account_id = ? AND status = 'subscribed' AND rowid > ? AND rowid <= ? AND ${seg.sql}
+            AND NOT EXISTS (SELECT 1 FROM automation_seen s WHERE s.automation_id = ? AND s.contact_id = contacts.id AND s.key = 'seg')`,
+        a.account_id,
+        pass.cursor,
+        end,
+        ...seg.params,
+        a.id,
+      );
+      for (const c of newcomers) {
+        // First look: today's members are the baseline, only later newcomers start the journey.
+        if (!seg.seeded) run(db, "INSERT OR IGNORE INTO automation_seen (automation_id, contact_id, key, created_at) VALUES (?, ?, 'seg', ?)", a.id, c.id, now());
+        else if (startOnce(db, a.id, c.id, 'seg', { segment_id: cfg.segment_id })) started++;
+      }
+      pass.cursor = end;
+      if (end !== Number.MAX_SAFE_INTEGER) return [started, false];
+      if (!seg.seeded) {
+        run(db, "INSERT OR IGNORE INTO automation_seen (automation_id, contact_id, key, created_at) VALUES (?, '', 'seg:seed', ?)", a.id, now());
+        return [started, true];
+      }
+      pass.phase = 'leave';
+      return [started, false];
+    }
+
+    const end = contactWindow(db, a.account_id, pass.cursor, size);
+    if (a.trigger === 'date_anniversary') {
+      const field = cfg.field || 'birthday';
+      const target = parisParts(pass.nowMs + (cfg.days_before ?? 0) * 86_400_000);
+      const mmdd = `${String(target.m).padStart(2, '0')}-${String(target.d).padStart(2, '0')}`;
+      const key = `anniv:${target.y}`;
+      const rows = all<{ id: string; v: string | null }>(
+        db,
+        field === 'created_at'
+          ? `SELECT id, created_at AS v FROM contacts
+              WHERE account_id = ? AND status = 'subscribed' AND rowid > ? AND rowid <= ? AND substr(created_at, 6, 5) = ?
+                AND NOT EXISTS (SELECT 1 FROM automation_seen s WHERE s.automation_id = ? AND s.contact_id = contacts.id AND s.key = ?)`
+          : `SELECT id, json_extract(attributes, '$.' || ?) AS v FROM contacts
+              WHERE account_id = ? AND status = 'subscribed' AND rowid > ? AND rowid <= ? AND json_extract(attributes, '$.' || ?) IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM automation_seen s WHERE s.automation_id = ? AND s.contact_id = contacts.id AND s.key = ?)`,
+        ...(field === 'created_at' ? [a.account_id, pass.cursor, end, mmdd, a.id, key] : [field, a.account_id, pass.cursor, end, field, a.id, key]),
+      );
+      for (const c of rows) {
+        const md = monthDay(c.v);
+        if (!md || md[0] !== target.m || md[1] !== target.d) continue;
+        if (field === 'created_at' && md[2] === target.y) continue; // signed up this year: not an anniversary yet
+        const years = md[2] ? target.y - md[2] : null;
+        if (startOnce(db, a.id, c.id, key, { date: `${target.y}-${mmdd}`, years, field })) started++;
+      }
+    } else if (a.trigger === 'inactive') {
+      const days = cfg.days ?? 90;
+      const rows = all<{ id: string; last_order_at: string }>(
+        db,
+        `SELECT id, last_order_at FROM contacts
+          WHERE account_id = ? AND status = 'subscribed' AND rowid > ? AND rowid <= ?
+            AND orders_count > 0 AND last_order_at IS NOT NULL AND last_order_at <= ?
+            AND NOT EXISTS (SELECT 1 FROM automation_seen s WHERE s.automation_id = ? AND s.contact_id = contacts.id AND s.key = 'inactive:' || contacts.last_order_at)`,
+        a.account_id,
+        pass.cursor,
+        end,
+        new Date(pass.nowMs - days * 86_400_000).toISOString(),
+        a.id,
+      );
+      for (const c of rows) if (startOnce(db, a.id, c.id, `inactive:${c.last_order_at}`, { last_order_at: c.last_order_at, days })) started++;
+    } else {
+      return [0, true];
+    }
+    pass.cursor = end;
+    return [started, end === Number.MAX_SAFE_INTEGER];
+  }));
+}
+
+/**
+ * Birthdays / anniversaries, inactive customers, segment entries: a new pass starts every few minutes
+ * (SCHEDULED_TRIGGERS_MS) for each automation, and passes advance by windows of 1 000 contacts, ~50 ms
+ * per call at most, resuming on the next worker tick. Each automation starts at most once per customer
+ * per occurrence (`automation_seen`), and contacts already started are filtered out in SQL.
+ * `force` (tests, scripts) starts a pass right away and runs it to the end.
+ */
+export function processScheduledTriggers(db: DatabaseSync, nowMs = Date.now(), force = false): number {
+  const every = Number(process.env.SCHEDULED_TRIGGERS_MS ?? 300_000);
+  if (force || nowMs - lastScheduledRun >= every) {
+    lastScheduledRun = nowMs;
+    const automations = all(
+      db,
+      "SELECT * FROM automations WHERE status = 'active' AND trigger IN ('date_anniversary','inactive','segment_entered')",
+    ).map(serializeAutomation);
+    for (const a of automations) {
+      if (!passes.has(a.id)) passes.set(a.id, { automation: a, nowMs, cursor: 0, leaveCursor: '', phase: 'enter', batch: new AdaptiveBatch(SCAN_WINDOW, 50, 5000) });
+    }
+  }
+  if (!passes.size) return 0;
+  const deadline = force ? Infinity : Date.now() + TICK_BUDGET_MS;
+  for (const pass of passes.values()) pass.batch.start();
+  let started = 0;
+  // Round robin: one window per automation in turn, so a huge account never starves the others.
+  for (let progressed = true; progressed && passes.size && !pastDeadline(deadline); ) {
+    progressed = false;
+    for (const [id, pass] of [...passes]) {
+      // Only start a window that should end before the deadline (its last duration is known).
+      if (pastDeadline(deadline) || !pass.batch.fits(deadline)) continue;
+      progressed = true;
+      try {
+        const [n, finished] = stepPass(db, pass);
+        started += n;
+        if (finished) passes.delete(id);
+      } catch (err) {
+        // Broken rules, deleted segment…: this automation waits for the next round, the others go on.
+        passes.delete(id);
+        console.error(`[worker] déclencheur planifié de l’automatisation ${id} : ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
   }
   return started;
 }

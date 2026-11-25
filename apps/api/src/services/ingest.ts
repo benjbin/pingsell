@@ -163,10 +163,11 @@ export function createIngest(db: DatabaseSync) {
         const tracking = body.tracking_number ?? null;
         const shipments = db
           .prepare(
-            `SELECT id, data FROM events WHERE account_id = ? AND contact_id = ? AND type = 'order_fulfilled'
+            // Pinned to the buyer's own history (idx_events_contact): idx_events_account_type would read every shipment of the account.
+            `SELECT id, data FROM events INDEXED BY idx_events_contact WHERE contact_id = ? AND account_id = ? AND type = 'order_fulfilled'
                AND json_extract(data, '$.order_id') = ?`,
           )
-          .all(accountId, existing.id, body.order_id) as { id: string; data: string }[];
+          .all(existing.id, accountId, body.order_id) as { id: string; data: string }[];
         const tracked = (e: { data: string }) => (JSON.parse(e.data) as { tracking_number?: string | null }).tracking_number ?? null;
         if (shipments.some((e) => !tracking || tracked(e) === tracking)) return { contact: existing, duplicate: true, skipped: false };
         // The tracking number often arrives after the shipment: complete it without a second email.
@@ -193,9 +194,10 @@ export function createIngest(db: DatabaseSync) {
         !!existing &&
         scalar(
           db,
-          "SELECT COUNT(*) FROM events WHERE account_id = ? AND contact_id = ? AND type = 'order' AND json_extract(data, '$.order_id') = ?",
-          accountId,
+          // Same: only this contact's events (idx_events_contact), never every order of the account.
+          "SELECT COUNT(*) FROM events INDEXED BY idx_events_contact WHERE contact_id = ? AND account_id = ? AND type = 'order' AND json_extract(data, '$.order_id') = ?",
           existing.id,
+          accountId,
           body.order_id,
         ) > 0;
       const total = body.total ?? 0;

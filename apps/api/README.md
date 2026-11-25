@@ -76,6 +76,30 @@ Le worker enchaîne les étapes `email` et reprogramme sur les étapes `wait`. G
 série `contact_created` par contact, pas de doublon tant qu'un run est en cours, une commande annule
 les relances de panier abandonné, un désabonnement annule les runs en cours.
 
+### Webhooks sortants
+
+L'étape `webhook` d'une automatisation n'appelle pas l'URL directement : l'appel est écrit dans la table
+`webhook_outbox` (dans la même transaction que l'étape), puis envoyé par le worker (`takeWebhooks` →
+`sendWebhooks`). Un appel est donc envoyé au moins une fois, même si le processus redémarre.
+
+- `POST` JSON `{ automation, contact, event, sent_at }`, en-têtes `Content-Type: application/json`,
+  `User-Agent: Pingsell-Webhook/1.0`, `Pingsell-Webhook-Id` (identique à chaque nouvel essai : sert à dédoublonner),
+  `Pingsell-Signature: t=<horodatage unix>,v1=<hex>`.
+- Signature : `v1 = HMAC-SHA256(secret, "<t>.<corps brut>")` en hexadécimal. Le secret (`whsec_…`, un par compte)
+  est affiché dans `GET /api/v1/inbound` (`outgoing_webhooks.signing_secret`) et renouvelé par
+  `POST /api/v1/inbound/outgoing-webhooks/rotate`. Côté récepteur : recalculer la signature sur le corps brut,
+  la comparer en temps constant et refuser un `t` de plus de 5 minutes.
+  ```js
+  const [t, v1] = header.split(',').map((p) => p.split('=')[1]);
+  const ok = crypto.timingSafeEqual(Buffer.from(v1, 'hex'), crypto.createHmac('sha256', secret).update(`${t}.${rawBody}`).digest());
+  ```
+- Réponse 2xx = reçu. Erreur réseau, délai dépassé (5 s), `408`, `429` ou `5xx` : nouvel essai après 1 min, 5 min,
+  30 min, 2 h puis 6 h, ensuite l'appel est marqué `failed`. Autre code (`4xx`, redirection) : `failed` tout de suite.
+- Sécurité : HTTPS ou HTTP public uniquement. L'adresse est résolue une fois et la connexion part vers cette IP
+  (pas de rebinding DNS), les adresses privées / locales sont refusées (`ALLOW_PRIVATE_WEBHOOKS=1` pour le
+  développement), les redirections ne sont pas suivies.
+- Historique : les appels envoyés sont effacés après 2 jours, les échecs après 14 jours.
+
 ### Tracking public
 
 `GET /t/o/:messageId.gif` · `GET /t/c/:messageId?u=` (redirige uniquement vers une URL présente dans

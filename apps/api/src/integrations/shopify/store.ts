@@ -4,6 +4,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { ShopifyClient, isTerminalTokenError, requestAccessToken, type TokenProvider } from './client.js';
 import type { IntegrationRow, PublicIntegration, ShopifyConfig } from './types.js';
 import { t } from '../../i18n.js';
+import { transaction } from '../../db.js';
 
 const PROVIDER = 'shopify';
 
@@ -31,6 +32,8 @@ export function ensureShopifySchema(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_shopify_checkouts_pending ON shopify_checkouts(status, updated_at);
     CREATE INDEX IF NOT EXISTS idx_shopify_checkouts_email ON shopify_checkouts(account_id, email);
+    -- Due abandoned checkouts only (guest checkouts without email never wait in front of them).
+    CREATE INDEX IF NOT EXISTS idx_shopify_checkouts_due ON shopify_checkouts(updated_at) WHERE status = 'pending' AND email IS NOT NULL;
 
     -- Secrets kept outside integrations.config so that core never exposes them.
     CREATE TABLE IF NOT EXISTS shopify_credentials (
@@ -73,6 +76,49 @@ export function ensureShopifySchema(db: DatabaseSync): void {
       webhook_id TEXT PRIMARY KEY,
       topic TEXT,
       received_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_shopify_webhook_log_received ON shopify_webhook_log(received_at);
+    CREATE INDEX IF NOT EXISTS idx_shopify_checkouts_token ON shopify_checkouts(account_id, checkout_token);
+
+    -- Shopify orders already recorded (webhooks and historical sync): one index probe instead of reading
+    -- every order event, and the claim that makes a redelivered order a no-op.
+    CREATE TABLE IF NOT EXISTS shopify_orders (
+      account_id TEXT NOT NULL,
+      order_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (account_id, order_id)
+    ) WITHOUT ROWID;
+
+    -- Verified webhooks waiting to be processed: the HTTP answer never waits for the work, and a failure is
+    -- retried (attempts, next_attempt_at) instead of being lost. Rows are deleted once processed.
+    CREATE TABLE IF NOT EXISTS shopify_webhook_inbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shop_domain TEXT NOT NULL,
+      topic TEXT NOT NULL,
+      webhook_id TEXT,
+      account_ids TEXT NOT NULL,                 -- JSON: accounts whose secret verified the HMAC
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',   -- pending | failed
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TEXT NOT NULL,
+      last_error TEXT,
+      received_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_shopify_webhook_inbox_due ON shopify_webhook_inbox(status, next_attempt_at);
+
+    -- Historical sync, resumable after a restart: phase, Shopify cursor and counts, saved after every page.
+    CREATE TABLE IF NOT EXISTS shopify_sync_state (
+      account_id TEXT PRIMARY KEY,
+      status TEXT NOT NULL,                      -- running | done | error
+      phase TEXT NOT NULL,                       -- customers | orders | done
+      cursor TEXT,
+      orders_since TEXT,
+      customers INTEGER NOT NULL DEFAULT 0,
+      orders INTEGER NOT NULL DEFAULT 0,
+      started_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      finished_at TEXT,
+      error TEXT
     );
   `);
   // Expiring offline tokens (public apps, mandatory since 2026): rotating refresh token per store.
@@ -147,6 +193,7 @@ export function deleteIntegration(db: DatabaseSync, accountId: string): void {
   db.prepare('DELETE FROM integrations WHERE account_id = ? AND provider = ?').run(accountId, PROVIDER);
   db.prepare('DELETE FROM shopify_credentials WHERE account_id = ?').run(accountId);
   db.prepare("DELETE FROM shopify_checkouts WHERE account_id = ? AND status = 'pending'").run(accountId);
+  db.prepare('DELETE FROM shopify_sync_state WHERE account_id = ?').run(accountId);
 }
 
 export function toPublic(row: IntegrationRow): PublicIntegration {
@@ -307,12 +354,13 @@ export interface ContactSnapshot {
   last_order_at: string | null;
 }
 
+/** Emails are stored trimmed and lower-cased (contacts.normalizeEmail, cleanEmail): compare with `=` to use the index. */
+const emailKey = (email: string) => email.trim().toLowerCase();
+
 export function findContactByEmail(db: DatabaseSync, accountId: string, email: string): ContactSnapshot | undefined {
   const row = db
-    .prepare(
-      'SELECT id, email, tags, status, total_spent, orders_count, last_order_at FROM contacts WHERE account_id = ? AND lower(email) = lower(?)',
-    )
-    .get(accountId, email) as
+    .prepare('SELECT id, email, tags, status, total_spent, orders_count, last_order_at FROM contacts WHERE account_id = ? AND email = ?')
+    .get(accountId, emailKey(email)) as
     | { id: string; email: string; tags: string | null; status: string; total_spent: number | null; orders_count: number | null; last_order_at: string | null }
     | undefined;
   if (!row) return undefined;
@@ -334,12 +382,27 @@ export function findContactByEmail(db: DatabaseSync, accountId: string, email: s
   };
 }
 
-/** True when an `order` event with this Shopify order id was already recorded for the account. */
-export function orderAlreadyRecorded(db: DatabaseSync, accountId: string, orderId: string): boolean {
-  const row = db
-    .prepare("SELECT 1 AS x FROM events WHERE account_id = ? AND type = 'order' AND json_extract(data, '$.order_id') = ? LIMIT 1")
-    .get(accountId, orderId);
-  return Boolean(row);
+/**
+ * True when this Shopify order was already recorded for the account: `shopify_orders` (one index probe), or,
+ * for orders recorded before that table existed, an `order` event among the buyer's own events (contact index:
+ * bounded by that customer's history, never the whole account's).
+ */
+export function orderAlreadyRecorded(db: DatabaseSync, accountId: string, orderId: string, contactId?: string | null): boolean {
+  if (db.prepare('SELECT 1 AS x FROM shopify_orders WHERE account_id = ? AND order_id = ?').get(accountId, orderId)) return true;
+  if (!contactId) return false;
+  const legacy = db
+    .prepare(
+      "SELECT 1 AS x FROM events INDEXED BY idx_events_contact WHERE contact_id = ? AND account_id = ? AND type = 'order' AND json_extract(data, '$.order_id') = ? LIMIT 1",
+    )
+    .get(contactId, accountId, orderId);
+  if (legacy) claimOrder(db, accountId, orderId);
+  return Boolean(legacy);
+}
+
+/** Records the order id; false when it was already there (another delivery got it first). */
+export function claimOrder(db: DatabaseSync, accountId: string, orderId: string): boolean {
+  const res = db.prepare('INSERT OR IGNORE INTO shopify_orders (account_id, order_id, created_at) VALUES (?, ?, ?)').run(accountId, orderId, nowIso());
+  return Number(res.changes) > 0;
 }
 
 /** Inserts an `order` event with its original date (used by the historical sync). */
@@ -368,9 +431,113 @@ export function markWebhookProcessed(db: DatabaseSync, webhookId: string, topic:
   return Number(res.changes) > 0;
 }
 
+/** Forgets delivery ids after 7 days and failed inbox rows after 30 (small batches, indexed). */
 export function pruneWebhookLog(db: DatabaseSync): void {
   const cutoff = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
-  db.prepare('DELETE FROM shopify_webhook_log WHERE received_at < ?').run(cutoff);
+  db.prepare('DELETE FROM shopify_webhook_log WHERE rowid IN (SELECT rowid FROM shopify_webhook_log WHERE received_at < ? LIMIT 5000)').run(cutoff);
+  const failedBefore = new Date(Date.now() - 30 * 24 * 3600_000).toISOString();
+  db.prepare("DELETE FROM shopify_webhook_inbox WHERE id IN (SELECT id FROM shopify_webhook_inbox WHERE status = 'failed' AND next_attempt_at < ? LIMIT 1000)").run(failedBefore);
+}
+
+// ---------------------------------------------------------------------------
+// Webhook inbox (verified deliveries, processed by the module's drain loop)
+
+export interface InboxRow {
+  id: number;
+  shop_domain: string;
+  topic: string;
+  webhook_id: string | null;
+  account_ids: string;
+  payload: string;
+  attempts: number;
+}
+
+/**
+ * Stores a verified delivery. Returns false for a duplicate (same X-Shopify-Webhook-Id already received):
+ * the delivery log and the inbox row are written together.
+ */
+export function enqueueWebhook(db: DatabaseSync, input: { shop: string; topic: string; webhookId: string | null; accountIds: string[]; payload: string }): boolean {
+  // Same transaction as the rest of the app (db.ts): a nested call joins the caller's transaction.
+  return transaction(db, () => {
+    if (input.webhookId && !markWebhookProcessed(db, input.webhookId, input.topic)) return false;
+    const ts = nowIso();
+    db.prepare(
+      `INSERT INTO shopify_webhook_inbox (shop_domain, topic, webhook_id, account_ids, payload, status, attempts, next_attempt_at, received_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
+    ).run(input.shop, input.topic, input.webhookId, JSON.stringify(input.accountIds), input.payload, ts, ts);
+    return true;
+  });
+}
+
+export function dueInboxRows(db: DatabaseSync, limit: number): InboxRow[] {
+  return db
+    .prepare("SELECT id, shop_domain, topic, webhook_id, account_ids, payload, attempts FROM shopify_webhook_inbox WHERE status = 'pending' AND next_attempt_at <= ? ORDER BY next_attempt_at, id LIMIT ?")
+    .all(nowIso(), limit) as unknown as InboxRow[];
+}
+
+/** Retries after 30 s, 2 min, 10 min, 1 h, 6 h…; then the row is kept as `failed` (30 days) for inspection. */
+const INBOX_RETRY_MS = [30_000, 120_000, 600_000, 3_600_000, 6 * 3_600_000, 12 * 3_600_000];
+
+export function inboxFailed(db: DatabaseSync, row: InboxRow, error: string): void {
+  const delay = INBOX_RETRY_MS[row.attempts];
+  db.prepare('UPDATE shopify_webhook_inbox SET attempts = attempts + 1, last_error = ?, status = ?, next_attempt_at = ? WHERE id = ?').run(
+    error.slice(0, 1000),
+    delay === undefined ? 'failed' : 'pending',
+    new Date(Date.now() + (delay ?? 0)).toISOString(),
+    row.id,
+  );
+}
+
+export function inboxDone(db: DatabaseSync, id: number): void {
+  db.prepare('DELETE FROM shopify_webhook_inbox WHERE id = ?').run(id);
+}
+
+// ---------------------------------------------------------------------------
+// Historical sync state
+
+export interface SyncState {
+  account_id: string;
+  status: 'running' | 'done' | 'error';
+  phase: 'customers' | 'orders' | 'done';
+  cursor: string | null;
+  orders_since: string | null;
+  customers: number;
+  orders: number;
+  started_at: string;
+  updated_at: string;
+  finished_at: string | null;
+  error: string | null;
+}
+
+export function getSyncState(db: DatabaseSync, accountId: string): SyncState | undefined {
+  return db.prepare('SELECT * FROM shopify_sync_state WHERE account_id = ?').get(accountId) as unknown as SyncState | undefined;
+}
+
+export function saveSyncState(db: DatabaseSync, state: SyncState): void {
+  db.prepare(
+    `INSERT INTO shopify_sync_state (account_id, status, phase, cursor, orders_since, customers, orders, started_at, updated_at, finished_at, error)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(account_id) DO UPDATE SET status = excluded.status, phase = excluded.phase, cursor = excluded.cursor,
+       orders_since = excluded.orders_since, customers = excluded.customers, orders = excluded.orders, started_at = excluded.started_at,
+       updated_at = excluded.updated_at, finished_at = excluded.finished_at, error = excluded.error`,
+  ).run(
+    state.account_id,
+    state.status,
+    state.phase,
+    state.cursor,
+    state.orders_since,
+    state.customers,
+    state.orders,
+    state.started_at,
+    nowIso(),
+    state.finished_at,
+    state.error,
+  );
+}
+
+/** Syncs interrupted by a restart (still `running` in the database). */
+export function interruptedSyncs(db: DatabaseSync): string[] {
+  return (db.prepare("SELECT account_id FROM shopify_sync_state WHERE status = 'running'").all() as { account_id: string }[]).map((r) => r.account_id);
 }
 
 // ---------------------------------------------------------------------------
@@ -439,8 +606,8 @@ function contactsFor(db: DatabaseSync, accountId: string, email: string | null, 
   const rows = new Map<string, { id: string; source: string }>();
   if (email) {
     for (const r of db
-      .prepare('SELECT id, source FROM contacts WHERE account_id = ? AND lower(email) = lower(?)')
-      .all(accountId, email) as { id: string; source: string }[])
+      .prepare('SELECT id, source FROM contacts WHERE account_id = ? AND email = ?')
+      .all(accountId, emailKey(email)) as { id: string; source: string }[])
       rows.set(r.id, r);
   }
   if (customerId) {
@@ -474,11 +641,11 @@ export function redactCustomer(db: DatabaseSync, accountId: string, shop: string
     }
   }
   if (email) {
-    db.prepare('DELETE FROM shopify_checkouts WHERE account_id = ? AND shop_domain = ? AND lower(email) = lower(?)').run(accountId, shop, email);
+    db.prepare('DELETE FROM shopify_checkouts WHERE account_id = ? AND email = ? AND shop_domain = ?').run(accountId, emailKey(email), shop);
   }
-  db.prepare('DELETE FROM shopify_data_requests WHERE account_id = ? AND (lower(customer_email) = lower(?) OR customer_id = ?)').run(
+  db.prepare('DELETE FROM shopify_data_requests WHERE account_id = ? AND (customer_email = ? OR customer_id = ?)').run(
     accountId,
-    email ?? '',
+    email ? emailKey(email) : '',
     customerId ?? '',
   );
   return touched;
@@ -514,6 +681,7 @@ export function redactShop(db: DatabaseSync, shop: string): void {
     if (r.status === 'connected' && r.access_token) continue;
     db.prepare('DELETE FROM shopify_checkouts WHERE account_id = ? AND shop_domain = ?').run(r.account_id, shop);
     db.prepare('DELETE FROM shopify_data_requests WHERE account_id = ? AND shop_domain = ?').run(r.account_id, shop);
+    db.prepare('DELETE FROM shopify_sync_state WHERE account_id = ?').run(r.account_id);
     db.prepare('DELETE FROM integrations WHERE account_id = ? AND provider = ? AND shop_domain = ?').run(r.account_id, PROVIDER, shop);
     db.prepare('DELETE FROM shopify_credentials WHERE account_id = ?').run(r.account_id);
   }

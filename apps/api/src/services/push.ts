@@ -1,5 +1,5 @@
 import { createHash, createHmac, createSign, randomBytes, sign as cryptoSign, timingSafeEqual } from 'node:crypto';
-import { connect as http2Connect } from 'node:http2';
+import { connect as http2Connect, constants as http2Constants, type ClientHttp2Session, type ClientHttp2Stream } from 'node:http2';
 import { z } from 'zod';
 import type { AppConfig } from '../config.js';
 import { all, get, newId, now, parseJson, run, scalar, transaction, type DatabaseSync, type Row, type SQLInputValue } from '../db.js';
@@ -7,6 +7,7 @@ import { applyMergeTags } from './render.js';
 import { compileRules, loadSegmentRules } from './segments.js';
 import { zmsg } from '../lib/http.js';
 import { t, withAccountLang } from '../i18n.js';
+import { AdaptiveBatch } from './timeSlice.js';
 
 /* -------------------------------------------------------------------------- */
 /* Credentials                                                                */
@@ -355,28 +356,46 @@ export interface Recipient {
   last_name: string | null;
 }
 
-/** Active devices targeted by an audience (devices without a contact only match "all"). */
-export function audienceDevices(db: DatabaseSync, accountId: string, audience: PushAudience): Recipient[] {
-  let filter = '';
-  const params: SQLInputValue[] = [accountId];
+/**
+ * SQL condition (on `d`, the device) of an audience; null when its segment no longer exists.
+ * Correlated on the device's contact, so it can be evaluated a window of devices at a time.
+ */
+function audienceFilter(db: DatabaseSync, accountId: string, audience: PushAudience): { sql: string; params: SQLInputValue[] } | null {
   if (audience.type === 'segment') {
     const rules = loadSegmentRules(db, accountId, audience.segment_id);
-    if (!rules) return [];
+    if (!rules) return null;
     const compiled = compileRules(rules);
-    filter = ` AND d.contact_id IN (SELECT id FROM contacts WHERE account_id = ? AND ${compiled.sql})`;
-    params.push(accountId, ...compiled.params);
-  } else if (audience.type === 'tag') {
-    filter = ` AND d.contact_id IN (SELECT id FROM contacts WHERE account_id = ? AND EXISTS (SELECT 1 FROM json_each(contacts.tags) t WHERE lower(t.value) = lower(?)))`;
-    params.push(accountId, audience.tag);
+    return {
+      sql: ` AND EXISTS (SELECT 1 FROM contacts WHERE contacts.id = d.contact_id AND contacts.account_id = ? AND ${compiled.sql})`,
+      params: [accountId, ...compiled.params],
+    };
   }
-  return all<Recipient>(
-    db,
-    `SELECT d.id AS device_id, d.contact_id, c.email, c.first_name, c.last_name
+  if (audience.type === 'tag') {
+    return {
+      sql: ` AND EXISTS (SELECT 1 FROM contacts WHERE contacts.id = d.contact_id AND contacts.account_id = ?
+               AND EXISTS (SELECT 1 FROM json_each(contacts.tags) t WHERE lower(t.value) = lower(?)))`,
+      params: [accountId, audience.tag],
+    };
+  }
+  return { sql: '', params: [] };
+}
+
+const RECIPIENT_COLUMNS = `SELECT d.id AS device_id, d.contact_id, c.email, c.first_name, c.last_name
        FROM push_devices d LEFT JOIN contacts c ON c.id = d.contact_id
-      WHERE d.account_id = ? AND d.active = 1 AND (c.id IS NULL OR c.status != 'complained')${filter}
-      ORDER BY d.created_at`,
-    ...params,
-  );
+      WHERE d.account_id = ? AND d.active = 1 AND (c.id IS NULL OR c.status != 'complained')`;
+
+/** Active devices targeted by an audience (devices without a contact only match "all"). */
+export function audienceDevices(db: DatabaseSync, accountId: string, audience: PushAudience): Recipient[] {
+  const filter = audienceFilter(db, accountId, audience);
+  if (!filter) return [];
+  return all<Recipient>(db, `${RECIPIENT_COLUMNS}${filter.sql} ORDER BY d.created_at`, accountId, ...filter.params);
+}
+
+/** Number of devices an audience reaches, without loading them. */
+export function audienceDeviceCount(db: DatabaseSync, accountId: string, audience: PushAudience): number {
+  const filter = audienceFilter(db, accountId, audience);
+  if (!filter) return 0;
+  return scalar(db, `SELECT COUNT(*) FROM (${RECIPIENT_COLUMNS}${filter.sql})`, accountId, ...filter.params);
 }
 
 function personalise(text: string, r: Pick<Recipient, 'email' | 'first_name' | 'last_name'>): string {
@@ -470,7 +489,11 @@ export function queueContent(
   refs: { campaignId?: string | null; automationId?: string | null },
   channels: readonly PushChannel[],
   scope: 'contact' | 'device' = 'contact',
-  options: { smart?: boolean; resend?: boolean; inboxId?: string | null } = {},
+  /**
+   * `reuseCampaignInbox`: a campaign queued a window of devices at a time; a contact whose devices fall in two
+   * windows keeps the inbox entry created by the first one (one entry per person and campaign).
+   */
+  options: { smart?: boolean; resend?: boolean; inboxId?: string | null; reuseCampaignInbox?: boolean } = {},
 ): { pushes: number; inbox: number } {
   const hours = new Map<string, number | null>();
   const groups = new Map<string, Recipient[]>();
@@ -484,7 +507,13 @@ export function queueContent(
   for (const [key, members] of groups) {
     const first = members[0];
     let inboxId: string | null = options.inboxId ?? null;
-    if (channels.includes('in_app')) {
+    const existing =
+      options.reuseCampaignInbox && refs.campaignId && key.startsWith('c:') && channels.includes('in_app')
+        ? get<{ id: string }>(db, 'SELECT id FROM app_inbox WHERE push_campaign_id = ? AND contact_id = ? LIMIT 1', refs.campaignId, first.contact_id)
+        : undefined;
+    if (existing) {
+      inboxId = existing.id;
+    } else if (channels.includes('in_app')) {
       inboxId = newId();
       const byContact = key.startsWith('c:');
       run(
@@ -620,35 +649,82 @@ export function pushCampaignStats(db: DatabaseSync, campaignId: string) {
   };
 }
 
-/** Queues messages for push campaigns in `sending` state (idempotent). */
-export function queuePushCampaigns(db: DatabaseSync): number {
-  const campaigns = all(
+/** Devices queued per transaction (sized for ~20 ms, COMMIT included), and longest stretch of queueing per call. */
+const queueBatch = new AdaptiveBatch(250, 25, 2000);
+const QUEUE_BUDGET_MS = 50;
+
+/** Upper rowid of the next window of the account's active devices after `after` (MAX_SAFE_INTEGER: last one). */
+function deviceWindow(db: DatabaseSync, accountId: string, after: number, size: number): number {
+  const row = get<{ r: number }>(
     db,
-    `SELECT * FROM push_campaigns c WHERE c.status = 'sending'
-        AND NOT EXISTS (SELECT 1 FROM push_messages m WHERE m.push_campaign_id = c.id)
-        AND NOT EXISTS (SELECT 1 FROM app_inbox i WHERE i.push_campaign_id = c.id)`,
-  ).map(serializePushCampaign);
+    'SELECT rowid AS r FROM push_devices WHERE account_id = ? AND active = 1 AND rowid > ? ORDER BY rowid LIMIT 1 OFFSET ?',
+    accountId,
+    after,
+    size - 1,
+  );
+  return row ? Number(row.r) : Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * Queues messages for push campaigns in `sending` state, a window of devices per transaction (~20 ms), from a
+ * cursor kept on the campaign (queue_cursor): ~50 ms per call at most, the rest on the next tick. The campaign
+ * gets `queued_at` once every device was looked at (finalizePushCampaigns waits for it). Idempotent.
+ */
+export function queuePushCampaigns(db: DatabaseSync): number {
+  const deadline = Date.now() + QUEUE_BUDGET_MS;
+  queueBatch.start();
+  const campaigns = all(db, "SELECT * FROM push_campaigns WHERE status = 'sending' AND queued_at IS NULL ORDER BY created_at").map((row) => ({
+    ...serializePushCampaign(row),
+    account_id: String(row.account_id),
+    cursor: Number(row.queue_cursor ?? 0),
+  }));
   let queued = 0;
   for (const c of campaigns) {
-    transaction(db, () => {
-      const accountId = String(get<{ account_id: string }>(db, 'SELECT account_id FROM push_campaigns WHERE id = ?', c.id)!.account_id);
-      const recipients = audienceDevices(db, accountId, c.audience);
-      const result = queueContent(db, accountId, recipients, c, { campaignId: c.id }, c.channels, 'contact', { smart: c.send_mode === 'smart' });
-      // In-app only (or nobody): nothing to deliver through Apple / Google, the campaign is done.
-      if (!result.pushes) run(db, "UPDATE push_campaigns SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ?", now(), now(), c.id);
-      queued += result.pushes;
-    });
+    if (Date.now() >= deadline) break;
+    try {
+      const filter = audienceFilter(db, c.account_id, c.audience);
+      let cursor = c.cursor;
+      let finished = false;
+      while (!finished && queueBatch.fits(deadline)) {
+        queueBatch.measure(() => transaction(db, () => {
+          const end = filter ? deviceWindow(db, c.account_id, cursor, queueBatch.size) : Number.MAX_SAFE_INTEGER;
+          const recipients = filter
+            ? all<Recipient>(db, `${RECIPIENT_COLUMNS} AND d.rowid > ? AND d.rowid <= ?${filter.sql} ORDER BY d.rowid`, c.account_id, cursor, end, ...filter.params)
+            : [];
+          const result = queueContent(db, c.account_id, recipients, c, { campaignId: c.id }, c.channels, 'contact', {
+            smart: c.send_mode === 'smart',
+            reuseCampaignInbox: true,
+          });
+          queued += result.pushes;
+          cursor = end;
+          finished = end === Number.MAX_SAFE_INTEGER;
+          if (!finished) {
+            run(db, 'UPDATE push_campaigns SET queue_cursor = ? WHERE id = ?', end, c.id);
+            return;
+          }
+          run(db, 'UPDATE push_campaigns SET queue_cursor = ?, queued_at = ? WHERE id = ?', end, now(), c.id);
+          // In-app only (or nobody): nothing to deliver through Apple / Google, the campaign is done.
+          const pushes = get(db, 'SELECT 1 FROM push_messages INDEXED BY idx_push_messages_campaign_sent WHERE push_campaign_id = ? AND resend = 0 LIMIT 1', c.id);
+          if (!pushes) run(db, "UPDATE push_campaigns SET status = 'sent', sent_at = ?, updated_at = ? WHERE id = ?", now(), now(), c.id);
+        }));
+      }
+    } catch (err) {
+      // This campaign is retried on the next tick; the others go on.
+      console.error(`[worker] mise en file de la campagne push ${c.id} : ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
   return queued;
 }
 
+/** Campaigns fully queued whose every first delivery left: `sent` (index probes only, whatever their size). */
 export function finalizePushCampaigns(db: DatabaseSync): void {
   run(
     db,
     `UPDATE push_campaigns SET status = 'sent', sent_at = ?, updated_at = ?
-      WHERE status = 'sending'
-        AND EXISTS (SELECT 1 FROM push_messages m WHERE m.push_campaign_id = push_campaigns.id AND m.resend = 0)
-        AND NOT EXISTS (SELECT 1 FROM push_messages m WHERE m.push_campaign_id = push_campaigns.id AND m.resend = 0 AND m.status = 'queued')`,
+      WHERE status = 'sending' AND queued_at IS NOT NULL
+        AND EXISTS (SELECT 1 FROM push_messages m INDEXED BY idx_push_messages_campaign_sent WHERE m.push_campaign_id = push_campaigns.id AND m.resend = 0)
+        AND NOT EXISTS (SELECT 1 FROM push_messages m INDEXED BY idx_push_messages_campaign_sent
+                         WHERE m.push_campaign_id = push_campaigns.id AND m.resend = 0 AND m.status = 'queued')`,
     now(),
     now(),
   );
@@ -702,6 +778,13 @@ export type PushOutcome = { ok: true; providerId: string } | { ok: false; error:
 
 const b64url = (input: Buffer | string) => Buffer.from(input).toString('base64url');
 
+/**
+ * Every call to Apple / Google / Expo gives up after this delay (body included): a provider that hangs
+ * must never hold the worker. deliverPush adds an outer guard on top, whatever the provider.
+ */
+const PUSH_TIMEOUT_MS = 10_000;
+const DELIVER_GUARD_MS = 15_000;
+
 const fcmTokens = new Map<string, { token: string; expiresAt: number }>();
 
 /** OAuth2 access token for the FCM HTTP v1 API, from a Google service account (JWT bearer grant). */
@@ -724,6 +807,7 @@ async function fcmAccessToken(creds: FcmCredentials): Promise<string> {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${unsigned}.${b64url(signature)}` }),
+    signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
   });
   const data = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error_description?: string };
   if (!res.ok || !data.access_token) throw new Error(t(`Authentification Firebase refusée : ${data.error_description ?? res.status}`, `Firebase authentication refused: ${data.error_description ?? res.status}`));
@@ -760,6 +844,7 @@ async function sendFcm(config: AppConfig, creds: FcmCredentials, p: PushPayload)
         },
       },
     }),
+    signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
   });
   const json = (await res.json().catch(() => ({}))) as {
     name?: string;
@@ -791,6 +876,35 @@ function apnsJwt(creds: ApnsCredentials): string {
   return token;
 }
 
+/**
+ * One HTTP/2 connection per APNs origin and signing key, reused for every notification (Apple asks providers
+ * to keep connections open rather than open one per push). Dropped on error, GOAWAY or a minute idle.
+ */
+const apnsSessions = new Map<string, ClientHttp2Session>();
+
+function apnsSession(origin: string, key: string): ClientHttp2Session {
+  const cached = apnsSessions.get(key);
+  if (cached && !cached.closed && !cached.destroyed) return cached;
+  const session = http2Connect(origin);
+  apnsSessions.set(key, session);
+  const forget = () => {
+    if (apnsSessions.get(key) === session) apnsSessions.delete(key);
+  };
+  session.on('error', () => {
+    forget();
+    session.destroy();
+  });
+  session.on('goaway', forget);
+  session.on('close', forget);
+  session.setTimeout(60_000, () => {
+    forget();
+    session.close();
+  });
+  // An idle connection never keeps the process alive.
+  session.unref();
+  return session;
+}
+
 function sendApns(config: AppConfig, creds: ApnsCredentials, p: PushPayload): Promise<PushOutcome> {
   const origin = creds.production ? config.push.apnsProductionUrl : config.push.apnsSandboxUrl;
   const body = JSON.stringify({
@@ -805,21 +919,38 @@ function sendApns(config: AppConfig, creds: ApnsCredentials, p: PushPayload): Pr
     ...payloadData(p),
   });
   return new Promise((resolve) => {
-    const session = http2Connect(origin);
+    const session = apnsSession(origin, `${origin}|${creds.team_id}|${creds.key_id}`);
+    let settled = false;
+    let req: ClientHttp2Stream | undefined;
     const done = (outcome: PushOutcome) => {
-      session.close();
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      session.off('error', onSessionError);
       resolve(outcome);
     };
-    session.on('error', (err) => done({ ok: false, error: t(`APNs injoignable : ${err.message}`, `APNs unreachable: ${err.message}`), invalidToken: false }));
-    const req = session.request({
-      ':method': 'POST',
-      ':path': `/3/device/${encodeURIComponent(p.token)}`,
-      authorization: `bearer ${apnsJwt(creds)}`,
-      'apns-topic': creds.bundle_id,
-      'apns-push-type': 'alert',
-      'apns-priority': '10',
-      'content-type': 'application/json',
-    });
+    const onSessionError = (err: Error) => done({ ok: false, error: t(`APNs injoignable : ${err.message}`, `APNs unreachable: ${err.message}`), invalidToken: false });
+    const timer = setTimeout(() => {
+      // Still connecting after the delay: that connection is useless, the next notification opens a new one.
+      if (session.connecting) session.destroy();
+      if (req && !req.closed) req.close(http2Constants.NGHTTP2_CANCEL);
+      done({ ok: false, error: t('APNs : pas de réponse (délai dépassé)', 'APNs: no answer (timed out)'), invalidToken: false });
+    }, PUSH_TIMEOUT_MS);
+    session.once('error', onSessionError);
+    try {
+      req = session.request({
+        ':method': 'POST',
+        ':path': `/3/device/${encodeURIComponent(p.token)}`,
+        authorization: `bearer ${apnsJwt(creds)}`,
+        'apns-topic': creds.bundle_id,
+        'apns-push-type': 'alert',
+        'apns-priority': '10',
+        'content-type': 'application/json',
+      });
+    } catch (err) {
+      session.destroy();
+      return done({ ok: false, error: t(`APNs : ${(err as Error).message}`, `APNs: ${(err as Error).message}`), invalidToken: false });
+    }
     let status = 0;
     let apnsId = '';
     let raw = '';
@@ -862,6 +993,7 @@ async function sendExpo(config: AppConfig, creds: ExpoCredentials | null, p: Pus
         ...(p.imageUrl ? { richContent: { image: p.imageUrl } } : {}),
       },
     ]),
+    signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
   });
   const json = (await res.json().catch(() => ({}))) as {
     data?: Array<{ status: string; id?: string; message?: string; details?: { error?: string } }>;
@@ -878,68 +1010,91 @@ export async function deliverPush(config: AppConfig, cfg: PushConfig, provider: 
     console.log(`[push:log] ${provider} → ${p.token.slice(0, 16)}… « ${p.title} » (${p.messageId})`);
     return { ok: true, providerId: `log_${p.messageId}` };
   }
+  let guard: NodeJS.Timeout | undefined;
   try {
-    if (provider === 'expo') return await sendExpo(config, cfg.expo, p);
-    if (provider === 'fcm') {
-      if (!cfg.fcm) return { ok: false, error: t('Firebase (FCM) n’est pas configuré', 'Firebase (FCM) isn’t configured'), invalidToken: false };
-      return await sendFcm(config, cfg.fcm, p);
-    }
-    if (!cfg.apns) return { ok: false, error: t('Apple (APNs) n’est pas configuré', 'Apple (APNs) isn’t configured'), invalidToken: false };
-    return await sendApns(config, cfg.apns, p);
+    const call = (async (): Promise<PushOutcome> => {
+      if (provider === 'expo') return sendExpo(config, cfg.expo, p);
+      if (provider === 'fcm') {
+        if (!cfg.fcm) return { ok: false, error: t('Firebase (FCM) n’est pas configuré', 'Firebase (FCM) isn’t configured'), invalidToken: false };
+        return sendFcm(config, cfg.fcm, p);
+      }
+      if (!cfg.apns) return { ok: false, error: t('Apple (APNs) n’est pas configuré', 'Apple (APNs) isn’t configured'), invalidToken: false };
+      return sendApns(config, cfg.apns, p);
+    })();
+    // Outer guard: whatever the provider does, the worker gets an answer.
+    const timeout = new Promise<PushOutcome>((resolve) => {
+      guard = setTimeout(() => resolve({ ok: false, error: t(`${provider} : pas de réponse (délai dépassé)`, `${provider}: no answer (timed out)`), invalidToken: false }), DELIVER_GUARD_MS);
+    });
+    return await Promise.race([call, timeout]);
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err), invalidToken: false };
+  } finally {
+    clearTimeout(guard);
   }
 }
 
-/** Sends queued push messages; invalid tokens deactivate their device. Returns the number processed. */
+/** A batch stops taking new messages after this long (slow providers): the rest waits for the next tick. */
+const BATCH_BUDGET_MS = 30_000;
+
+type QueuedPush = {
+  id: string;
+  account_id: string;
+  device_id: string;
+  device_contact_id: string | null;
+  token: string;
+  provider: PushProvider;
+  title: string;
+  body: string;
+  image_url: string | null;
+  url: string | null;
+  inbox_id: string | null;
+};
+
+/**
+ * Sends queued push messages; invalid tokens deactivate their device. Returns the number processed.
+ * Due smart-scheduled messages first, then the unscheduled queue: both read in index order, so millions of
+ * notifications scheduled for later cost nothing here.
+ */
 export async function sendPushBatch(db: DatabaseSync, config: AppConfig, limit: number): Promise<number> {
-  const batch = all<{
-    id: string;
-    account_id: string;
-    device_id: string;
-    device_contact_id: string | null;
-    token: string;
-    provider: PushProvider;
-    title: string;
-    body: string;
-    image_url: string | null;
-    url: string | null;
-    inbox_id: string | null;
-  }>(
-    db,
-    `SELECT m.id, m.account_id, m.device_id, d.contact_id AS device_contact_id, d.token, d.provider, m.title, m.body, m.image_url, m.url, m.inbox_id
-       FROM push_messages m JOIN push_devices d ON d.id = m.device_id
-      WHERE m.status = 'queued' AND (m.scheduled_at IS NULL OR m.scheduled_at <= ?)
-      ORDER BY m.created_at LIMIT ?`,
-    now(),
-    limit,
-  );
+  const cols = `SELECT m.id, m.account_id, m.device_id, d.contact_id AS device_contact_id, d.token, d.provider, m.title, m.body, m.image_url, m.url, m.inbox_id
+       FROM push_messages m INDEXED BY idx_push_messages_due JOIN push_devices d ON d.id = m.device_id`;
+  const batch = all<QueuedPush>(db, `${cols} WHERE m.status = 'queued' AND m.scheduled_at <= ? ORDER BY m.scheduled_at LIMIT ?`, now(), limit);
+  if (batch.length < limit) batch.push(...all<QueuedPush>(db, `${cols} WHERE m.status = 'queued' AND m.scheduled_at IS NULL ORDER BY m.created_at LIMIT ?`, limit - batch.length));
   const configs = new Map<string, PushConfig>();
+  const started = Date.now();
+  let processed = 0;
   for (const m of batch) {
-    let cfg = configs.get(m.account_id);
-    if (!cfg) {
-      cfg = ensurePushConfig(db, m.account_id);
-      configs.set(m.account_id, cfg);
-    }
-    // Delivery errors are stored for the merchant: written in the account's language.
-    const outcome = await withAccountLang(db, m.account_id, () =>
-      deliverPush(config, cfg, m.provider, {
-        messageId: m.id,
-        token: m.token,
-        title: m.title,
-        body: m.body,
-        imageUrl: m.image_url,
-        url: m.url,
-        inboxId: m.inbox_id,
-        badge: inboxUnread(db, m.account_id, { id: m.device_id, contact_id: m.device_contact_id }),
-      }),
-    );
-    if (outcome.ok) {
-      run(db, "UPDATE push_messages SET status = 'sent', provider_id = ?, error = NULL, sent_at = ? WHERE id = ?", outcome.providerId, now(), m.id);
-    } else {
-      run(db, "UPDATE push_messages SET status = 'failed', error = ? WHERE id = ?", outcome.error.slice(0, 1000), m.id);
-      if (outcome.invalidToken) run(db, 'UPDATE push_devices SET active = 0 WHERE id = ?', m.device_id);
+    if (Date.now() - started > BATCH_BUDGET_MS) break;
+    processed++;
+    try {
+      let cfg = configs.get(m.account_id);
+      if (!cfg) {
+        cfg = ensurePushConfig(db, m.account_id);
+        configs.set(m.account_id, cfg);
+      }
+      // Delivery errors are stored for the merchant: written in the account's language.
+      const outcome = await withAccountLang(db, m.account_id, () =>
+        deliverPush(config, cfg, m.provider, {
+          messageId: m.id,
+          token: m.token,
+          title: m.title,
+          body: m.body,
+          imageUrl: m.image_url,
+          url: m.url,
+          inboxId: m.inbox_id,
+          badge: inboxUnread(db, m.account_id, { id: m.device_id, contact_id: m.device_contact_id }),
+        }),
+      );
+      if (outcome.ok) {
+        run(db, "UPDATE push_messages SET status = 'sent', provider_id = ?, error = NULL, sent_at = ? WHERE id = ?", outcome.providerId, now(), m.id);
+      } else {
+        run(db, "UPDATE push_messages SET status = 'failed', error = ? WHERE id = ?", outcome.error.slice(0, 1000), m.id);
+        if (outcome.invalidToken) run(db, 'UPDATE push_devices SET active = 0 WHERE id = ?', m.device_id);
+      }
+    } catch (err) {
+      // One broken row (deleted config, bad data) is marked failed and never blocks the queue.
+      run(db, "UPDATE push_messages SET status = 'failed', error = ? WHERE id = ? AND status = 'queued'", (err instanceof Error ? err.message : String(err)).slice(0, 1000), m.id);
     }
   }
-  return batch.length;
+  return processed;
 }
