@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest, onRequestHookHandler } from 'fastify';
 import type { IntegrationContext } from '../context.js';
 import { ShopifyClient, ShopifyError, normalizeShopDomain, requestAccessToken } from './client.js';
-import { fireCartAbandoned, processAbandonedCheckouts } from './checkouts.js';
+import { fireCartAbandoned, processAbandonedCheckoutsSlice } from './checkouts.js';
 import { cleanEmail, toNumber, upsertShopifyContact } from './contacts.js';
 import { verifyOAuthHmac, verifyWebhookHmac } from './hmac.js';
 import { buildInstallUrl, consumeState, createState } from './oauth.js';
@@ -14,6 +14,8 @@ import { pricingUrl, storePlan } from './billing.js';
 import {
   clientFor,
   deleteIntegration,
+  dueInboxRows,
+  enqueueWebhook,
   ensureShopifySchema,
   findContactByEmail,
   deletePendingInstall,
@@ -21,8 +23,12 @@ import {
   getIntegration,
   getIntegrationsByShop,
   getPendingInstall,
+  getSyncState,
+  inboxDone,
+  inboxFailed,
   inSeconds,
-  markWebhookProcessed,
+  interruptedSyncs,
+  type InboxRow,
   prunePendingInstalls,
   recordDataRequest,
   redactCustomer,
@@ -39,6 +45,7 @@ import {
 import { SyncInProgressError, isSyncRunning, runFullSync } from './sync.js';
 import { SHOPIFY_SCOPES, type ShopifyConfig } from './types.js';
 import { deleteWebhooks, dispatchWebhook, registerWebhooks } from './webhooks.js';
+import { transaction } from '../../db.js';
 import { t, withLang, accountLang } from '../../i18n.js';
 
 export { getShopifyRevenue, getCampaignAttributedRevenue } from './revenue.js';
@@ -500,7 +507,15 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
       const accountId = accountIdOf(request);
       const row = getIntegration(ctx.db, accountId);
       if (!row || row.status !== 'connected' || !row.access_token) throw new HttpError(400, t('Aucune boutique Shopify connectée', 'No Shopify store connected'));
-      return await runFullSync(ctx, accountId, clientFor(ctx.db, accountId, row.shop_domain));
+      if (isSyncRunning(accountId)) throw new SyncInProgressError();
+      // Millions of customers take a while: the sync runs in the background (progress in integration.config.sync,
+      // resumed after a restart). Same fields as before, plus `running`.
+      const previous = getSyncState(ctx.db, accountId);
+      const resumes = previous && previous.status !== 'done' && previous.phase !== 'done';
+      void runFullSync(ctx, accountId, clientFor(ctx.db, accountId, row.shop_domain)).catch((err: Error) =>
+        request.log.warn({ err, shop: row.shop_domain }, 'Shopify : la synchronisation a échoué'),
+      );
+      return reply.code(202).send({ customers: resumes ? previous.customers : 0, orders: resumes ? previous.orders : 0, running: true });
     } catch (err) {
       return sendError(reply, err, request);
     }
@@ -630,16 +645,45 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
           });
       if (!globalOk && targets.length === 0) return reply.code(401).send({ error: t('Signature HMAC invalide', 'Invalid HMAC signature') });
 
-      // Mandatory privacy (compliance) topics.
+      // Verified: stored in the inbox and acknowledged at once (Shopify wants an answer within 5 s, and a big
+      // shop/redact or a burst of orders must not hold the API). The drain loop below does the work.
+      const fresh = enqueueWebhook(ctx.db, {
+        shop,
+        topic,
+        webhookId: webhookId ?? null,
+        accountIds: [...new Set(targets.map((r) => r.account_id))],
+        payload: raw || '{}',
+      });
+      if (!fresh) return { ok: true, duplicate: true };
+      kickInbox();
+      return { ok: true };
+    });
+  });
+
+  // ---------------------------------------------------------------- webhook inbox drain
+  /** Mandatory privacy (compliance) topics, then the regular ones, for the accounts that verified the delivery. */
+  const processInboxRow = (row: InboxRow) => {
+    let payload: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = JSON.parse(row.payload);
+      if (parsed && typeof parsed === 'object') payload = parsed as Record<string, unknown>;
+    } catch {
+      /* invalid JSON: handled as an empty payload, like the route did */
+    }
+    let accounts: string[] = [];
+    try {
+      accounts = (JSON.parse(row.account_ids) as unknown[]).map(String);
+    } catch {
+      accounts = [];
+    }
+    const shop = row.shop_domain;
+    const topic = row.topic;
+    // One transaction per delivery: all its effects, or none (then retried).
+    transaction(ctx.db, () => {
       if (topic === 'customers/data_request' || topic === 'customers/redact' || topic === 'shop/redact') {
-        const body = (request.body && typeof request.body === 'object' ? request.body : {}) as {
-          customer?: { id?: unknown; email?: unknown };
-          orders_requested?: unknown;
-          orders_to_redact?: unknown;
-        };
+        const body = payload as { customer?: { id?: unknown; email?: unknown }; orders_requested?: unknown };
         const email = cleanEmail(body.customer?.email) ?? null;
         const customerId = body.customer?.id !== undefined && body.customer?.id !== null ? String(body.customer.id) : null;
-        const accounts = [...new Set(targets.map((r) => r.account_id))];
         if (topic === 'customers/redact') {
           for (const accountId of accounts) redactCustomer(ctx.db, accountId, shop, email, customerId);
         } else if (topic === 'customers/data_request') {
@@ -648,46 +692,108 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
         } else {
           redactShop(ctx.db, shop);
         }
-        request.log.info({ shop, topic, accounts: accounts.length }, 'Shopify : demande de confidentialité traitée');
-        return { ok: true };
+        app.log.info({ shop, topic, accounts: accounts.length }, 'Shopify : demande de confidentialité traitée');
+        return;
       }
-      if (webhookId && !markWebhookProcessed(ctx.db, webhookId, topic)) {
-        return { ok: true, duplicate: true };
+      for (const accountId of accounts) {
+        const integration = getIntegration(ctx.db, accountId);
+        if (!integration || integration.shop_domain !== shop) continue;
+        if (integration.status !== 'connected' && topic !== 'app/uninstalled') continue;
+        // Shopify sends no language: texts stored for the merchant follow the account's language.
+        withLang(accountLang(ctx.db, accountId), () => dispatchWebhook(ctx, accountId, shop, topic, payload));
       }
-
-      const payload = (request.body && typeof request.body === 'object' ? request.body : {}) as Record<string, unknown>;
-      try {
-        for (const row of targets) {
-          if (row.status !== 'connected' && topic !== 'app/uninstalled') continue;
-          // Shopify sends no language: texts stored for the merchant follow the account's language.
-          withLang(accountLang(ctx.db, row.account_id), () => dispatchWebhook(ctx, row.account_id, shop, topic, payload));
-        }
-      } catch (err) {
-        // Let Shopify retry: forget the delivery id.
-        if (webhookId) ctx.db.prepare('DELETE FROM shopify_webhook_log WHERE webhook_id = ?').run(webhookId);
-        request.log.error({ err, shop, topic }, 'Shopify : échec du traitement du webhook');
-        return reply.code(500).send({ error: t('Échec du traitement du webhook', 'Webhook processing failed') });
-      }
-      return { ok: true };
     });
-  });
+  };
+
+  const INBOX_SLICE_MS = 40;
+  let draining = false;
+  let inboxTimer: NodeJS.Timeout | null = null;
+  let closing = false;
+  /** Processes due deliveries ~40 ms at a time, yielding to the API between slices, until none is due. */
+  const drainInbox = async () => {
+    if (draining || closing) return;
+    draining = true;
+    try {
+      for (;;) {
+        const deadline = Date.now() + INBOX_SLICE_MS;
+        const rows = dueInboxRows(ctx.db, 50);
+        let handled = 0;
+        for (const row of rows) {
+          if (Date.now() >= deadline) break;
+          handled++;
+          try {
+            processInboxRow(row);
+            inboxDone(ctx.db, row.id);
+          } catch (err) {
+            app.log.error({ err, shop: row.shop_domain, topic: row.topic, attempts: row.attempts + 1 }, 'Shopify : échec du traitement du webhook');
+            try {
+              inboxFailed(ctx.db, row, err instanceof Error ? err.message : String(err));
+            } catch {
+              /* retried by the next drain */
+            }
+          }
+        }
+        if (closing || (handled === rows.length && rows.length < 50)) break;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+    } catch (err) {
+      app.log.error({ err }, 'Shopify : échec de la file des webhooks');
+    } finally {
+      draining = false;
+    }
+  };
+  /** Right after a delivery is stored (coalesced: one drain at a time). */
+  function kickInbox(): void {
+    if (inboxTimer || closing) return;
+    inboxTimer = setTimeout(() => {
+      inboxTimer = null;
+      void drainInbox();
+    }, 0);
+    inboxTimer.unref();
+  }
+  // Retries (back-off) and anything left after a restart.
+  const inboxInterval = setInterval(() => void drainInbox(), 5_000);
+  inboxInterval.unref();
 
   // ---------------------------------------------------------------- abandoned-cart checker
-  const tick = () => {
+  let ticking = false;
+  /** Every minute: due checkouts ~50 ms at a time (yielding to the API in between), then small housekeeping. */
+  const tick = async () => {
+    if (ticking || closing) return;
+    ticking = true;
     try {
-      processAbandonedCheckouts(ctx, app.log);
+      for (let slice = 0; slice < 200 && !closing; slice++) {
+        if (!processAbandonedCheckoutsSlice(ctx, app.log).more) break;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
       pruneWebhookLog(ctx.db);
       prunePendingInstalls(ctx.db);
     } catch (err) {
       app.log.error({ err }, 'Shopify : échec du contrôle des paniers abandonnés');
+    } finally {
+      ticking = false;
     }
   };
-  const interval = setInterval(tick, ABANDON_CHECK_INTERVAL_MS);
+  const interval = setInterval(() => void tick(), ABANDON_CHECK_INTERVAL_MS);
   interval.unref();
-  const firstRun = setTimeout(tick, 5_000);
+  const firstRun = setTimeout(() => {
+    void tick();
+    void drainInbox();
+    // Syncs interrupted by a restart carry on from their saved cursor.
+    for (const accountId of interruptedSyncs(ctx.db)) {
+      const row = getIntegration(ctx.db, accountId);
+      if (!row || row.status !== 'connected' || !row.access_token || isSyncRunning(accountId)) continue;
+      void runFullSync(ctx, accountId, clientFor(ctx.db, accountId, row.shop_domain)).catch((err: Error) =>
+        app.log.warn({ err, shop: row.shop_domain }, 'Shopify : la reprise de la synchronisation a échoué'),
+      );
+    }
+  }, 5_000);
   firstRun.unref();
   app.addHook('onClose', async () => {
+    closing = true;
     clearInterval(interval);
     clearTimeout(firstRun);
+    clearInterval(inboxInterval);
+    if (inboxTimer) clearTimeout(inboxTimer);
   });
 }

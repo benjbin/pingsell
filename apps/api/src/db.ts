@@ -666,6 +666,60 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   UPDATE campaigns SET queued_at = COALESCE(sent_at, updated_at)
    WHERE EXISTS (SELECT 1 FROM messages m WHERE m.campaign_id = campaigns.id);
   `,
+  // [automatisations / push / Shopify / suivi du site] Montée en charge (2 M contacts, 2 M destinataires) :
+  // - push : index des relances aux non-ouvreurs, de la file programmée (envoi intelligent) et du parcours des
+  //   appareils par compte ; curseurs de mise en file (queue_cursor / queued_at) et de relance sur la campagne ;
+  // - automatisations : les parcours d'une automatisation en pause sont « garés » (parked_at) et ne coûtent plus
+  //   rien au worker ; un parcours en échec est réessayé (attempts / error) au lieu de bloquer les suivants ;
+  // - webhooks sortants : boîte d'envoi écrite dans la même transaction que le parcours, signée (webhook_secret) ;
+  // - paniers / suivi du site : index pour « commandé depuis ? » et pour la purge.
+  // Aucune réécriture des grandes tables : index, colonnes ajoutées, et une mise à jour de push_campaigns (petite).
+  `
+  CREATE INDEX IF NOT EXISTS idx_push_messages_campaign_device ON push_messages(push_campaign_id, device_id, resend);
+  CREATE INDEX IF NOT EXISTS idx_push_messages_campaign_opened ON push_messages(push_campaign_id, contact_id, opened_at);
+  CREATE INDEX IF NOT EXISTS idx_push_messages_campaign_sent ON push_messages(push_campaign_id, resend, status, sent_at);
+  CREATE INDEX IF NOT EXISTS idx_push_messages_due ON push_messages(status, scheduled_at, created_at);
+  CREATE INDEX IF NOT EXISTS idx_push_devices_account_active ON push_devices(account_id, active);
+  CREATE INDEX IF NOT EXISTS idx_app_inbox_campaign_contact ON app_inbox(push_campaign_id, contact_id);
+  ALTER TABLE push_campaigns ADD COLUMN queued_at TEXT;
+  ALTER TABLE push_campaigns ADD COLUMN queue_cursor INTEGER;
+  ALTER TABLE push_campaigns ADD COLUMN resend_cursor_at TEXT;
+  ALTER TABLE push_campaigns ADD COLUMN resend_cursor_id INTEGER;
+  -- Campagnes déjà mises en file avant cette version : ne jamais les remettre en file.
+  UPDATE push_campaigns SET queued_at = COALESCE(sent_at, updated_at)
+   WHERE status = 'sent'
+      OR EXISTS (SELECT 1 FROM push_messages m WHERE m.push_campaign_id = push_campaigns.id)
+      OR EXISTS (SELECT 1 FROM app_inbox i WHERE i.push_campaign_id = push_campaigns.id);
+
+  ALTER TABLE automation_runs ADD COLUMN parked_at TEXT;
+  ALTER TABLE automation_runs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE automation_runs ADD COLUMN error TEXT;
+  CREATE INDEX IF NOT EXISTS idx_runs_due_live ON automation_runs(next_run_at) WHERE status = 'pending' AND parked_at IS NULL;
+  CREATE INDEX IF NOT EXISTS idx_runs_parked ON automation_runs(automation_id) WHERE parked_at IS NOT NULL;
+
+  CREATE TABLE webhook_outbox (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    automation_id TEXT,
+    contact_id TEXT,
+    url TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TEXT NOT NULL,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    sent_at TEXT
+  );
+  CREATE INDEX idx_webhook_outbox_due ON webhook_outbox(status, next_attempt_at);
+  CREATE INDEX idx_webhook_outbox_created ON webhook_outbox(created_at);
+  ALTER TABLE accounts ADD COLUMN webhook_secret TEXT;
+
+  CREATE INDEX IF NOT EXISTS idx_api_carts_email ON api_carts(account_id, email);
+  CREATE INDEX IF NOT EXISTS idx_web_pageviews_created ON web_pageviews(created_at);
+  CREATE INDEX IF NOT EXISTS idx_web_actions_vid ON web_actions(account_id, vid) WHERE vid IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_web_visitors_anonymous ON web_visitors(last_seen) WHERE contact_id IS NULL;
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

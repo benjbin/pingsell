@@ -520,12 +520,23 @@ export function contactVisits(db: DatabaseSync, accountId: string, contactId: st
 
 /* ------------------------------------------------------------------ browse abandonment (worker) */
 
+/** Product views read per step, and longest stretch of work per worker call (the API shares the thread). */
+const BROWSE_PAGE = 500;
+const TRACKING_BUDGET_MS = 50;
+/** Last product view handled per « Produit consulté » automation (high-water mark: created_at, rowid). */
+const browseMarks = new Map<string, { at: string; rid: number }>();
+let browseBacklog = false;
+
 /**
  * « Produit consulté sans achat »: a known, subscribed contact viewed a product, then nothing (no order,
- * no cart) for `hours`. Their latest product starts the journey, at most once every 3 days per automation,
- * and never twice for the same product within 30 days.
+ * no cart, no other product) for `hours`. Their latest product starts the journey, at most once every 3 days
+ * per automation, and never twice for the same product within 30 days.
+ * Each view is looked at once, `hours` after it happened: a high-water mark per automation walks the views in
+ * order, a page at a time, within `budgetMs` (the rest on the next call).
  */
-export function processBrowseAbandonment(db: DatabaseSync, nowMs = Date.now()): number {
+export function processBrowseAbandonment(db: DatabaseSync, nowMs = Date.now(), budgetMs = Infinity): number {
+  const deadline = Date.now() + budgetMs;
+  browseBacklog = false;
   const automations = all<{ id: string; account_id: string; trigger_config: string }>(
     db,
     "SELECT id, account_id, trigger_config FROM automations WHERE status = 'active' AND trigger = 'product_viewed'",
@@ -537,94 +548,155 @@ export function processBrowseAbandonment(db: DatabaseSync, nowMs = Date.now()): 
     // Un seul site choisi : seuls ses produits comptent (vide = tous les sites).
     const host = typeof cfg.host === 'string' ? cfg.host : '';
     const until = new Date(nowMs - hours * 3_600_000).toISOString();
-    const from = new Date(nowMs - hours * 3_600_000 - 2 * 86_400_000).toISOString();
-    const rows = all<{ contact_id: string; product: string; url: string; created_at: string; email: string; status: string }>(
-      db,
-      `SELECT p.contact_id, p.product, p.url, p.created_at, c.email, c.status
-         FROM web_pageviews p JOIN contacts c ON c.id = p.contact_id
-        WHERE p.account_id = ? AND p.product IS NOT NULL AND p.contact_id IS NOT NULL AND p.created_at > ? AND p.created_at <= ?
-          AND (? = '' OR p.host = ?)
-        ORDER BY p.created_at DESC`,
-      a.account_id,
-      from,
-      until,
-      host,
-      host,
-    );
-    const done = new Set<string>();
-    for (const row of rows) {
-      if (done.has(row.contact_id)) continue;
-      done.add(row.contact_id);
-      if (row.status !== 'subscribed') continue;
-      transaction(db, () => {
-        const since = row.created_at;
-        // Still browsing, bought or started a cart since: not abandoned (the cart journey takes over).
-        if (scalar(db, 'SELECT COUNT(*) FROM web_pageviews WHERE contact_id = ? AND product IS NOT NULL AND created_at > ?', row.contact_id, since) > 0) return;
-        if (scalar(db, "SELECT COUNT(*) FROM events WHERE contact_id = ? AND type = 'order' AND created_at > ?", row.contact_id, since) > 0) return;
-        if (scalar(db, 'SELECT COUNT(*) FROM api_carts WHERE account_id = ? AND email = ? AND updated_at > ?', a.account_id, row.email, since) > 0) return;
-        if (
-          scalar(
-            db,
-            "SELECT COUNT(*) FROM automation_seen WHERE automation_id = ? AND contact_id = ? AND key LIKE 'browse:%' AND created_at > ?",
-            a.id,
-            row.contact_id,
-            new Date(nowMs - 3 * 86_400_000).toISOString(),
-          ) > 0
-        )
-          return;
-        const product = parseJson<Product>(row.product, { name: '', url: row.url });
-        const views = scalar(
-          db,
-          'SELECT COUNT(*) FROM web_pageviews WHERE contact_id = ? AND url = ? AND created_at > ?',
-          row.contact_id,
-          row.url,
-          new Date(nowMs - 30 * 86_400_000).toISOString(),
-        );
-        const key = `browse:${(product.sku || new URL(product.url).pathname).slice(0, 200)}:${Math.floor(nowMs / (30 * 86_400_000))}`;
-        if (
-          startOnce(db, a.id, row.contact_id, key, {
-            product: product.name,
-            name: product.name,
-            url: product.url,
-            image: product.image ?? '',
-            price: product.price ?? '',
-            currency: product.currency ?? '',
-            sku: product.sku ?? '',
-            views,
-            viewed_at: row.created_at,
-          })
-        )
-          started++;
-      });
+    // Views older than 2 days past the delay are never relaunched (also the starting point after a restart).
+    const floor = new Date(nowMs - hours * 3_600_000 - 2 * 86_400_000).toISOString();
+    const saved = browseMarks.get(a.id);
+    let markAt = saved && saved.at >= floor ? saved.at : floor;
+    let markRid = saved && saved.at >= floor ? saved.rid : 0;
+    for (;;) {
+      if (Date.now() >= deadline) {
+        browseBacklog = true;
+        break;
+      }
+      const page = all<{ rid: number; contact_id: string; product: string; url: string; host: string | null; created_at: string }>(
+        db,
+        `SELECT rowid AS rid, contact_id, product, url, host, created_at FROM web_pageviews
+          WHERE account_id = ? AND product IS NOT NULL AND contact_id IS NOT NULL AND created_at >= ? AND created_at <= ?
+            AND NOT (created_at = ? AND rowid <= ?)
+          ORDER BY created_at, rowid LIMIT ?`,
+        a.account_id,
+        markAt,
+        until,
+        markAt,
+        markRid,
+        BROWSE_PAGE,
+      );
+      if (!page.length) break;
+      // Newest first within the page: the latest product of each contact is the one that counts.
+      const done = new Set<string>();
+      for (let i = page.length - 1; i >= 0; i--) {
+        const row = page[i]!;
+        if ((host && row.host !== host) || done.has(row.contact_id)) continue;
+        done.add(row.contact_id);
+        try {
+          if (relaunchBrowse(db, a, row, nowMs)) started++;
+        } catch (err) {
+          console.error(`[worker] produit consulté (automatisation ${a.id}) : ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      const last = page[page.length - 1]!;
+      markAt = last.created_at;
+      markRid = Number(last.rid);
+      browseMarks.set(a.id, { at: markAt, rid: markRid });
+      if (page.length < BROWSE_PAGE) break;
     }
   }
   return started;
 }
 
-/** Anonymous visitors are forgotten after 90 days, browsing history and site actions after 13 months (CNIL guidance). */
-export function purgeTracking(db: DatabaseSync, nowMs = Date.now()): void {
+function relaunchBrowse(
+  db: DatabaseSync,
+  a: { id: string; account_id: string },
+  row: { contact_id: string; product: string; url: string; created_at: string },
+  nowMs: number,
+): boolean {
+  return transaction(db, () => {
+    const contact = get<{ email: string; status: string }>(db, 'SELECT email, status FROM contacts WHERE id = ?', row.contact_id);
+    if (contact?.status !== 'subscribed') return false;
+    const since = row.created_at;
+    // Still browsing, bought or started a cart since: not abandoned (the cart journey takes over).
+    if (get(db, 'SELECT 1 FROM web_pageviews WHERE contact_id = ? AND created_at > ? AND product IS NOT NULL LIMIT 1', row.contact_id, since)) return false;
+    if (get(db, "SELECT 1 FROM events WHERE contact_id = ? AND created_at > ? AND type = 'order' LIMIT 1", row.contact_id, since)) return false;
+    if (get(db, 'SELECT 1 FROM api_carts WHERE account_id = ? AND email = ? AND updated_at > ? LIMIT 1', a.account_id, contact.email, since)) return false;
+    if (
+      get(
+        db,
+        "SELECT 1 FROM automation_seen WHERE automation_id = ? AND contact_id = ? AND key LIKE 'browse:%' AND created_at > ? LIMIT 1",
+        a.id,
+        row.contact_id,
+        new Date(nowMs - 3 * 86_400_000).toISOString(),
+      )
+    )
+      return false;
+    const product = parseJson<Product>(row.product, { name: '', url: row.url });
+    const views = scalar(
+      db,
+      'SELECT COUNT(*) FROM web_pageviews WHERE contact_id = ? AND created_at > ? AND url = ?',
+      row.contact_id,
+      new Date(nowMs - 30 * 86_400_000).toISOString(),
+      row.url,
+    );
+    const key = `browse:${(product.sku || new URL(product.url).pathname).slice(0, 200)}:${Math.floor(nowMs / (30 * 86_400_000))}`;
+    return startOnce(db, a.id, row.contact_id, key, {
+      product: product.name,
+      name: product.name,
+      url: product.url,
+      image: product.image ?? '',
+      price: product.price ?? '',
+      currency: product.currency ?? '',
+      sku: product.sku ?? '',
+      views,
+      viewed_at: row.created_at,
+    });
+  });
+}
+
+/** Rows deleted per statement by the purge. */
+const PURGE_BATCH = 2000;
+
+/**
+ * Anonymous visitors are forgotten after 90 days, browsing history and site actions after 13 months (CNIL guidance).
+ * Small batches within `budgetMs`; returns true when something is left for the next call.
+ */
+export function purgeTracking(db: DatabaseSync, nowMs = Date.now(), budgetMs = Infinity): boolean {
+  const deadline = Date.now() + budgetMs;
   const anonymousBefore = new Date(nowMs - 90 * 86_400_000).toISOString();
-  // Le visiteur anonyme oublié ne laisse pas son identifiant sur des actions restantes.
-  run(
-    db,
-    `UPDATE web_actions SET vid = NULL WHERE vid IS NOT NULL AND EXISTS (
-       SELECT 1 FROM web_visitors v WHERE v.account_id = web_actions.account_id AND v.vid = web_actions.vid AND v.contact_id IS NULL AND v.last_seen < ?)`,
-    anonymousBefore,
-  );
-  run(db, 'DELETE FROM web_visitors WHERE contact_id IS NULL AND last_seen < ?', anonymousBefore);
-  run(db, 'DELETE FROM web_pageviews WHERE created_at < ?', new Date(nowMs - 395 * 86_400_000).toISOString());
-  run(db, 'DELETE FROM web_actions WHERE created_at < ?', new Date(nowMs - 395 * 86_400_000).toISOString());
-  // Codes « Connecter à Pingsell » expirés (10 min).
-  run(db, 'DELETE FROM connect_codes WHERE expires_at < ?', new Date(nowMs).toISOString());
+  const historyBefore = new Date(nowMs - 395 * 86_400_000).toISOString();
+  const steps: Array<() => number> = [
+    () =>
+      transaction(db, () => {
+        const gone = all<{ account_id: string; vid: string }>(
+          db,
+          'SELECT account_id, vid FROM web_visitors WHERE contact_id IS NULL AND last_seen < ? LIMIT ?',
+          anonymousBefore,
+          PURGE_BATCH / 4,
+        );
+        for (const v of gone) {
+          // Le visiteur anonyme oublié ne laisse pas son identifiant sur des actions restantes.
+          run(db, 'UPDATE web_actions SET vid = NULL WHERE account_id = ? AND vid = ?', v.account_id, v.vid);
+          run(db, 'DELETE FROM web_visitors WHERE account_id = ? AND vid = ?', v.account_id, v.vid);
+        }
+        return gone.length === PURGE_BATCH / 4 ? 1 : 0;
+      }),
+    () => (run(db, 'DELETE FROM web_pageviews WHERE rowid IN (SELECT rowid FROM web_pageviews WHERE created_at < ? LIMIT ?)', historyBefore, PURGE_BATCH) === PURGE_BATCH ? 1 : 0),
+    () => (run(db, 'DELETE FROM web_actions WHERE rowid IN (SELECT rowid FROM web_actions WHERE created_at < ? LIMIT ?)', historyBefore, PURGE_BATCH) === PURGE_BATCH ? 1 : 0),
+    // Codes « Connecter à Pingsell » expirés (10 min).
+    () => (run(db, 'DELETE FROM connect_codes WHERE expires_at < ?', new Date(nowMs).toISOString()), 0),
+  ];
+  for (const step of steps) {
+    while (step()) if (Date.now() >= deadline) return true;
+    if (Date.now() >= deadline) return true;
+  }
+  return false;
 }
 
 let lastTrackingRun = 0;
-/** Worker entry point: browse abandonment and clean-up, every few minutes. */
+let lastPurge = 0;
+let purgeBacklog = false;
+/** Worker entry point: browse abandonment every few minutes, clean-up every hour; ~50 ms per call at most. */
 export function processTracking(db: DatabaseSync, nowMs = Date.now(), force = false): number {
   const every = Number(process.env.SCHEDULED_TRIGGERS_MS ?? 300_000);
-  if (!force && nowMs - lastTrackingRun < every) return 0;
-  lastTrackingRun = nowMs;
-  const started = processBrowseAbandonment(db, nowMs);
-  purgeTracking(db, nowMs);
+  const deadline = force ? Infinity : Date.now() + TRACKING_BUDGET_MS;
+  let started = 0;
+  if (force || browseBacklog || nowMs - lastTrackingRun >= every) {
+    lastTrackingRun = nowMs;
+    started = processBrowseAbandonment(db, nowMs, deadline - Date.now());
+  }
+  if (force || purgeBacklog || nowMs - lastPurge >= 3_600_000) {
+    lastPurge = nowMs;
+    // What is left of this call's budget; nothing left: the purge waits for the next tick.
+    const left = deadline - Date.now();
+    purgeBacklog = left > 5 ? purgeTracking(db, nowMs, left) : true;
+  }
   return started;
 }

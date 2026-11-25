@@ -3,7 +3,7 @@ import type { IntegrationContext } from '../context.js';
 import { ShopifyError, type ShopifyClient } from './client.js';
 import { handleCheckoutPayload, markCheckoutsCompleted, summarizeLineItems } from './checkouts.js';
 import { cleanEmail, customerFromRest, marketingStateFromRest, toNumber, upsertShopifyContact } from './contacts.js';
-import { findContactByEmail, forgetTokens, orderAlreadyRecorded, updateIntegration } from './store.js';
+import { claimOrder, findContactByEmail, forgetTokens, orderAlreadyRecorded, updateIntegration } from './store.js';
 import { WEBHOOK_TOPICS } from './types.js';
 import { t } from '../../i18n.js';
 
@@ -133,11 +133,13 @@ export function handleOrderWebhook(ctx: IntegrationContext, accountId: string, p
   const customerRaw = (payload.customer as Payload | null | undefined) ?? null;
   const email = cleanEmail(payload.email) ?? cleanEmail(payload.contact_email) ?? cleanEmail(customerRaw?.email);
   if (!orderId || !email) return;
-  if (orderAlreadyRecorded(ctx.db, accountId, orderId)) return;
+  const existing = findContactByEmail(ctx.db, accountId, email);
+  // Redelivered order (or already imported by the sync): nothing to do. The claim, the event and the trigger
+  // are written in the same transaction (see the webhook inbox), so a failure leaves nothing half done.
+  if (orderAlreadyRecorded(ctx.db, accountId, orderId, existing?.id) || !claimOrder(ctx.db, accountId, orderId)) return;
 
   const total = toNumber(payload.total_price ?? payload.current_total_price);
   const createdAt = typeof payload.created_at === 'string' ? new Date(payload.created_at).toISOString() : new Date().toISOString();
-  const existing = findContactByEmail(ctx.db, accountId, email);
   const customer = customerRaw ? customerFromRest(customerRaw, email) : null;
   const marketingState =
     marketingStateFromRest(customerRaw) ?? (payload.buyer_accepts_marketing === true ? 'subscribed' : null);

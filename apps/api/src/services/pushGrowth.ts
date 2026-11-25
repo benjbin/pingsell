@@ -4,6 +4,7 @@ import { fireTrigger } from './automations.js';
 import { CHANNELS, ensurePushConfig, queueContent, type PushChannel, type PushContent } from './push.js';
 import { zmsg } from '../lib/http.js';
 import { t } from '../i18n.js';
+import { AdaptiveBatch } from './timeSlice.js';
 
 /* -------------------------------------------------------------------------- */
 /* Pre-permission prompt                                                      */
@@ -104,12 +105,25 @@ export function promptStats(db: DatabaseSync, accountId: string, days = 30) {
 /* Resend to non-openers                                                      */
 /* -------------------------------------------------------------------------- */
 
+/** Deliveries read per page (keyset on sent_at, rowid; sized for ~20 ms with the COMMIT), and longest stretch of work per call. */
+const resendBatch = new AdaptiveBatch(300, 25, 2000);
+const RESEND_BUDGET_MS = 50;
+/** Without a backlog, campaigns are looked at every 2 minutes (the delay is counted in hours). */
+const RESEND_EVERY_MS = 120_000;
+let nextResendRun = 0;
+
 /**
  * For campaigns with a resend delay: X hours after each notification was delivered, sends the
  * reminder to the devices of customers who neither opened it nor read it in the app.
+ * Deliveries are walked once each, in delivery order, from a cursor kept on the campaign
+ * (resend_cursor_at / resend_cursor_id): every call reads at most a few pages (~50 ms).
  * A campaign is closed for resends once it is fully delivered and every delivery is past the delay.
  */
 export function processPushResends(db: DatabaseSync): number {
+  if (Date.now() < nextResendRun) return 0;
+  const deadline = Date.now() + RESEND_BUDGET_MS;
+  resendBatch.start();
+  let backlog = false;
   const campaigns = all<{
     id: string;
     account_id: string;
@@ -121,53 +135,93 @@ export function processPushResends(db: DatabaseSync): number {
     resend_after_hours: number;
     resend_title: string | null;
     resend_body: string | null;
+    resend_cursor_at: string | null;
+    resend_cursor_id: number | null;
   }>(
     db,
-    `SELECT id, account_id, status, title, body, image_url, url, resend_after_hours, resend_title, resend_body
+    `SELECT id, account_id, status, title, body, image_url, url, resend_after_hours, resend_title, resend_body, resend_cursor_at, resend_cursor_id
        FROM push_campaigns
       WHERE resend_after_hours IS NOT NULL AND resend_queued_at IS NULL AND status IN ('sending','sent')`,
   );
   let queued = 0;
   for (const c of campaigns) {
+    if (Date.now() >= deadline) {
+      backlog = true;
+      break;
+    }
     const threshold = new Date(Date.now() - Number(c.resend_after_hours) * 3_600_000).toISOString();
-    transaction(db, () => {
-      const due = all<{ id: string; device_id: string; contact_id: string | null; inbox_id: string | null; email: string | null; first_name: string | null; last_name: string | null }>(
-        db,
-        `SELECT m.id, m.device_id, m.contact_id, m.inbox_id, ct.email, ct.first_name, ct.last_name
-           FROM push_messages m
-           JOIN push_devices d ON d.id = m.device_id AND d.active = 1
-           LEFT JOIN contacts ct ON ct.id = m.contact_id
-          WHERE m.push_campaign_id = ? AND m.resend = 0 AND m.status = 'sent' AND m.sent_at <= ?
-            AND NOT EXISTS (SELECT 1 FROM push_messages r WHERE r.push_campaign_id = m.push_campaign_id AND r.resend = 1 AND r.device_id = m.device_id)
-            AND NOT EXISTS (
-              SELECT 1 FROM push_messages o WHERE o.push_campaign_id = m.push_campaign_id AND o.opened_at IS NOT NULL
-                 AND (o.device_id = m.device_id OR (m.contact_id IS NOT NULL AND o.contact_id = m.contact_id)))
-            AND NOT EXISTS (SELECT 1 FROM app_inbox i WHERE i.id = m.inbox_id AND i.read_at IS NOT NULL)
-            AND (ct.id IS NULL OR ct.status = 'subscribed')`,
-        c.id,
-        threshold,
-      );
-      for (const m of due) {
-        const content: PushContent = {
-          title: c.resend_title || c.title,
-          body: c.resend_body || c.body,
-          image_url: c.image_url,
-          url: c.url,
-        };
-        // Same inbox entry: opening the reminder reads the original message in the app.
-        insertResend(db, c.account_id, c.id, m, content);
-        queued++;
+    const content: PushContent = { title: c.resend_title || c.title, body: c.resend_body || c.body, image_url: c.image_url, url: c.url };
+    let cursorAt = c.resend_cursor_at ?? '';
+    let cursorId = Number(c.resend_cursor_id ?? 0);
+    try {
+      for (;;) {
+        if (!resendBatch.fits(deadline)) {
+          backlog = true;
+          break;
+        }
+        const pageSize = resendBatch.size;
+        const done = resendBatch.measure(() => {
+          // One page of deliveries past the delay, after the cursor (sent_at only grows: nothing is skipped).
+          const page = all<{ rid: number; sent_at: string }>(
+            db,
+            `SELECT rowid AS rid, sent_at FROM push_messages INDEXED BY idx_push_messages_campaign_sent
+              WHERE push_campaign_id = ? AND resend = 0 AND status = 'sent' AND sent_at >= ? AND sent_at <= ?
+                AND NOT (sent_at = ? AND rowid <= ?)
+              ORDER BY sent_at, rowid LIMIT ?`,
+            c.id,
+            cursorAt,
+            threshold,
+            cursorAt,
+            cursorId,
+            pageSize,
+          );
+          const last = page[page.length - 1];
+          transaction(db, () => {
+            if (page.length) {
+              const due = all<{ id: string; device_id: string; contact_id: string | null; inbox_id: string | null; email: string | null; first_name: string | null; last_name: string | null }>(
+                db,
+                `SELECT m.id, m.device_id, m.contact_id, m.inbox_id, ct.email, ct.first_name, ct.last_name
+                   FROM push_messages m
+                   JOIN push_devices d ON d.id = m.device_id AND d.active = 1
+                   LEFT JOIN contacts ct ON ct.id = m.contact_id
+                  WHERE m.rowid IN (SELECT value FROM json_each(?))
+                    AND NOT EXISTS (SELECT 1 FROM push_messages r WHERE r.push_campaign_id = m.push_campaign_id AND r.device_id = m.device_id AND r.resend = 1)
+                    AND NOT EXISTS (SELECT 1 FROM push_messages o WHERE o.push_campaign_id = m.push_campaign_id AND o.device_id = m.device_id AND o.opened_at IS NOT NULL)
+                    AND NOT (m.contact_id IS NOT NULL AND EXISTS (
+                      SELECT 1 FROM push_messages o WHERE o.push_campaign_id = m.push_campaign_id AND o.contact_id = m.contact_id AND o.opened_at IS NOT NULL))
+                    AND NOT EXISTS (SELECT 1 FROM app_inbox i WHERE i.id = m.inbox_id AND i.read_at IS NOT NULL)
+                    AND (ct.id IS NULL OR ct.status = 'subscribed')
+                  ORDER BY m.sent_at, m.rowid`,
+                JSON.stringify(page.map((p) => p.rid)),
+              );
+              // Same inbox entry: opening the reminder reads the original message in the app.
+              for (const m of due) insertResend(db, c.account_id, c.id, m, content);
+              queued += due.length;
+              cursorAt = last!.sent_at;
+              cursorId = Number(last!.rid);
+              run(db, 'UPDATE push_campaigns SET resend_cursor_at = ?, resend_cursor_id = ? WHERE id = ?', cursorAt, cursorId, c.id);
+            }
+            if (page.length < pageSize && c.status === 'sent') {
+              // Fully delivered and every delivery past the delay: the campaign is closed for resends.
+              const later = get(
+                db,
+                "SELECT 1 FROM push_messages INDEXED BY idx_push_messages_campaign_sent WHERE push_campaign_id = ? AND resend = 0 AND status = 'sent' AND sent_at > ? LIMIT 1",
+                c.id,
+                threshold,
+              );
+              if (!later) run(db, 'UPDATE push_campaigns SET resend_queued_at = ? WHERE id = ?', now(), c.id);
+            }
+          });
+          return page.length < pageSize;
+        });
+        if (done) break;
       }
-      const pending = scalar(
-        db,
-        `SELECT COUNT(*) FROM push_messages WHERE push_campaign_id = ? AND resend = 0
-            AND (status = 'queued' OR (status = 'sent' AND sent_at > ?))`,
-        c.id,
-        threshold,
-      );
-      if (c.status === 'sent' && pending === 0) run(db, 'UPDATE push_campaigns SET resend_queued_at = ? WHERE id = ?', now(), c.id);
-    });
+    } catch (err) {
+      console.error(`[worker] relance push de la campagne ${c.id} : ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
+  // A backlog goes on at the next tick; otherwise wait a little.
+  nextResendRun = backlog ? 0 : Date.now() + RESEND_EVERY_MS;
   return queued;
 }
 

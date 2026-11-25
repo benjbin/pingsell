@@ -24,6 +24,7 @@ import {
   verifyContactToken,
 } from '../services/webTracking.js';
 import { findContactByEmail, isValidEmail, normalizeEmail } from '../services/contacts.js';
+import { WEBHOOK_SIGNATURE_HEADER, rotateWebhookSecret, webhookSecret } from '../services/automationOutbox.js';
 
 const PREFIX = '/api/v1';
 
@@ -421,10 +422,18 @@ export async function inboundSettingsRoutes(app: FastifyInstance, { db, config }
         allowed_origins: hookOrigins(form),
         ...last(form),
       },
+      // Étape « webhook » des automatisations : chaque appel est signé avec ce secret (voir README, Webhooks sortants).
+      outgoing_webhooks: { signing_secret: webhookSecret(db, accountId), signature_header: WEBHOOK_SIGNATURE_HEADER },
     };
   };
 
   app.get('/inbound', async (request) => view(request.accountId));
+
+  // Nouveau secret de signature des webhooks sortants (l'ancien cesse aussitôt d'être utilisé).
+  app.post('/inbound/outgoing-webhooks/rotate', async (request) => {
+    rotateWebhookSecret(db, request.accountId);
+    return view(request.accountId);
+  });
 
   app.post<{ Params: { kind: string } }>('/inbound/:kind/rotate', async (request) => {
     rotateHook(db, request.accountId, parse(kindParam, request.params.kind));
