@@ -1,5 +1,6 @@
-import { get, newId, now, parseJson, run, type DatabaseSync, type Row, type SQLInputValue } from '../db.js';
+import { all, get, newId, now, parseJson, run, transaction, type DatabaseSync, type Row, type SQLInputValue } from '../db.js';
 import { badRequest } from '../lib/http.js';
+import { offload } from '../lib/offload.js';
 import { t } from '../i18n.js';
 
 export const CONTACT_STATUSES = ['subscribed', 'unsubscribed', 'bounced', 'complained'] as const;
@@ -186,8 +187,7 @@ export function upsertContact(
   fill('phone');
   if (addedTags.length) updates.tags = JSON.stringify([...existing.tags, ...addedTags]);
   if (input.attributes) updates.attributes = JSON.stringify({ ...existing.attributes, ...input.attributes });
-  // A spam complaint is final: an import or API upsert never re-subscribes it.
-  if (status && !(existing.status === 'complained' && status === 'subscribed')) updates.status = status;
+  if (status && status !== existing.status && !(status === 'subscribed' && !mayResubscribe(existing.status, input.source))) updates.status = status;
   if (input.external_id !== undefined && input.external_id !== null) updates.external_id = clean(input.external_id);
   if (finite(input.total_spent) !== undefined) updates.total_spent = finite(input.total_spent)!;
   if (finite(input.orders_count) !== undefined) updates.orders_count = Math.trunc(finite(input.orders_count)!);
@@ -197,6 +197,140 @@ export function upsertContact(
 
   updateContactColumns(db, existing.id, updates);
   return { contact: findContact(db, accountId, existing.id)!, created: false, addedTags };
+}
+
+/**
+ * Consent (RGPD / CAN-SPAM): an import, an API call, a form or a webhook never moves an unsubscribed,
+ * bounced or complained contact back to « subscribed » — only the person can (the merchant may still do it
+ * by hand, PATCH /contacts/:id). A complaint or a hard bounce is final for every upsert; the one exception is
+ * an integration relaying the customer's own new marketing consent (Shopify, no `source` on update, which
+ * itself never re-subscribes bounced / complained, see resolveStatus).
+ */
+export function mayResubscribe(current: ContactStatus, source: string | undefined): boolean {
+  if (current === 'subscribed') return true;
+  if (current === 'bounced' || current === 'complained') return false;
+  return source === undefined || source === 'shopify';
+}
+
+/* ───────────── Search (« contient », email ou nom) ───────────── */
+
+/**
+ * SQL condition over `contacts` for « email or name contains `search` » (any case). Same answer as the
+ * former ULOWER(...) LIKE '%x%' on four expressions, but:
+ * - once the trigram index (contacts_fts) is complete and the search has 3+ characters, only the rows the
+ *   index returns are tested (milliseconds instead of a scan of every contact);
+ * - otherwise an ASCII search uses the built-in LIKE (it ignores ASCII case, and emails are stored lowercased),
+ *   ULOWER() — one JavaScript call per row — is only kept for searches like « émile ».
+ */
+export function contactSearchSql(db: DatabaseSync, search: string): { sql: string; params: SQLInputValue[]; indexed: boolean } {
+  const needle = search.toLowerCase();
+  const like = `%${needle.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  const low = /^[\x00-\x7f]*$/.test(needle) ? (col: string) => col : (col: string) => `ULOWER(${col})`;
+  const parts = [`email LIKE ? ESCAPE '\\'`, `${low("COALESCE(first_name, '')")} LIKE ? ESCAPE '\\'`, `${low("COALESCE(last_name, '')")} LIKE ? ESCAPE '\\'`];
+  // « prénom nom » can only match where first name or last name alone does not if the search has a space.
+  if (needle.includes(' ')) parts.push(`${low("COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')")} LIKE ? ESCAPE '\\'`);
+  const exact = { sql: `(${parts.join(' OR ')})`, params: parts.map(() => like), indexed: false };
+  if ([...needle].length < 3 || !contactSearchIndexReady(db)) return exact;
+  return {
+    sql: `rowid IN (SELECT rowid FROM contacts_fts WHERE contacts_fts MATCH ?) AND ${exact.sql}`,
+    params: [`"${needle.replace(/"/g, '""')}"`, ...exact.params],
+    indexed: true,
+  };
+}
+
+const searchReady = new WeakMap<DatabaseSync, boolean>();
+
+/** True once every contact is in the trigram index (the background backfill is over). */
+export function contactSearchIndexReady(db: DatabaseSync): boolean {
+  if (searchReady.get(db)) return true;
+  let ready = false;
+  try {
+    ready = Number(get<{ done: number }>(db, 'SELECT done FROM contacts_fts_state WHERE id = 1')?.done ?? 0) === 1;
+  } catch {
+    ready = false; // read worker on a database without the table yet
+  }
+  if (ready) searchReady.set(db, true);
+  return ready;
+}
+
+const backfilling = new WeakSet<DatabaseSync>();
+
+/**
+ * Indexes the contacts that existed before contacts_fts (new / changed ones are indexed by triggers):
+ * by rowid ranges, each in its own short transaction (~25 ms), yielding to the event loop in between.
+ * Idempotent (INSERT OR REPLACE) and resumable: the cursor is saved with each batch.
+ */
+export function startContactSearchBackfill(db: DatabaseSync, opts: { budgetMs?: number; pauseMs?: number } = {}): Promise<void> {
+  if (backfilling.has(db)) return Promise.resolve();
+  backfilling.add(db);
+  const budget = opts.budgetMs ?? 25;
+  const pause = opts.pauseMs ?? 5;
+  return (async () => {
+    try {
+      const state = get<{ cursor: number; done: number }>(db, 'SELECT cursor, done FROM contacts_fts_state WHERE id = 1');
+      if (!state) return;
+      if (state.done) {
+        if (!(await searchIndexLooksRight(db))) {
+          console.error('[contacts] search index out of step with contacts (restored backup?): rebuilding it');
+          run(db, "INSERT INTO contacts_fts (contacts_fts) VALUES ('delete-all')");
+          run(db, 'UPDATE contacts_fts_state SET cursor = 0, done = 0 WHERE id = 1');
+          searchReady.delete(db);
+        } else return;
+      }
+      const end = Number(get<{ m: number | null }>(db, 'SELECT MAX(rowid) AS m FROM contacts')?.m ?? 0);
+      let cursor = Number(get<{ cursor: number }>(db, 'SELECT cursor FROM contacts_fts_state WHERE id = 1')?.cursor ?? 0);
+      let step = 500;
+      const insert = db.prepare(
+        `INSERT OR REPLACE INTO contacts_fts (rowid, email, name)
+         SELECT rowid, email, COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') FROM contacts WHERE rowid > ? AND rowid <= ?`,
+      );
+      while (cursor < end) {
+        const started = performance.now();
+        const to = Math.min(end, cursor + step);
+        transaction(db, () => {
+          insert.run(cursor, to);
+          run(db, 'UPDATE contacts_fts_state SET cursor = ? WHERE id = 1', to);
+        });
+        cursor = to;
+        // Keep each batch near the time budget whatever the row size / disk speed.
+        const took = performance.now() - started;
+        step = Math.max(100, Math.min(20_000, Math.round(step * (took > 0 ? Math.min(1.5, budget / took) : 1.5))));
+        await new Promise((r) => setTimeout(r, pause));
+      }
+      // Rows above `end` were inserted after the start: the insert trigger indexed them.
+      run(db, 'UPDATE contacts_fts_state SET done = 1 WHERE id = 1');
+      searchReady.set(db, true);
+    } finally {
+      backfilling.delete(db);
+    }
+  })();
+}
+
+/** A few random contacts must be found in the index by their own email (cheap check at start-up). */
+async function searchIndexLooksRight(db: DatabaseSync): Promise<boolean> {
+  const max = Number(get<{ m: number | null }>(db, 'SELECT MAX(rowid) AS m FROM contacts')?.m ?? 0);
+  const pick = db.prepare('SELECT rowid, email FROM contacts WHERE rowid >= ? ORDER BY rowid LIMIT 1');
+  const sample = Array.from({ length: 10 }, () => pick.get(1 + Math.floor(Math.random() * max)) as { rowid: number; email: string } | undefined).filter(
+    (c): c is { rowid: number; email: string } => !!c && [...c.email].length >= 3,
+  );
+  // A MATCH on a whole email intersects big trigram lists (« com », « mai »…): run off the main thread.
+  const found = await Promise.all(
+    sample.map((c) => offload(db, 'get', 'SELECT 1 AS ok FROM contacts_fts WHERE contacts_fts MATCH ? AND rowid = ?', [`email:"${c.email.replace(/"/g, '""')}"`, c.rowid])),
+  );
+  return found.every((r) => !!r);
+}
+
+/** Read-worker task: number of contacts per tag (GET /tags), largest first. */
+export function tagCounts(db: DatabaseSync, accountId: string): Array<{ tag: string; count: number }> {
+  return all<{ tag: string; count: number }>(
+    db,
+    `SELECT LOWER(j.value) AS tag, COUNT(DISTINCT c.id) AS count
+       FROM contacts c, json_each(c.tags) j
+      WHERE c.account_id = ? AND c.tags != '[]'
+      GROUP BY LOWER(j.value)
+      ORDER BY count DESC, tag ASC`,
+    accountId,
+  ).map((r) => ({ tag: r.tag, count: Number(r.count) }));
 }
 
 export function updateContactColumns(db: DatabaseSync, contactId: string, updates: Record<string, SQLInputValue>): void {

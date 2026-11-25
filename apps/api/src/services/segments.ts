@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { get, parseJson, scalar, type DatabaseSync, type SQLInputValue } from '../db.js';
+import { get, now, parseJson, run, scalar, type DatabaseSync, type SQLInputValue } from '../db.js';
 import { badRequest } from '../lib/http.js';
+import { offload } from '../lib/offload.js';
 import { t } from '../i18n.js';
 
 export const SEGMENT_FIELDS = [
@@ -109,7 +110,10 @@ function compileCondition(c: SegmentCondition): CompiledRules {
     }
     const exists = `EXISTS (SELECT 1 FROM json_each(contacts.tags) WHERE LOWER(json_each.value) = ?)`;
     const negate = c.op === 'not_has_tag' || c.op === 'neq';
-    return { sql: negate ? `NOT ${exists}` : exists, params: [tag] };
+    const pre = tagPrefilter(tag);
+    // The cheap LIKE on the raw JSON skips json_each for the (many) contacts that cannot have the tag.
+    const test = pre ? `(contacts.tags LIKE ? ESCAPE '\\' AND ${exists})` : exists;
+    return { sql: negate ? `NOT ${test}` : test, params: pre ? [pre, tag] : [tag] };
   }
 
   if (kind === 'number') {
@@ -163,6 +167,15 @@ function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (m) => `\\${m}`);
 }
 
+/**
+ * LIKE pattern that every `tags` JSON holding `tag` (any ASCII case) matches: `%"tag"%`. Only for plain
+ * printable ASCII tags without quotes or backslashes, whose JSON spelling is the tag itself (LIKE folds
+ * ASCII case like LOWER()); null otherwise (no shortcut, json_each alone).
+ */
+export function tagPrefilter(tag: string): string | null {
+  return /^[\x20-\x7e]+$/.test(tag) && !/["\\]/.test(tag) ? `%"${escapeLike(tag)}"%` : null;
+}
+
 /** Compiles segment rules into a parameterized SQL boolean expression. An empty rule set matches everyone. */
 export function compileRules(rules: SegmentRules): CompiledRules {
   if (!rules.conditions.length) return { sql: '1 = 1', params: [] };
@@ -205,6 +218,68 @@ export function countMatching(db: DatabaseSync, accountId: string, rules: Segmen
     accountId,
     ...params,
   );
+}
+
+/** Read-worker task: number of contacts matching each rule set (stored JSON), in order. */
+export function segmentCounts(db: DatabaseSync, accountId: string, rulesJson: string[]): number[] {
+  return rulesJson.map((json) => {
+    const parsed = rulesSchema.safeParse(parseJson(json, {}));
+    return countMatching(db, accountId, parsed.success ? parsed.data : { match: 'all', conditions: [] });
+  });
+}
+
+/** A segment's cached count is recomputed in the background once older than this. */
+export const SEGMENT_COUNT_TTL_MS = 10 * 60_000;
+const counting = new Map<string, Promise<number | null>>();
+
+/**
+ * Counts of the given segments rows without counting 2 M contacts on every page load: the count stored
+ * on the segment (`contacts_count`, `counted_at`) is served; a missing one is computed now, off the main
+ * thread; a stale one is served and refreshed in the background.
+ */
+export async function cachedSegmentCounts(db: DatabaseSync, accountId: string, rows: Array<Record<string, unknown>>): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>();
+  const missing: Array<Record<string, unknown>> = [];
+  const stale: Array<Record<string, unknown>> = [];
+  for (const r of rows) {
+    const id = String(r.id);
+    if (r.counted_at == null || r.contacts_count == null) missing.push(r);
+    else {
+      out.set(id, Number(r.contacts_count));
+      if (Date.now() - Date.parse(String(r.counted_at)) > SEGMENT_COUNT_TTL_MS) stale.push(r);
+    }
+  }
+  if (stale.length) refreshSegmentCounts(db, accountId, stale).catch((err) => console.error('[segments] count refresh failed:', err));
+  if (missing.length) {
+    const counts = await refreshSegmentCounts(db, accountId, missing);
+    missing.forEach((r, i) => out.set(String(r.id), counts[i]));
+  }
+  return out;
+}
+
+async function refreshSegmentCounts(db: DatabaseSync, accountId: string, rows: Array<Record<string, unknown>>): Promise<Array<number | null>> {
+  const todo = rows.filter((r) => !counting.has(String(r.id)));
+  if (todo.length) {
+    const startedAt = now();
+    for (const r of todo) {
+      const id = String(r.id);
+      // One task per segment: the read workers count several segments side by side.
+      const p = offload(db, 'segmentCounts', accountId, [String(r.rules)]).then(
+        ([count]) => {
+          // Skipped if the rules changed meanwhile (that edit cleared counted_at and counts again).
+          run(db, 'UPDATE segments SET contacts_count = ?, counted_at = ? WHERE id = ? AND rules = ?', count, startedAt, id, String(r.rules));
+          return count;
+        },
+        (err) => {
+          console.error('[segments] count failed:', err);
+          return null;
+        },
+      );
+      counting.set(id, p);
+      p.finally(() => counting.delete(id));
+    }
+  }
+  return Promise.all(rows.map((r) => counting.get(String(r.id)) ?? Promise.resolve(r.contacts_count == null ? null : Number(r.contacts_count))));
 }
 
 export function serializeSegment(row: Record<string, unknown>) {

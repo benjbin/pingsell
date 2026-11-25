@@ -3,8 +3,10 @@ import { detectColumns, isEmptyCell, splitFullName, type ContactField } from './
 /**
  * Minimal RFC 4180 CSV parser (quoted fields, escaped quotes, CRLF) with
  * delimiter auto-detection (`,` `;` or tab — French Excel exports use `;`).
+ * Stops once `maxRows` non-blank rows are read: a 20 MB file of short lines is never fully materialised
+ * (millions of small arrays) just to be rejected by the row cap afterwards.
  */
-export function parseCsv(input: string): string[][] {
+export function parseCsv(input: string, maxRows = Infinity): string[][] {
   const text = input.replace(/^﻿/, '');
   const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
   const delimiter = [',', ';', '\t'].reduce((best, d) =>
@@ -12,6 +14,9 @@ export function parseCsv(input: string): string[][] {
   );
 
   const rows: string[][] = [];
+  const keep = (r: string[]) => {
+    if (r.some((cell) => cell.trim() !== '')) rows.push(r);
+  };
   let row: string[] = [];
   let field = '';
   let inQuotes = false;
@@ -38,16 +43,17 @@ export function parseCsv(input: string): string[][] {
     } else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && text[i + 1] === '\n') i++;
       row.push(field);
-      rows.push(row);
+      keep(row);
       row = [];
       field = '';
+      if (rows.length >= maxRows) return rows;
     } else field += ch;
   }
   if (field !== '' || row.length) {
     row.push(field);
-    rows.push(row);
+    keep(row);
   }
-  return rows.filter((r) => r.some((cell) => cell.trim() !== ''));
+  return rows;
 }
 
 export interface CsvContactRow {
@@ -67,10 +73,18 @@ export function csvToContacts(csv: string): CsvContactRow[] {
   return parsed.rows;
 }
 
-/** Same, plus what each column was recognised as (`hasEmail` false = no column holds email addresses). */
-export function csvToContactsWithColumns(csv: string): { headers: string[]; columns: Array<ContactField | null>; hasEmail: boolean; rows: CsvContactRow[] } {
-  const rows = parseCsv(csv);
-  if (rows.length < 2) return { headers: rows[0] ?? [], columns: [], hasEmail: false, rows: [] };
+/**
+ * Same, plus what each column was recognised as (`hasEmail` false = no column holds email addresses).
+ * With `maxRows`, parsing stops after `maxRows + 1` data rows and `tooMany` is true when the file has more.
+ */
+export function csvToContactsWithColumns(
+  csv: string,
+  maxRows = Infinity,
+): { headers: string[]; columns: Array<ContactField | null>; hasEmail: boolean; rows: CsvContactRow[]; tooMany: boolean } {
+  const rows = parseCsv(csv, maxRows + 2);
+  const tooMany = rows.length - 1 > maxRows;
+  if (tooMany) rows.length = maxRows + 1;
+  if (rows.length < 2) return { headers: rows[0] ?? [], columns: [], hasEmail: false, rows: [], tooMany };
   const headers = rows[0].map((h) => h.trim());
   const keys = detectColumns(headers, rows.slice(1, 201));
   const out = rows.slice(1).map((cells, i) => {
@@ -111,5 +125,5 @@ export function csvToContactsWithColumns(csv: string): { headers: string[]; colu
     }
     return out;
   });
-  return { headers, columns: keys, hasEmail: keys.includes('email'), rows: out };
+  return { headers, columns: keys, hasEmail: keys.includes('email'), rows: out, tooMany };
 }

@@ -1,4 +1,5 @@
 import { all, scalar, type DatabaseSync } from '../db.js';
+import { memo, offload } from '../lib/offload.js';
 import { rate } from './campaigns.js';
 import { attributedRevenue } from './analytics.js';
 
@@ -74,17 +75,13 @@ export function overviewStats(db: DatabaseSync, accountId: string, days: number)
   for (let t = firstDay, i = 0; i < days; i++, t += DAY_MS) {
     series.set(new Date(t).toISOString().slice(0, 10), { sent: 0, opened: 0, clicked: 0 });
   }
+  // One COUNT per UTC day over a covering index range (no substr() per row, no GROUP BY temp b-tree).
   const bump = (column: 'sent_at' | 'opened_at' | 'clicked_at', key: 'sent' | 'opened' | 'clicked') => {
-    const rows = all<{ d: string; n: number }>(
-      db,
-      `SELECT substr(${column}, 1, 10) AS d, COUNT(*) AS n FROM messages
-        WHERE account_id = ? AND ${column} IS NOT NULL AND ${column} >= ? GROUP BY d`,
-      accountId,
-      since,
-    );
-    for (const r of rows) {
-      const bucket = series.get(r.d);
-      if (bucket) bucket[key] += Number(r.n);
+    const stmt = db.prepare(`SELECT COUNT(*) AS n FROM messages WHERE account_id = ? AND ${column} >= ? AND ${column} < ?`);
+    let t = firstDay;
+    for (const bucket of series.values()) {
+      bucket[key] += Number((stmt.get(accountId, new Date(t).toISOString(), new Date(t + DAY_MS).toISOString()) as { n: number }).n);
+      t += DAY_MS;
     }
   };
   bump('sent_at', 'sent');
@@ -107,6 +104,33 @@ export function overviewStats(db: DatabaseSync, accountId: string, days: number)
   };
 }
 
+/**
+ * What is connected to the account (« Sources » of the automation editor). Counts over contacts and
+ * messages read covering indexes only; callers serve it from a short cache, computed off the main thread.
+ */
+export function automationSources(db: DatabaseSync, accountId: string) {
+  const n = (sql: string) => Number(scalar(db, sql, accountId) ?? 0);
+  const plugins = all<{ label: string }>(
+    db,
+    "SELECT label FROM api_keys WHERE account_id = ? AND (label LIKE 'WordPress · %' OR label LIKE 'PrestaShop · %') ORDER BY created_at",
+    accountId,
+  ).map((k) => k.label);
+  return {
+    shopify: n("SELECT COUNT(*) FROM integrations WHERE account_id = ? AND provider = 'shopify' AND status = 'connected' AND access_token IS NOT NULL") > 0,
+    plugins,
+    api_keys_used: n('SELECT COUNT(*) FROM api_keys WHERE account_id = ? AND last_used_at IS NOT NULL'),
+    orders: n("SELECT COUNT(*) FROM events WHERE account_id = ? AND type = 'order'"),
+    fulfilled: n("SELECT COUNT(*) FROM events WHERE account_id = ? AND type = 'order_fulfilled'"),
+    carts: n('SELECT COUNT(*) FROM api_carts WHERE account_id = ?') + n("SELECT COUNT(*) FROM events WHERE account_id = ? AND type = 'cart_abandoned'"),
+    products_seen: n('SELECT COUNT(*) FROM web_pageviews WHERE account_id = ? AND product IS NOT NULL'),
+    app_users: n('SELECT COUNT(*) FROM app_users WHERE account_id = ?'),
+    push_devices: n('SELECT COUNT(*) FROM push_devices WHERE account_id = ?'),
+    contacts: n('SELECT COUNT(*) FROM contacts WHERE account_id = ?'),
+    segments: n('SELECT COUNT(*) FROM segments WHERE account_id = ?'),
+    emails_sent: n("SELECT COUNT(*) FROM messages WHERE account_id = ? AND status = 'sent'"),
+  };
+}
+
 export function monthlyUsage(db: DatabaseSync, accountId: string) {
   const d = new Date();
   const monthStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
@@ -120,3 +144,15 @@ export function monthlyUsage(db: DatabaseSync, accountId: string) {
     contacts: scalar(db, 'SELECT COUNT(*) FROM contacts WHERE account_id = ?', accountId),
   };
 }
+
+/* Cached, off-the-main-thread versions used by the routes: counts over millions of rows never block the API. */
+
+/** Shown on every page (/me): one minute fresh, then served while it is refreshed in the background. */
+export const cachedMonthlyUsage = (db: DatabaseSync, accountId: string) =>
+  memo(`usage:${accountId}`, 60_000, 6 * 3600_000, () => offload(db, 'monthlyUsage', accountId));
+
+export const cachedAutomationSources = (db: DatabaseSync, accountId: string) =>
+  memo(`sources:${accountId}`, 60_000, 3600_000, () => offload(db, 'automationSources', accountId));
+
+export const cachedOverviewStats = (db: DatabaseSync, accountId: string, days: number) =>
+  memo(`overview:${accountId}:${days}`, 60_000, 15 * 60_000, () => offload(db, 'overviewStats', accountId, days));
