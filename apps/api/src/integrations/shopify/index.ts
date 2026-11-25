@@ -7,6 +7,9 @@ import { fireCartAbandoned, processAbandonedCheckouts } from './checkouts.js';
 import { cleanEmail, toNumber, upsertShopifyContact } from './contacts.js';
 import { verifyOAuthHmac, verifyWebhookHmac } from './hmac.js';
 import { buildInstallUrl, consumeState, createState } from './oauth.js';
+import { verifySessionToken } from './sessionToken.js';
+import { embeddedPage } from './embedded.js';
+import { getShopifyRevenue } from './revenue.js';
 import {
   clientFor,
   deleteIntegration,
@@ -274,6 +277,14 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
     if (!shop || !verifyOAuthHmac(query, shopifyApiSecret)) {
       return reply.code(400).type('text/plain; charset=utf-8').send(t('Lien Shopify invalide : ouvrez Pingsell depuis votre admin Shopify.', 'Invalid Shopify link: open Pingsell from your Shopify admin.'));
     }
+    // Embedded app (opened inside the Shopify admin): App Bridge page, authenticated with session tokens.
+    if (query.embedded === '1' || query.host) {
+      const lang = String(query.locale ?? '').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+      return reply
+        .header('Content-Security-Policy', `frame-ancestors https://${shop} https://admin.shopify.com;`)
+        .type('text/html; charset=utf-8')
+        .send(embeddedPage({ apiKey: shopifyApiKey, apiBase: `${ctx.config.publicUrl.replace(/\/+$/, '')}/api/v1`, webUrl, lang }));
+    }
     // Already installed and working: straight to the app UI.
     const live = getIntegrationsByShop(ctx.db, shop).filter((r) => r.status === 'connected' && r.access_token && parseAuthMode(r) === 'oauth');
     if (live.length > 0) return reply.redirect(`${webUrl}/integrations?outil=shopify`);
@@ -334,6 +345,91 @@ export async function registerShopify(app: FastifyInstance, ctx: IntegrationCont
     } catch (err) {
       request.log.warn({ err }, 'Shopify : échec du callback OAuth');
       return fail(err instanceof Error ? err.message : t('Échec de la connexion Shopify', 'Shopify connection failed'));
+    }
+  });
+
+  // ---------------------------------------------------------------- embedded app (inside the Shopify admin)
+  /**
+   * Called by the embedded page with an App Bridge session token. Installed through Shopify's managed install,
+   * the store has no access token yet: it is obtained with the token exchange (expiring offline token).
+   * Answers what the page shows: the store's numbers, or the link that attaches it to a Pingsell account.
+   */
+  app.post(`${base}/integrations/shopify/embedded`, async (request, reply) => {
+    try {
+      const { shopifyApiKey, shopifyApiSecret } = ctx.config;
+      if (!shopifyApiKey || !shopifyApiSecret) throw new HttpError(400, t('App Shopify non configurée', 'Shopify app isn’t configured'));
+      const header = request.headers.authorization ?? '';
+      const session = verifySessionToken(header.replace(/^Bearer\s+/i, ''), shopifyApiKey, shopifyApiSecret);
+      if (!session) throw new HttpError(401, t('Session Shopify invalide : rechargez la page.', 'Invalid Shopify session: reload the page.'));
+      const shop = session.shop;
+
+      let live = getIntegrationsByShop(ctx.db, shop).filter((r) => r.status === 'connected' && r.access_token && parseAuthMode(r) === 'oauth');
+      let claimUrl: string | null = null;
+      let shopName: string | null = null;
+      if (!live.length) {
+        const token = await requestAccessToken(shop, {
+          client_id: shopifyApiKey,
+          client_secret: shopifyApiSecret,
+          grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+          subject_token: session.raw,
+          subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
+          requested_token_type: 'urn:shopify:params:oauth:token-type:offline-access-token',
+          expiring: '1',
+        });
+        // Reinstall on a store this Pingsell already knows (one account): reconnect it straight away.
+        const known = [...new Set(getIntegrationsByShop(ctx.db, shop).map((r) => r.account_id))];
+        if (known.length === 1) {
+          await establish(known[0]!, shop, token.access_token, 'oauth', oauthSecrets(token), request.log);
+          live = getIntegrationsByShop(ctx.db, shop).filter((r) => r.account_id === known[0]);
+        } else {
+          try {
+            const probe = new ShopifyClient(shop, async () => token.access_token);
+            shopName = (await probe.graphql<{ shop: { name: string } }>('query { shop { name } }')).shop.name;
+          } catch {
+            shopName = null;
+          }
+          const secrets = oauthSecrets(token);
+          const claim = savePendingInstall(ctx.db, {
+            shop_domain: shop,
+            shop_name: shopName,
+            access_token: token.access_token,
+            refresh_token: secrets.refresh_token ?? null,
+            token_expires_at: secrets.token_expires_at ?? null,
+            refresh_expires_at: secrets.refresh_expires_at ?? null,
+          });
+          claimUrl = `${webUrl}/shopify/connecter?claim=${encodeURIComponent(claim)}`;
+        }
+      }
+      if (!live.length) return { state: 'claim', shop_domain: shop, shop_name: shopName ?? shop, claim_url: claimUrl };
+
+      const row = live[0]!;
+      const accountId = row.account_id;
+      let cfg: ShopifyConfig = {};
+      try {
+        cfg = JSON.parse(row.config ?? '{}') as ShopifyConfig;
+      } catch {
+        cfg = {};
+      }
+      const account = ctx.db.prepare('SELECT name FROM accounts WHERE id = ?').get(accountId) as { name?: string } | undefined;
+      const count = (sql: string, ...params: string[]) => Number((ctx.db.prepare(sql).get(...params) as { n?: number } | undefined)?.n ?? 0);
+      const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+      return {
+        state: 'connected',
+        shop_domain: shop,
+        shop_name: cfg.shop_name ?? shop,
+        account_name: account?.name ?? '',
+        currency: cfg.currency ?? 'EUR',
+        stats: {
+          contacts: count("SELECT COUNT(*) AS n FROM contacts WHERE account_id = ? AND source = 'shopify'", accountId),
+          subscribed: count("SELECT COUNT(*) AS n FROM contacts WHERE account_id = ? AND source = 'shopify' AND status = 'subscribed'", accountId),
+          revenue: getShopifyRevenue(ctx.db, accountId, 30).revenue,
+          campaigns: count("SELECT COUNT(*) AS n FROM campaigns WHERE account_id = ? AND status = 'sent' AND sent_at >= ?", accountId, since),
+        },
+        sync: { running: isSyncRunning(accountId) },
+        links: { home: `${webUrl}/`, campaigns: `${webUrl}/campagnes/nouvelle`, automations: `${webUrl}/automatisations` },
+      };
+    } catch (err) {
+      return sendError(reply, err, request);
     }
   });
 

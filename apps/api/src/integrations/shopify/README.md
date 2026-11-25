@@ -66,6 +66,20 @@ Parcours conforme aux règles de l'App Store (installation lancée depuis Shopif
      Le marchand se connecte ou crée son compte, puis `GET /integrations/shopify/pending?claim=` et
      `POST /integrations/shopify/claim { claim }` rattachent la boutique (lien à usage unique).
 
+### App intégrée à l'admin Shopify (mode « plugin »)
+
+`embedded = true` dans `shopify.app.toml` : Shopify ouvre l'application_url **dans son admin** avec `embedded=1`, `host`, `shop`, `locale` et `hmac`.
+
+1. `GET /integrations/shopify/app` vérifie le HMAC puis renvoie une page App Bridge (`embedded.ts`), avec l'en-tête
+   `Content-Security-Policy: frame-ancestors https://{shop} https://admin.shopify.com`. La page ne stocke rien dans le navigateur
+   (ni cookie ni localStorage) : chaque appel porte un jeton de session App Bridge (`shopify.idToken()`).
+2. `POST /integrations/shopify/embedded` (`Authorization: Bearer <jeton de session>`) vérifie le JWT (`sessionToken.ts` :
+   HS256 signé avec `SHOPIFY_API_SECRET`, `aud` = `SHOPIFY_API_KEY`, `dest` = `iss` = la boutique, non expiré).
+   - Boutique connectée → ses chiffres (clients synchronisés, abonnés, ventes 30 j, campagnes 30 j) et des liens vers Pingsell.
+   - Boutique installée par Shopify mais sans jeton → **token exchange** (`grant_type=urn:ietf:params:oauth:grant-type:token-exchange`,
+     jeton hors ligne qui expire). Boutique déjà connue d'un seul compte → reconnectée tout de suite. Sinon → lien
+     `/shopify/connecter?claim=…`, ouvert dans un nouvel onglet, pour la relier à un compte Pingsell.
+
 ### Confidentialité (webhooks obligatoires)
 
 Déclarés dans `shopify.app.toml` (`compliance_topics`), signés avec `SHOPIFY_API_SECRET` :
