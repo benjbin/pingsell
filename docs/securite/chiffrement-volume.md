@@ -17,4 +17,6 @@ Il protège les données si un disque, un instantané ou une sauvegarde du serve
 3. Vérifiez que l'app répond (`https://app…/health`), puis supprimez la copie en clair (la commande exacte est affichée à la fin).
 4. Copiez la clé du volume dans votre gestionnaire de mots de passe (commande affichée à la fin).
 
+Docker ne démarre que si le volume chiffré est monté : si le déverrouillage échoue au redémarrage, l'app reste arrêtée au lieu de tourner sur un dossier vide. Après chaque redémarrage du serveur, vérifiez `findmnt` sur le dossier du volume.
+
 Vérifier à tout moment : `sudo cryptsetup status pingsell-<nom-du-volume>` doit afficher `type: LUKS2` et `cipher: aes-xts-plain64`.

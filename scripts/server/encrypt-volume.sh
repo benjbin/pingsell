@@ -47,6 +47,10 @@ chown --reference="$DATA.plain-backup" "$DATA"; chmod --reference="$DATA.plain-b
 
 grep -q "^$NAME " /etc/crypttab 2>/dev/null || echo "$NAME $FILE $KEY luks" >> /etc/crypttab
 grep -q " $DATA " /etc/fstab || echo "/dev/mapper/$NAME $DATA ext4 defaults,nofail,x-systemd.before=docker.service 0 2" >> /etc/fstab
+# Docker ne démarre pas sans le volume chiffré monté : si le déverrouillage échoue au redémarrage,
+# l'app reste arrêtée (visible) au lieu de repartir sur un dossier vide.
+mkdir -p /etc/systemd/system/docker.service.d
+printf '[Unit]\nRequiresMountsFor=%s\n' "$DATA" > "/etc/systemd/system/docker.service.d/$NAME.conf"
 systemctl daemon-reload || true
 
 [[ -n "$CONTAINERS" ]] && docker start $CONTAINERS >/dev/null
