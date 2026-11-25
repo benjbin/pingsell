@@ -1,7 +1,7 @@
 import type { AppConfig } from './config.js';
-import * as dbModule from './db.js';
-import { all, get, now, run, scalar, type DatabaseSync } from './db.js';
-import * as appModule from './app.js';
+import { all, checkpointWal, get, now, run, scalar, type DatabaseSync } from './db.js';
+import { markWorkerTick } from './lib/health.js';
+import { optimizeDatabase } from './services/maintenance.js';
 import { backfillLegacy, finalizeCampaigns, purgeStoppedQueues, queueCampaign } from './services/campaigns.js';
 import { processDueRuns, processScheduledTriggers, takeWebhooks } from './services/automations.js';
 import { sendTeamNotifications, sendWebhooks } from './services/automationOutbox.js';
@@ -17,7 +17,7 @@ import { convertEmailImages } from './services/emailImages.js';
 import { classifySendError, type EmailProvider } from './services/mailer.js';
 import { outsideLang } from './i18n.js';
 import { guardCampaigns } from './services/deliverability.js';
-import { backupDue, runBackup } from './services/backup.js';
+import { backupDue, backupInProgress, runBackup } from './services/backup.js';
 import { purgeDataAccessLog } from './services/dataAccess.js';
 
 export interface WorkerLogger {
@@ -43,12 +43,6 @@ export const retryDelayMs = (n: number) => Math.min(30 * 60_000, 30_000 * 2 ** M
 let lastTick: number | null = null;
 /** When the worker last ran a tick (ms epoch), null before the first one. */
 export const lastWorkerTickAt = (): number | null => lastTick;
-
-/** Optional hooks other modules may export (health check, WAL checkpoint): called only if present. */
-const optionalFn = (mod: unknown, name: string): ((...args: unknown[]) => unknown) | undefined => {
-  const fn = (mod as Record<string, unknown>)[name];
-  return typeof fn === 'function' ? (fn as (...args: unknown[]) => unknown) : undefined;
-};
 
 interface Queued {
   rid: number;
@@ -83,6 +77,8 @@ export class SendingWorker {
   private current: Promise<void> | null = null;
   private maintenanceAt = 0;
   private checkpointAt = 0;
+  private optimizeAt = 0;
+  private optimizeRunning = false;
   private backupRunning = false;
   private backupWarned = false;
   private readonly queueing = new Map<string, Promise<void>>();
@@ -167,13 +163,32 @@ export class SendingWorker {
       .finally(() => (this.backupRunning = false));
   }
 
-  /** Checkpoint du WAL une fois par heure, si db.ts le propose. */
+  /** Checkpoint du WAL une fois par heure (hors sauvegarde en cours) ; checkpointWal ne rejette jamais. */
   private checkpoint(): void {
     const at = Date.now();
-    if (at - this.checkpointAt < 3_600_000) return;
+    if (at - this.checkpointAt < 3_600_000 || backupInProgress()) return;
     this.checkpointAt = at;
-    const fn = optionalFn(dbModule, 'checkpointWal');
-    if (fn) fn(this.db);
+    void this.track(
+      checkpointWal(this.db).then((r) => {
+        if (r && r.walBefore > 0) this.log.info(`[worker] checkpoint du WAL : ${JSON.stringify(r)}`);
+      }),
+    );
+  }
+
+  /** Statistiques du planificateur une fois par heure (comptage dans un thread de lecture, quelques ms ici). */
+  private optimize(): void {
+    const at = Date.now();
+    if (this.optimizeRunning || at - this.optimizeAt < 3_600_000) return;
+    this.optimizeAt = at;
+    this.optimizeRunning = true;
+    void this.track(
+      optimizeDatabase(this.db)
+        .then((r) => {
+          if (r.tables) this.log.info(`[worker] statistiques de la base : ${r.tables} table(s), ${r.indexes} index, ${r.total_ms} ms`);
+        })
+        .catch((err) => this.log.error(`[worker] statistiques de la base : ${errText(err)}`))
+        .finally(() => (this.optimizeRunning = false)),
+    );
   }
 
   private async stage(name: string, fn: () => unknown): Promise<void> {
@@ -203,9 +218,10 @@ export class SendingWorker {
       lastTick = Date.now();
       let sent = 0;
       let pushed = 0;
-      await this.stage('suivi du worker', () => optionalFn(appModule, 'markWorkerTick')?.());
+      markWorkerTick();
       await this.stage('maintenance', () => this.maintenance());
       await this.stage('checkpoint du WAL', () => this.checkpoint());
+      await this.stage('statistiques de la base', () => this.optimize());
       await this.stage('campagnes programmées', () => this.promoteScheduled());
       await this.stage('rattrapage des compteurs', () => this.backfill());
       await this.stage('mise en file des campagnes', () => this.queueSendingCampaigns());
