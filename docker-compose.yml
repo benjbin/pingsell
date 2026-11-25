@@ -6,6 +6,10 @@ services:
     build:
       context: ./apps/api
     restart: unless-stopped
+    # tini en PID 1 : node n'ignore plus SIGKILL envoyé par son chien de garde (API figée → redémarrage par Docker).
+    init: true
+    # Laisse le worker finir son lot d'envoi et la base se fermer proprement avant le SIGKILL de Docker.
+    stop_grace_period: 30s
     environment:
       - NODE_ENV=production
       - PORT=4000
@@ -41,7 +45,10 @@ services:
       # Encrypted daily backups of the database (docs/securite). Coolify generates the key on first deploy:
       # copy it to a password manager, it is the only way to read the backups.
       - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY:-${SERVICE_PASSWORD_64_BACKUPKEY}}
-      - BACKUP_KEEP=${BACKUP_KEEP:-14}
+      # Sauvegardes gardées sur le volume (chacune ≈ la base compressée) ; l'historique long se garde sur S3.
+      - BACKUP_KEEP=${BACKUP_KEEP:-3}
+      # Event loop bloquée plus longtemps que ça (ms) → le processus est tué et Docker le redémarre. 0 = désactivé.
+      - WATCHDOG_TIMEOUT_MS=${WATCHDOG_TIMEOUT_MS:-60000}
       - BACKUP_S3_ENDPOINT=${BACKUP_S3_ENDPOINT:-}
       - BACKUP_S3_REGION=${BACKUP_S3_REGION:-}
       - BACKUP_S3_BUCKET=${BACKUP_S3_BUCKET:-}

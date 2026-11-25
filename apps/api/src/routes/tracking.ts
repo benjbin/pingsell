@@ -6,6 +6,7 @@ import { recordEvent } from '../services/contacts.js';
 import { decorateLink } from '../services/webTracking.js';
 import { escapeHtml } from '../services/render.js';
 import { currentLang, t } from '../i18n.js';
+import { WORKER_STALE_MS, workerTickAgeMs } from '../lib/health.js';
 
 // 1x1 transparent GIF.
 const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
@@ -62,7 +63,26 @@ export async function trackingRoutes(app: FastifyInstance, { db }: Deps) {
     ...extra,
   });
 
-  app.get('/health', async () => ({ ok: true }));
+  // Santé : la base répond (SELECT 1) et le worker tourne. 503 seulement si la base ne répond pas ;
+  // un worker figé est signalé (worker_stale) sans faire tomber le HTTP.
+  app.get('/health', async (_request, reply) => {
+    const startedAt = performance.now();
+    let dbOk = false;
+    try {
+      dbOk = (db.prepare('SELECT 1 AS ok').get() as { ok?: number } | undefined)?.ok === 1;
+    } catch {
+      dbOk = false;
+    }
+    const tickAge = workerTickAgeMs();
+    return reply.code(dbOk ? 200 : 503).header('cache-control', 'no-store').send({
+      ok: dbOk,
+      db: dbOk,
+      db_ms: Math.round((performance.now() - startedAt) * 10) / 10,
+      worker_last_tick_ms: tickAge,
+      worker_stale: tickAge === null ? false : tickAge > WORKER_STALE_MS,
+      uptime_s: Math.round(process.uptime()),
+    });
+  });
 
   // Open pixel: /t/o/<messageId>.gif — records the first open only.
   app.get<{ Params: { file: string } }>('/t/o/:file', async (request, reply) => {

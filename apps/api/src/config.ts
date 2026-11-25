@@ -137,7 +137,7 @@ function loadConfig(): AppConfig {
     backup: {
       dir: str('BACKUP_DIR', '') || (dbPath === ':memory:' ? resolve(API_ROOT, 'backups') : join(dirname(isAbsolute(dbPath) ? dbPath : resolve(API_ROOT, dbPath)), 'backups')),
       key: optional('BACKUP_ENCRYPTION_KEY'),
-      keep: int('BACKUP_KEEP', 14),
+      keep: int('BACKUP_KEEP', 3),
       intervalHours: int('BACKUP_INTERVAL_HOURS', 24),
       s3:
         optional('BACKUP_S3_ENDPOINT') && optional('BACKUP_S3_BUCKET') && optional('BACKUP_S3_ACCESS_KEY_ID') && optional('BACKUP_S3_SECRET_ACCESS_KEY')

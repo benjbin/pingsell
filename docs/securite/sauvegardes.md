@@ -4,12 +4,13 @@
 
 Une fois par jour, le worker de l'API :
 
-1. prend une copie cohérente de la base (`VACUUM INTO`), sans arrêter l'app ;
-2. la compresse et la chiffre en AES-256-GCM avec `BACKUP_ENCRYPTION_KEY` (clé dérivée par scrypt) ;
-3. l'écrit dans `/data/backups/pingsell-<date>.pgbk` et garde les 14 plus récentes (`BACKUP_KEEP`) ;
-4. l'envoie sur un stockage S3 si `BACKUP_S3_*` est réglé (copie hors du serveur).
+1. vérifie la place libre sur le volume : il faut au moins 2,5 × la taille de la base, sinon la sauvegarde est ignorée et l'API écrit `espace disque insuffisant` dans ses journaux (elle réessaie toutes les heures) ;
+2. prend une copie cohérente de la base (`VACUUM INTO`) dans un thread à part, sur sa propre connexion en lecture seule : l'app continue de répondre pendant la copie ;
+3. la compresse et la chiffre en AES-256-GCM avec `BACKUP_ENCRYPTION_KEY` (clé dérivée par scrypt) ;
+4. l'écrit dans `/data/backups/pingsell-<date>.pgbk` et garde les 3 plus récentes (`BACKUP_KEEP`) ;
+5. l'envoie sur un stockage S3 si `BACKUP_S3_*` est réglé (copie hors du serveur, envoyée en flux et en plusieurs parties au-delà de 256 Mo : pas de limite de taille). Une panne S3 n'empêche pas la rotation locale.
 
-La copie en clair n'est jamais laissée sur le disque. Sans `BACKUP_ENCRYPTION_KEY`, rien n'est sauvegardé et l'API l'écrit dans ses journaux.
+La copie en clair n'est jamais laissée sur le disque : supprimée à la fin de chaque sauvegarde, et au démarrage de l'API si un arrêt brutal en a laissé une. Sans `BACKUP_ENCRYPTION_KEY`, rien n'est sauvegardé et l'API l'écrit dans ses journaux.
 
 ## Mise en place (une fois)
 
@@ -39,6 +40,6 @@ Testez une restauration au moins une fois par trimestre, sur une copie (sans rem
 
 ## Prévention de la perte de données
 
-- Copies quotidiennes, 14 jours d'historique, une copie hors du serveur.
+- Copies quotidiennes, 3 jours d'historique sur le serveur (chaque copie pèse presque autant que la base : en garder plus remplirait le volume), l'historique long sur S3 (règle de cycle de vie à 30 jours).
 - Volume de données chiffré ([chiffrement-volume.md](chiffrement-volume.md)) et accès serveur limité au fondateur.
 - Suppressions de contacts tracées dans le journal des accès ; une erreur se corrige depuis la sauvegarde de la veille.

@@ -39,5 +39,8 @@ Les adresses sont intégrées au build de l'app et du site : après un changemen
 - Données : volume `pingsell-data` monté sur `/data` (base `pingsell.db` + images + `backups/`). Sauvegarde chiffrée quotidienne automatique ; volume à chiffrer une fois : [docs/securite](docs/securite/README.md).
 - Le schéma SQLite est créé et mis à jour par l'API au démarrage : aucune migration à lancer.
 - SQLite = une seule instance de l'API, pas de réplicas.
-- Vérification : `https://app…/health` répond `{"ok":true}`.
+- Vérification : `https://app…/health` répond `{"ok":true,…}` après un `SELECT 1` sur la base (503 si la base ne répond pas) ; `worker_last_tick_ms` = temps depuis le dernier tour du worker d'envoi, `worker_stale: true` au-delà de 5 min.
+- API figée : un chien de garde (thread à part) tue le processus si la boucle d'événements reste bloquée plus de 60 s (`WATCHDOG_TIMEOUT_MS`), et Docker le relance (`init: true` + tini, `restart: unless-stopped`). Le message `[watchdog] boucle d'événements bloquée` dans les journaux signale un bug à corriger.
+- Arrêt : `stop_grace_period: 30s` laisse le worker finir son lot d'envoi avant la fermeture de la base.
+- Place disque : la base en WAL, 3 sauvegardes locales et la marge de 2,5 × la base pour la sauvegarde du jour doivent tenir sur le volume. Surveillez `df -h /data` ; agrandissez le volume avant 60 % d'occupation.
 - Le compte démo n'existe qu'en local : en ligne, créez votre compte sur `/inscription`.
