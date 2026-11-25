@@ -38,6 +38,16 @@ services:
       - SHOPIFY_APP_HANDLE=${SHOPIFY_APP_HANDLE:-pingsell}
       # Platform admin dashboard: comma-separated user emails (empty = nobody).
       - PLATFORM_ADMIN_EMAILS=${PLATFORM_ADMIN_EMAILS:-}
+      # Encrypted daily backups of the database (docs/securite). Coolify generates the key on first deploy:
+      # copy it to a password manager, it is the only way to read the backups.
+      - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY:-${SERVICE_PASSWORD_64_BACKUPKEY}}
+      - BACKUP_KEEP=${BACKUP_KEEP:-14}
+      - BACKUP_S3_ENDPOINT=${BACKUP_S3_ENDPOINT:-}
+      - BACKUP_S3_REGION=${BACKUP_S3_REGION:-}
+      - BACKUP_S3_BUCKET=${BACKUP_S3_BUCKET:-}
+      - BACKUP_S3_ACCESS_KEY_ID=${BACKUP_S3_ACCESS_KEY_ID:-}
+      - BACKUP_S3_SECRET_ACCESS_KEY=${BACKUP_S3_SECRET_ACCESS_KEY:-}
+      - BACKUP_S3_PREFIX=${BACKUP_S3_PREFIX:-pingsell/}
     volumes:
       - pingsell-data:/data
     expose:

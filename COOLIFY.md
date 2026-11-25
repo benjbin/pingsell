@@ -29,12 +29,14 @@ Deux domaines publics, quatre conteneurs :
 | `SITE_URL` | `https://pingsell.com` | Forcer l'adresse du site (sinon : domaine du service `site`) |
 | `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | — | Seulement pour l'app publique Shopify (OAuth) |
 | `PLATFORM_ADMIN_EMAILS` | `vous@exemple.fr` | Emails (séparés par des virgules) qui voient la page Administration de la plateforme |
+| `BACKUP_ENCRYPTION_KEY` | générée par Coolify | Clé des sauvegardes chiffrées quotidiennes : à copier dans un gestionnaire de mots de passe |
+| `BACKUP_S3_*` | voir [docs/securite/sauvegardes.md](docs/securite/sauvegardes.md) | Copie des sauvegardes hors du serveur |
 
 Les adresses sont intégrées au build de l'app et du site : après un changement de domaine, **Redeploy**.
 
 ## Bon à savoir
 
-- Données : volume `pingsell-data` monté sur `/data` (base `pingsell.db` + images). À sauvegarder.
+- Données : volume `pingsell-data` monté sur `/data` (base `pingsell.db` + images + `backups/`). Sauvegarde chiffrée quotidienne automatique ; volume à chiffrer une fois : [docs/securite](docs/securite/README.md).
 - Le schéma SQLite est créé et mis à jour par l'API au démarrage : aucune migration à lancer.
 - SQLite = une seule instance de l'API, pas de réplicas.
 - Vérification : `https://app…/health` répond `{"ok":true}`.

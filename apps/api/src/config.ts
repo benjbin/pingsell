@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import type { BackupConfig } from './services/backup.js';
 import { fileURLToPath } from 'node:url';
 
 /** Root of the api package (apps/api), independent of the current working directory. */
@@ -76,6 +77,8 @@ export interface AppConfig {
     batchSize: number;
     ratePerSecond: number;
   };
+  /** Sauvegardes chiffrées de la base (off sans BACKUP_ENCRYPTION_KEY). */
+  backup: BackupConfig;
 }
 
 function loadConfig(): AppConfig {
@@ -130,6 +133,23 @@ function loadConfig(): AppConfig {
       startHour: int('SEND_WINDOW_START_HOUR', 8),
       endHour: int('SEND_WINDOW_END_HOUR', 21),
       timeZone: str('SEND_WINDOW_TZ', 'Europe/Paris'),
+    },
+    backup: {
+      dir: str('BACKUP_DIR', '') || (dbPath === ':memory:' ? resolve(API_ROOT, 'backups') : join(dirname(isAbsolute(dbPath) ? dbPath : resolve(API_ROOT, dbPath)), 'backups')),
+      key: optional('BACKUP_ENCRYPTION_KEY'),
+      keep: int('BACKUP_KEEP', 14),
+      intervalHours: int('BACKUP_INTERVAL_HOURS', 24),
+      s3:
+        optional('BACKUP_S3_ENDPOINT') && optional('BACKUP_S3_BUCKET') && optional('BACKUP_S3_ACCESS_KEY_ID') && optional('BACKUP_S3_SECRET_ACCESS_KEY')
+          ? {
+              endpoint: str('BACKUP_S3_ENDPOINT', ''),
+              region: str('BACKUP_S3_REGION', 'us-east-1'),
+              bucket: str('BACKUP_S3_BUCKET', ''),
+              accessKeyId: str('BACKUP_S3_ACCESS_KEY_ID', ''),
+              secretAccessKey: str('BACKUP_S3_SECRET_ACCESS_KEY', ''),
+              prefix: str('BACKUP_S3_PREFIX', 'pingsell/'),
+            }
+          : undefined,
     },
     worker: {
       intervalMs: int('WORKER_INTERVAL_MS', 2000),

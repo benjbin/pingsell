@@ -642,6 +642,24 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   ALTER TABLE campaigns ADD COLUMN skipped_inactive INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE messages ADD COLUMN complained_at TEXT;
   `,
+  // Journal des accès aux données personnelles des contacts (exigence Shopify « protected customer data ») :
+  // qui a consulté, modifié, importé ou supprimé quoi, et d'où. Conservé 1 an.
+  `
+  CREATE TABLE data_access_log (
+    id TEXT PRIMARY KEY,
+    account_id TEXT,
+    user_id TEXT,
+    api_key_id TEXT,
+    action TEXT NOT NULL,
+    target TEXT,
+    route TEXT NOT NULL,
+    ip TEXT,
+    status INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_data_access_account ON data_access_log(account_id, created_at);
+  CREATE INDEX idx_data_access_created ON data_access_log(created_at);
+  `,
 ];
 
 export function openDatabase(path: string): DatabaseSync {

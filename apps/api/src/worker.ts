@@ -15,6 +15,8 @@ import { convertEmailImages } from './services/emailImages.js';
 import type { EmailProvider } from './services/mailer.js';
 import { outsideLang } from './i18n.js';
 import { guardCampaigns } from './services/deliverability.js';
+import { backupDue, runBackup } from './services/backup.js';
+import { purgeDataAccessLog } from './services/dataAccess.js';
 
 export interface WorkerLogger {
   info(msg: string): void;
@@ -36,6 +38,9 @@ export class SendingWorker {
   private timer: NodeJS.Timeout | undefined;
   private running = false;
   private rerun = false;
+  private maintenanceAt = 0;
+  private backupRunning = false;
+  private backupWarned = false;
 
   constructor(
     private readonly db: DatabaseSync,
@@ -62,7 +67,33 @@ export class SendingWorker {
     setImmediate(() => outsideLang(() => void this.tick()));
   }
 
+  /** Une fois par heure au plus : purge du journal des accès et sauvegarde chiffrée si elle est due. */
+  private maintenance(): void {
+    const at = Date.now();
+    if (at - this.maintenanceAt < 3_600_000) return;
+    this.maintenanceAt = at;
+    try {
+      const purged = purgeDataAccessLog(this.db);
+      if (purged) this.log.info(`[worker] journal des accès : ${purged} ligne(s) de plus d'un an supprimée(s)`);
+    } catch (err) {
+      this.log.error(`[worker] purge du journal des accès : ${err instanceof Error ? err.message : String(err)}`);
+    }
+    const cfg = this.config.backup;
+    if (!cfg.key) {
+      if (!this.backupWarned && this.config.isProduction) this.log.error('[worker] BACKUP_ENCRYPTION_KEY absente : aucune sauvegarde de la base');
+      this.backupWarned = true;
+      return;
+    }
+    if (this.backupRunning || !backupDue(cfg, at) || this.config.databasePath === ':memory:') return;
+    this.backupRunning = true;
+    runBackup(this.db, { ...cfg, key: cfg.key })
+      .then((file) => this.log.info(`[worker] sauvegarde chiffrée : ${file}${cfg.s3 ? ' (copiée sur S3)' : ''}`))
+      .catch((err) => this.log.error(`[worker] sauvegarde : ${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => (this.backupRunning = false));
+  }
+
   async tick(): Promise<void> {
+    this.maintenance();
     if (this.running) {
       this.rerun = true;
       return;

@@ -29,6 +29,10 @@ const accountsSchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
 });
+const dataAccessSchema = z.object({
+  account_id: z.string().min(1).max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).default(200),
+});
 const activitySchema = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) });
 const idSchema = z.object({ id: z.string().min(1).max(100) });
 
@@ -517,6 +521,21 @@ export async function adminRoutes(app: FastifyInstance, deps: Deps) {
   app.get('/admin/activity', { preHandler: guard }, async (request) => {
     const { limit } = parse(activitySchema, request.query);
     return activity(db, limit);
+  });
+
+  // Journal des accès aux données des contacts (qui, quoi, quand, d'où), le plus récent d'abord.
+  app.get('/admin/data-access', { preHandler: guard }, async (request) => {
+    const q = parse(dataAccessSchema, request.query);
+    const where = q.account_id ? 'WHERE account_id = ?' : '';
+    const params: SQLInputValue[] = q.account_id ? [q.account_id, q.limit] : [q.limit];
+    return {
+      entries: all<Row>(
+        db,
+        `SELECT id, account_id, user_id, api_key_id, action, target, route, ip, status, created_at
+         FROM data_access_log ${where} ORDER BY created_at DESC LIMIT ?`,
+        ...params,
+      ),
+    };
   });
 
   app.get('/admin/deliverability', { preHandler: guard }, async (request) => {

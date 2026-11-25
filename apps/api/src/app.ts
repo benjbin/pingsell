@@ -15,6 +15,7 @@ import type { EmailProvider } from './services/mailer.js';
 import { accountRoutes, authRoutes } from './routes/auth.js';
 import { accountDeletionRoutes, invitationRoutes, teamRoutes } from './routes/team.js';
 import { sendingDomainRoutes } from './routes/sendingDomain.js';
+import { makeLogDataAccess } from './services/dataAccess.js';
 import { apiKeyRoutes } from './routes/apiKeys.js';
 import { mtaRoutes } from './routes/mta.js';
 import { contactRoutes } from './routes/contacts.js';
@@ -158,6 +159,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   const requireAuth = makeRequireAuth(db);
   app.addHook('onResponse', makeMarkApiKeyUsed(db));
+  app.addHook('onResponse', makeLogDataAccess(db));
   const deps: Deps = { db, config, provider, requireAuth, kickWorker: options.kickWorker ?? (() => {}) };
 
   // Public routes: tracking, health.
