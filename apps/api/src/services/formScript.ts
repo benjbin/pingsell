@@ -31,6 +31,7 @@ export const FORM_SCRIPT = `/* Pingsell — formulaire d'inscription */
   function send(payload) {
     payload._page = payload._page || location.href;
     if (visitor()) payload._v = visitor();
+    if (!payload._lang && navigator.language) payload._lang = navigator.language;
     return fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

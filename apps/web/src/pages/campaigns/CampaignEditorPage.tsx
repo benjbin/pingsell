@@ -14,6 +14,7 @@ import { AiGeneratePanel } from "../../components/AiGeneratePanel";
 import { EmailPreview, renderMergeTags } from "../../components/EmailPreview";
 import { EmailBuilder } from "../../components/email-builder/EmailBuilder";
 import { ContactPicker } from "./ContactPicker";
+import { TranslateSettings, languageName } from "./TranslateSettings";
 import { t } from "../../lib/i18n";
 import { PRESETS, applyBrandKit, parseBrandKit, parseDesign, renderEmail, serializeDesign, type Design, type Preset } from "../../components/email-builder/model";
 
@@ -28,6 +29,9 @@ interface FormState {
   segment_id: string;
   audience: "all" | "segment" | "contacts";
   contact_ids: string[];
+  auto_translate: boolean;
+  /** "" = the account's language. */
+  language: string;
 }
 
 function toForm(c: Campaign): FormState {
@@ -42,6 +46,8 @@ function toForm(c: Campaign): FormState {
     segment_id: c.segment_id ?? "",
     audience: c.contact_ids ? "contacts" : c.segment_id ? "segment" : "all",
     contact_ids: c.contact_ids ?? [],
+    auto_translate: c.auto_translate ?? false,
+    language: c.language ?? "",
   };
 }
 
@@ -57,6 +63,8 @@ function toInput(f: FormState, html: string): CampaignInput {
     design: f.design || null,
     segment_id: f.audience === "segment" ? f.segment_id || null : null,
     contact_ids: f.audience === "contacts" ? f.contact_ids : null,
+    auto_translate: f.auto_translate,
+    language: f.language || null,
   };
 }
 
@@ -163,6 +171,8 @@ export function CampaignEditorPage() {
     segment_id: "",
     audience: "all",
     contact_ids: [],
+    auto_translate: false,
+    language: "",
   }));
   const [mode, setMode] = useState<"visual" | "html">("visual");
   const [toVisualOpen, setToVisualOpen] = useState(false);
@@ -176,6 +186,8 @@ export function CampaignEditorPage() {
   const [testOpen, setTestOpen] = useState(false);
   const [testTo, setTestTo] = useState(account?.email ?? "");
   const [testing, setTesting] = useState(false);
+  /** Langue du test quand la traduction est cochée ("" = version d'origine). */
+  const [testLang, setTestLang] = useState("");
 
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleAt, setScheduleAt] = useState(() => toDateTimeLocal(new Date(Date.now() + 24 * 3600 * 1000)));
@@ -295,7 +307,7 @@ export function CampaignEditorPage() {
     if (!cid) return;
     setTesting(true);
     try {
-      await api.campaigns.sendTest(cid, testTo.trim());
+      await api.campaigns.sendTest(cid, testTo.trim(), form.auto_translate ? testLang : null);
       toast.success(t("Email de test envoyé", "Test email sent"), testTo.trim());
       setTestOpen(false);
     } catch (err) {
@@ -458,6 +470,15 @@ export function CampaignEditorPage() {
             </p>
           )}
         </div>
+        <TranslateSettings
+          campaignId={id ?? null}
+          enabled={form.auto_translate}
+          language={form.language}
+          disabled={!editable}
+          onEnabledChange={set("auto_translate")}
+          onLanguageChange={set("language")}
+          ensureSaved={() => persist(true)}
+        />
       </fieldset>
     </Card>
   );
@@ -671,6 +692,20 @@ export function CampaignEditorPage() {
         <Field label={t("Adresse de réception", "Recipient address")} htmlFor="test-to">
           <Input id="test-to" type="email" value={testTo} onChange={(e) => setTestTo(e.target.value)} />
         </Field>
+        {form.auto_translate && (
+          <Field label={t("Langue du test", "Test language")} htmlFor="test-lang" className="mt-4">
+            <Select id="test-lang" value={testLang} onChange={(e) => setTestLang(e.target.value)}>
+              <option value="">{t("Version d'origine", "Original version")}</option>
+              {["en", "de", "es", "it", "nl", "pt", "pl", "sv", "da", "nb", "fi", "cs", "ro", "el", "tr", "ja", "zh", "ko", "ar", "fr"]
+                .filter((code) => code !== (form.language || "fr"))
+                .map((code) => (
+                  <option key={code} value={code}>
+                    {languageName(code)}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+        )}
       </Modal>
 
       <Modal

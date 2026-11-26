@@ -830,6 +830,28 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
   CREATE INDEX IF NOT EXISTS idx_web_actions_vid ON web_actions(account_id, vid) WHERE vid IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_web_visitors_anonymous ON web_visitors(last_seen) WHERE contact_id IS NULL;
   `,
+  // v27 — traduction automatique des campagnes dans la langue de chaque contact.
+  // contacts.language : code langue (« fr », « en », « de »…), NULL si inconnue (index partiel : minuscule).
+  // campaigns.language : langue dans laquelle le marchand a écrit ; auto_translate : traduire pour les autres.
+  // campaign_translations : une traduction par langue et par version du modèle (source_hash), faite une fois.
+  `
+  ALTER TABLE contacts ADD COLUMN language TEXT;
+  CREATE INDEX idx_contacts_account_language ON contacts(account_id, language) WHERE language IS NOT NULL;
+  ALTER TABLE campaigns ADD COLUMN language TEXT;
+  ALTER TABLE campaigns ADD COLUMN auto_translate INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE campaigns ADD COLUMN translated_at TEXT;
+  ALTER TABLE campaigns ADD COLUMN translate_error TEXT;
+  CREATE TABLE campaign_translations (
+    campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    lang TEXT NOT NULL,
+    source_hash TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    preheader TEXT,
+    html TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (campaign_id, lang)
+  );
+  `,
 ];
 
 const BUSY_TIMEOUT_MS = 1000;

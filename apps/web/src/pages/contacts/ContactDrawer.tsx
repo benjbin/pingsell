@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { api } from "../../lib/api";
+import { languageName } from "../campaigns/TranslateSettings";
 import { useAsync } from "../../lib/useAsync";
 import { CONTACT_SOURCE, CONTACT_STATUS, EVENT_LABELS } from "../../lib/constants";
 import { formatCurrency, formatDate, formatDateTime, formatRelative, fullName, initials } from "../../lib/format";
@@ -145,6 +146,7 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
               { label: t("Dernière commande", "Last order"), value: formatDate(c.last_order_at) },
               { label: t("Inscrit le", "Joined"), value: formatDate(c.created_at) },
               { label: t("Téléphone", "Phone"), value: c.phone || "—" },
+              { label: t("Langue", "Language"), value: c.language ? languageName(c.language) : t("Inconnue", "Unknown") },
               { label: t("ID externe", "External ID"), value: c.external_id || "—" },
             ].map((s) => (
               <div key={s.label} className="rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60">

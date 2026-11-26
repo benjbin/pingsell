@@ -269,6 +269,8 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
     }
     for (const k of FORM_FORBIDDEN) delete event[k];
     if (pageUrl) event.data = { page: pageUrl };
+    // The visitor's browser language: campaigns can be translated into it (only fills an unknown language).
+    if (typeof raw._lang === 'string' && !event.language) event.language = clip(raw._lang, 35);
 
     try {
       const result = ingestEvent(hook.account_id, event, { untrusted: true });

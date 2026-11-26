@@ -1,4 +1,4 @@
-import { detectColumns, isEmptyCell, splitFullName, type ContactField } from './csvColumns.js';
+import { detectColumns, isEmptyCell, languageOfCell, splitFullName, type ContactField } from './csvColumns.js';
 
 /** A cell longer than this, or a row with more cells, is not a contact list: the file is rejected at once. */
 export const CSV_MAX_FIELD_CHARS = 100_000;
@@ -77,6 +77,7 @@ export interface CsvContactRow {
   first_name?: string;
   last_name?: string;
   phone?: string;
+  language?: string;
   tags?: string[];
   status?: string;
   attributes: Record<string, string>;
@@ -119,6 +120,13 @@ export function csvToContactsWithColumns(
         case 'full_name':
           fullName = value;
           break;
+        case 'language': {
+          // Not a language (« oui », « 1 »…): kept as an attribute rather than lost.
+          const code = languageOfCell(value);
+          if (code) out.language = code;
+          else if (headers[col]) out.attributes[headers[col]] = value;
+          break;
+        }
         case 'first_name':
         case 'last_name':
         case 'phone':

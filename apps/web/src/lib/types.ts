@@ -137,6 +137,8 @@ export interface Contact {
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
+  /** Language code (« fr », « en »…), null when unknown. */
+  language?: string | null;
   tags: string[];
   attributes: Record<string, unknown>;
   status: ContactStatus;
@@ -330,9 +332,31 @@ export interface Campaign {
   paused?: CampaignPause | null;
   /** Inactive contacts left out of the send (mailed many times, never opened). */
   skipped_inactive?: number;
+  /** Language the campaign is written in (null: the account's). */
+  language?: string | null;
+  /** Translated into each contact's language. */
+  auto_translate?: boolean;
+  translated_at?: string | null;
+  translate_error?: string | null;
   created_at: string;
   updated_at: string;
   stats?: CampaignStatsSummary;
+}
+
+export interface CampaignLanguages {
+  source: string;
+  translation_available: boolean;
+  languages: Array<{ lang: string; same_as_source: boolean; supported: boolean; translated_at: string | null }>;
+}
+
+export interface CampaignTranslationPreview {
+  language: string;
+  same_as_source: boolean;
+  subject: string;
+  preheader: string | null;
+  html: string | null;
+  kept: number;
+  total: number;
 }
 
 export interface CampaignPause {
@@ -353,6 +377,8 @@ export interface CampaignInput {
   design?: string | null;
   segment_id?: string | null;
   contact_ids?: string[] | null;
+  language?: string | null;
+  auto_translate?: boolean;
 }
 
 export interface CampaignStats {

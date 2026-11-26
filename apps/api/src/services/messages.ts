@@ -3,6 +3,7 @@ import { get, newId, now, run, transaction, type DatabaseSync, type Row } from '
 import { currentLang, withAccountLang } from '../i18n.js';
 import { personalizeEmail, prepareTemplate, renderEmail, type MergeContact, type RenderedEmail } from './render.js';
 import { accountFromEmail } from './sendingDomains.js';
+import { campaignLanguage, sameLanguage, sourceHash, type TranslationSource } from './translate.js';
 
 export interface Sender {
   name: string;
@@ -23,6 +24,8 @@ export interface CreateMessageInput {
   contact: MergeContact;
   subject: string;
   html: string;
+  /** `html` is already a prepared template (prepareTemplate, e.g. a campaign translation): only personalized. */
+  prepared?: boolean;
   preheader?: string | null;
   senderName: string;
   status?: 'queued' | 'sent' | 'failed';
@@ -41,17 +44,10 @@ export function createMessage(
 ): { id: string; rendered: RenderedEmail } {
   const id = newId();
   // Footer texts follow the account's language when rendered by the worker.
-  const rendered = withAccountLang(db, input.accountId, () =>
-    renderEmail({
-      messageId: id,
-      publicUrl: config.publicUrl,
-      subject: input.subject,
-      html: input.html,
-      preheader: input.preheader,
-      contact: input.contact,
-      senderName: input.senderName,
-    }),
-  );
+  const rendered = withAccountLang(db, input.accountId, () => {
+    const base = { messageId: id, publicUrl: config.publicUrl, subject: input.subject, preheader: input.preheader, contact: input.contact };
+    return input.prepared ? personalizeEmail(input.html, base) : renderEmail({ ...base, html: input.html, senderName: input.senderName });
+  });
   const status = input.status ?? 'queued';
   run(
     db,
@@ -274,13 +270,16 @@ export function markClicked(db: DatabaseSync, m: Pick<MessageMeta, 'rid' | 'id' 
 
 /* ------------------------------------------------------------ campaign rendering */
 
-interface CampaignTemplateRow {
+export interface CampaignTemplateRow {
   id: string;
   account_id: string;
   subject: string;
   preheader: string | null;
   html: string | null;
   from_name: string | null;
+  language: string | null;
+  auto_translate: number;
+  translated_at: string | null;
 }
 
 interface PreparedTemplate {
@@ -288,6 +287,36 @@ interface PreparedTemplate {
   lang: string;
   senderName: string;
   prepared: string;
+  subject: string;
+  preheader: string | null;
+  /** Empreinte du modèle + objet + pré-en-tête : une traduction n'est utilisée que pour cette version-là. */
+  hash: string;
+}
+
+interface TranslationRow {
+  source_hash: string;
+  subject: string;
+  preheader: string | null;
+  html: string;
+}
+
+/** Traductions lues récemment ((campagne, version, langue) → ligne ou null), pour ne pas relire 2 M fois la base. */
+const translations = new Map<string, TranslationRow | null>();
+const TRANSLATION_CACHE = 256;
+
+function translationFor(db: DatabaseSync, c: CampaignTemplateRow, lang: string): TranslationRow | null {
+  const key = `${c.id}|${c.translated_at ?? ''}|${lang}`;
+  if (translations.has(key)) return translations.get(key)!;
+  const row =
+    get<TranslationRow>(db, 'SELECT source_hash, subject, preheader, html FROM campaign_translations WHERE campaign_id = ? AND lang = ?', c.id, lang) ?? null;
+  translations.set(key, row);
+  if (translations.size > TRANSLATION_CACHE) translations.delete(translations.keys().next().value!);
+  return row;
+}
+
+/** Oublie les traductions en mémoire d'une campagne (après un aperçu traduit, une nouvelle version…). */
+export function forgetTranslations(campaignId: string): void {
+  for (const key of [...translations.keys()]) if (key.startsWith(`${campaignId}|`)) translations.delete(key);
 }
 
 /** Contact-independent rendering of the last campaigns used (one ~150 KB string each). */
@@ -295,7 +324,11 @@ const templates = new Map<string, PreparedTemplate>();
 const TEMPLATE_CACHE = 32;
 
 export function loadCampaignTemplate(db: DatabaseSync, campaignId: string): CampaignTemplateRow | undefined {
-  return get<CampaignTemplateRow>(db, 'SELECT id, account_id, subject, preheader, html, from_name FROM campaigns WHERE id = ?', campaignId);
+  return get<CampaignTemplateRow>(
+    db,
+    'SELECT id, account_id, subject, preheader, html, from_name, language, auto_translate, translated_at FROM campaigns WHERE id = ?',
+    campaignId,
+  );
 }
 
 /** Must run inside the account's language (withAccountLang). */
@@ -303,7 +336,7 @@ function preparedFor(db: DatabaseSync, config: AppConfig, c: CampaignTemplateRow
   const source = c.html ?? '';
   const lang = currentLang();
   const hit = templates.get(c.id);
-  if (hit && hit.source === source && hit.lang === lang) {
+  if (hit && hit.source === source && hit.lang === lang && hit.subject === c.subject && hit.preheader === c.preheader) {
     // Refresh its place in the LRU order.
     templates.delete(c.id);
     templates.set(c.id, hit);
@@ -311,7 +344,8 @@ function preparedFor(db: DatabaseSync, config: AppConfig, c: CampaignTemplateRow
   }
   // The same sender name queueCampaign used to pass to createMessage.
   const senderName = c.from_name || accountSender(db, config, c.account_id).name;
-  const entry = { source, lang, senderName, prepared: prepareTemplate(source, senderName) };
+  const prepared = prepareTemplate(source, senderName);
+  const entry = { source, lang, senderName, prepared, subject: c.subject, preheader: c.preheader, hash: sourceHash(prepared, c.subject, c.preheader) };
   templates.set(c.id, entry);
   if (templates.size > TEMPLATE_CACHE) templates.delete(templates.keys().next().value!);
   return entry;
@@ -333,7 +367,7 @@ export function renderCampaignMessage(
   db: DatabaseSync,
   config: AppConfig,
   m: RenderableMessage,
-  preload: { campaign?: CampaignTemplateRow; contact?: MergeContact | null } = {},
+  preload: { campaign?: CampaignTemplateRow; contact?: MergeContact | null; language?: string | null } = {},
 ): RenderedEmail | null {
   if (!m.campaign_id) return null;
   const campaign = preload.campaign ?? loadCampaignTemplate(db, m.campaign_id);
@@ -341,19 +375,34 @@ export function renderCampaignMessage(
   let contact = preload.contact;
   if (contact === undefined) {
     contact = m.contact_id
-      ? (get<MergeContact>(db, 'SELECT email, first_name, last_name FROM contacts WHERE id = ?', m.contact_id) ?? null)
+      ? (get<MergeContact & { language: string | null }>(db, 'SELECT email, first_name, last_name, language FROM contacts WHERE id = ?', m.contact_id) ?? null)
       : null;
   }
   const merge: MergeContact = contact ?? { email: m.to_email };
+  const contactLang = preload.language !== undefined ? preload.language : ((contact as { language?: string | null } | null)?.language ?? null);
   return withAccountLang(db, m.account_id, () => {
     const t = preparedFor(db, config, campaign);
-    return personalizeEmail(t.prepared, {
-      messageId: m.id,
-      publicUrl: config.publicUrl,
-      subject: campaign.subject,
-      preheader: campaign.preheader,
-      contact: merge,
-    });
+    let { prepared } = t;
+    let subject = campaign.subject;
+    let preheader = campaign.preheader;
+    // Traduction automatique : la version de la langue du contact, si elle a été faite pour ce modèle-ci.
+    if (campaign.auto_translate && contactLang && !sameLanguage(contactLang, campaignLanguage(db, campaign))) {
+      const tr = translationFor(db, campaign, contactLang);
+      if (tr && tr.source_hash === t.hash) {
+        prepared = tr.html;
+        subject = tr.subject;
+        preheader = tr.preheader;
+      }
+    }
+    return personalizeEmail(prepared, { messageId: m.id, publicUrl: config.publicUrl, subject, preheader, contact: merge });
+  });
+}
+
+/** Le modèle commun d'une campagne, tel que les destinataires le reçoivent (pour le traduire). */
+export function campaignTranslationSource(db: DatabaseSync, config: AppConfig, c: CampaignTemplateRow): TranslationSource {
+  return withAccountLang(db, c.account_id, () => {
+    const t = preparedFor(db, config, c);
+    return { prepared: t.prepared, subject: c.subject, preheader: c.preheader, hash: t.hash };
   });
 }
 

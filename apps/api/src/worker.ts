@@ -9,7 +9,8 @@ import { processAbandonedCarts } from './services/carts.js';
 import { processTracking } from './services/webTracking.js';
 import { finalizePushCampaigns, queuePushCampaigns, sendPushBatch } from './services/push.js';
 import { processPushResends } from './services/pushGrowth.js';
-import { accountSender, loadCampaignTemplate, markFailed, markRetry, markSent, renderCampaignMessage } from './services/messages.js';
+import { accountSender, campaignTranslationSource, forgetTranslations, loadCampaignTemplate, markFailed, markRetry, markSent, renderCampaignMessage } from './services/messages.js';
+import { deeplTranslator, translateCampaignLanguages } from './services/translate.js';
 import { effectiveFrom } from './services/sendingDomains.js';
 import { platformAdminAccountIds } from './services/platformAdmin.js';
 import { htmlToText } from './services/render.js';
@@ -319,6 +320,30 @@ export class SendingWorker {
     }
   }
 
+  /** Traduit une campagne dans les langues de ses contacts. Une langue qui échoue part dans la langue d'origine. */
+  private async translateCampaign(c: { id: string; name: string }): Promise<void> {
+    const started = Date.now();
+    let error: string | null = null;
+    try {
+      const tpl = loadCampaignTemplate(this.db, c.id);
+      if (!tpl) return;
+      if (!this.config.translate.deeplKey) error = 'Traduction automatique indisponible : DEEPL_API_KEY absente du serveur';
+      else {
+        const report = await translateCampaignLanguages(this.db, tpl, campaignTranslationSource(this.db, this.config, tpl), deeplTranslator(this.config));
+        if (report.failed.length) error = report.failed.map((f) => `${f.lang} : ${f.error}`).join(' ; ').slice(0, 1000);
+        this.log.info(
+          `[worker] campagne « ${c.name} » : traduite en ${report.translated.length ? report.translated.join(', ') : 'aucune nouvelle langue'}` +
+            `${report.failed.length ? `, échecs : ${error}` : ''} (${Math.round((Date.now() - started) / 1000)} s)`,
+        );
+      }
+    } catch (err) {
+      error = `Traduction : ${err instanceof Error ? err.message : String(err)}`.slice(0, 1000);
+    }
+    if (error) this.log.error(`[worker] campagne « ${c.name} » : ${error}`);
+    run(this.db, 'UPDATE campaigns SET translated_at = ?, translate_error = ? WHERE id = ?', now(), error, c.id);
+    forgetTranslations(c.id);
+  }
+
   private async queueOne(c: { id: string; name: string; account_id: string; queue_cursor: string | null; queue_attempts: number }): Promise<void> {
     try {
       // Pictures Gmail can't show (SVG, WebP) become PNG/JPG first, so every recipient gets the same email.
@@ -333,6 +358,9 @@ export class SendingWorker {
           this.log.error(`[worker] conversion des images de « ${c.name} » : ${err instanceof Error ? err.message : String(err)}`);
         }
       }
+      // Traduction automatique : une fois par langue, avant le premier email (jamais pendant l'envoi).
+      const tr = get<{ auto_translate: number; translated_at: string | null }>(this.db, 'SELECT auto_translate, translated_at FROM campaigns WHERE id = ?', c.id);
+      if (tr?.auto_translate && !tr.translated_at) await this.translateCampaign(c);
       const t = Date.now();
       const queued = await queueCampaign(this.db, this.config, c.id, { aborted: () => this.stopped });
       if (c.queue_attempts) run(this.db, 'UPDATE campaigns SET queue_attempts = 0, queue_error = NULL, queue_retry_at = NULL WHERE id = ?', c.id);

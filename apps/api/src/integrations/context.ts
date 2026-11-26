@@ -16,6 +16,7 @@ export interface IntegrationContext {
       first_name?: string;
       last_name?: string;
       phone?: string;
+      language?: string;
       tags?: string[];
       source?: string;
       external_id?: string;

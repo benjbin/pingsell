@@ -12,6 +12,7 @@ import {
   findContact,
   findContactByEmail,
   isValidEmail,
+  normalizeContactLanguage,
   normalizeEmail,
   normalizeTags,
   recordEvent,
@@ -210,6 +211,11 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
     }
     for (const key of ['first_name', 'last_name', 'phone'] as const) {
       if (body[key] !== undefined) updates[key] = body[key] ? body[key] : null;
+    }
+    if (body.language !== undefined) {
+      const language = normalizeContactLanguage(body.language);
+      if (body.language && !language) throw badRequest(t('Langue invalide (ex : fr, en, de)', 'Invalid language (e.g. fr, en, de)'));
+      updates.language = language;
     }
     let addedTags: string[] = [];
     if (body.tags !== undefined) {

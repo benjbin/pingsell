@@ -27,6 +27,7 @@ interface StoredCustomer {
   first_name?: string | null;
   last_name?: string | null;
   external_id?: string | null;
+  language?: string | null;
   marketing_state?: string | null;
 }
 
@@ -63,6 +64,7 @@ export function handleCheckoutPayload(ctx: IntegrationContext, accountId: string
     first_name: fromCustomer?.first_name ?? null,
     last_name: fromCustomer?.last_name ?? null,
     external_id: fromCustomer?.external_id ?? null,
+    language: typeof payload.customer_locale === 'string' ? payload.customer_locale : (fromCustomer?.language ?? null),
     marketing_state:
       marketingStateFromRest(customerRaw) ?? (payload.buyer_accepts_marketing === true ? 'subscribed' : null),
   };
@@ -227,6 +229,7 @@ function handleDueCheckout(ctx: IntegrationContext, row: CheckoutRow, connected:
       first_name: customer.first_name,
       last_name: customer.last_name,
       external_id: customer.external_id,
+      language: customer.language,
       marketing_state: customer.marketing_state,
     });
     // Claim the row first: with the trigger in the same transaction, a checkout never fires twice.

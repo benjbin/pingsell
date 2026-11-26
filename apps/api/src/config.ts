@@ -79,6 +79,8 @@ export interface AppConfig {
   };
   /** Sauvegardes chiffrées de la base (off sans BACKUP_ENCRYPTION_KEY). */
   backup: BackupConfig;
+  /** Automatic translation of campaigns (DeepL). Without a key, campaigns go out as written. */
+  translate: { deeplKey?: string; deeplUrl: string };
 }
 
 function loadConfig(): AppConfig {
@@ -150,6 +152,14 @@ function loadConfig(): AppConfig {
               prefix: str('BACKUP_S3_PREFIX', 'pingsell/'),
             }
           : undefined,
+    },
+    translate: {
+      deeplKey: optional('DEEPL_API_KEY'),
+      // Free keys end with « :fx » and use their own host.
+      deeplUrl: str(
+        'DEEPL_API_URL',
+        optional('DEEPL_API_KEY')?.endsWith(':fx') ? 'https://api-free.deepl.com' : 'https://api.deepl.com',
+      ).replace(/\/+$/, ''),
     },
     worker: {
       intervalMs: int('WORKER_INTERVAL_MS', 2000),

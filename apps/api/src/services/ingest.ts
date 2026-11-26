@@ -19,6 +19,8 @@ export const contactInputSchema = z.object({
   first_name: optionalText(100),
   last_name: optionalText(100),
   phone: optionalText(40),
+  /** Customer's language (« fr », « en-GB »…): campaigns are translated into it when auto-translation is on. */
+  language: optionalText(35),
   tags: z.array(z.string().max(64)).max(100).optional(),
   attributes: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(CONTACT_STATUSES).optional(),
@@ -70,6 +72,8 @@ export const eventSchema = z.object({
   first_name: optionalText(100),
   last_name: optionalText(100),
   phone: optionalText(40),
+  /** Customer's language (« fr », « en-GB »…): campaigns are translated into it when auto-translation is on. */
+  language: optionalText(35),
   tags: z.array(z.string().max(64)).max(100).optional(),
   /** Your id for this cart / order / booking: the same id sent again updates it instead of duplicating. */
   id: z.union([z.string(), z.number()]).transform(String).pipe(z.string().trim().min(1).max(100)).optional(),
@@ -93,6 +97,8 @@ export const orderSchema = z.object({
   first_name: optionalText(100),
   last_name: optionalText(100),
   phone: optionalText(40),
+  /** Customer's language (« fr », « en-GB »…): campaigns are translated into it when auto-translation is on. */
+  language: optionalText(35),
   order_id: z.string().trim().min(1, zmsg('order_id est requis', 'order_id is required')).max(100),
   /** `created` = order placed (« Commande passée »), `fulfilled` = shipped (« Commande expédiée »). */
   status: z.enum(['created', 'fulfilled']).default('created'),
@@ -156,7 +162,7 @@ export function createIngest(db: DatabaseSync) {
   const placeOrder = (accountId: string, body: z.output<typeof orderSchema>, opts: IngestOptions = {}) =>
     transaction(db, () => {
       const existing = findContactByEmail(db, accountId, normalizeEmail(body.email));
-      const identity = { email: body.email, first_name: body.first_name, last_name: body.last_name, phone: body.phone, source: 'api' as const, fill_only: opts.untrusted };
+      const identity = { email: body.email, first_name: body.first_name, last_name: body.last_name, phone: body.phone, language: body.language, source: 'api' as const, fill_only: opts.untrusted };
       if (body.status === 'fulfilled') {
         // Like Shopify: a shipment never creates (and opts in) a marketing contact.
         if (!existing) return { contact: null, duplicate: false, skipped: true };
@@ -232,7 +238,7 @@ export function createIngest(db: DatabaseSync) {
     if (!name) throw badRequest(t("Le nom de l'événement est requis", 'Event name is required'));
     const email = normalizeEmail(body.email);
     if (!isValidEmail(email)) throw badRequest(t(`Adresse email invalide : ${body.email}`, `Invalid email address: ${body.email}`));
-    const identity = { email, first_name: body.first_name, last_name: body.last_name, phone: body.phone };
+    const identity = { email, first_name: body.first_name, last_name: body.last_name, phone: body.phone, language: body.language };
     const kind = BUILTIN_EVENTS[name];
     const cancelled = CANCEL_WORDS.includes(body.status ?? '');
 

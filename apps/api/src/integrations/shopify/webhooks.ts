@@ -149,6 +149,7 @@ export function handleOrderWebhook(ctx: IntegrationContext, accountId: string, p
     first_name: customer?.first_name,
     last_name: customer?.last_name,
     phone: customer?.phone,
+    language: typeof payload.customer_locale === 'string' ? payload.customer_locale : customer?.language,
     tags: customer?.tags,
     external_id: customer?.external_id,
     marketing_state: marketingState,

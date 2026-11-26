@@ -1,6 +1,8 @@
 // Typed client for the Pingsell REST API (see SPEC.md, base /api/v1).
 import { LANG, t } from "./i18n";
 import type {
+  CampaignLanguages,
+  CampaignTranslationPreview,
   InboundSettings,
   WebSite,
   Analytics,
@@ -280,7 +282,9 @@ export const api = {
     create: (input: CampaignInput) => post<unknown>("/campaigns", input).then((r) => one<Campaign>(r)),
     update: (id: string, input: Partial<CampaignInput>) => patch<unknown>(`/campaigns/${id}`, input).then((r) => one<Campaign>(r)),
     remove: (id: string) => del(`/campaigns/${id}`),
-    sendTest: (id: string, to: string) => post<unknown>(`/campaigns/${id}/test`, { to }),
+    sendTest: (id: string, to: string, language?: string | null) => post<unknown>(`/campaigns/${id}/test`, { to, language: language || undefined }),
+    languages: (id: string) => get<CampaignLanguages>(`/campaigns/${id}/languages`),
+    translationPreview: (id: string, language: string) => post<CampaignTranslationPreview>(`/campaigns/${id}/translation-preview`, { language }),
     send: (id: string) => post<unknown>(`/campaigns/${id}/send`),
     schedule: (id: string, scheduled_at: string) => post<unknown>(`/campaigns/${id}/schedule`, { scheduled_at }),
     unschedule: (id: string) => post<unknown>(`/campaigns/${id}/unschedule`),

@@ -51,6 +51,7 @@ const FIELD_LABEL: Record<ContactField, string> = {
   phone: t("Téléphone", "Phone"),
   tags: "Tags",
   status: t("Statut", "Status"),
+  language: t("Langue", "Language"),
 };
 
 /** Emails present more than once in the file (case and spaces ignored), with how many times. */

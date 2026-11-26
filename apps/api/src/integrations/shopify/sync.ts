@@ -40,6 +40,7 @@ interface CustomerNode {
   id: string;
   firstName: string | null;
   lastName: string | null;
+  locale: string | null;
   tags: string[];
   numberOfOrders: string | number;
   amountSpent: { amount: string } | null;
@@ -54,6 +55,7 @@ interface OrderNode {
   createdAt: string;
   email: string | null;
   customerAcceptsMarketing: boolean;
+  customerLocale: string | null;
   totalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
   customer: { id: string; firstName: string | null; lastName: string | null } | null;
 }
@@ -66,6 +68,7 @@ const CUSTOMERS_QUERY = /* GraphQL */ `
         id
         firstName
         lastName
+        locale
         tags
         numberOfOrders
         amountSpent { amount }
@@ -87,6 +90,7 @@ const ORDERS_QUERY = /* GraphQL */ `
         createdAt
         email
         customerAcceptsMarketing
+        customerLocale
         totalPriceSet { shopMoney { amount currencyCode } }
         customer { id firstName lastName }
       }
@@ -138,6 +142,7 @@ export function importCustomers(ctx: IntegrationContext, accountId: string, node
       email,
       first_name: c.firstName,
       last_name: c.lastName,
+      language: c.locale,
       phone: c.defaultPhoneNumber?.phoneNumber ?? null,
       tags: parseTags(c.tags),
       external_id: legacyId(c.id),
@@ -170,6 +175,7 @@ export function importOrders(ctx: IntegrationContext, accountId: string, nodes: 
         email,
         first_name: o.customer?.firstName,
         last_name: o.customer?.lastName,
+        language: o.customerLocale,
         external_id: legacyId(o.customer?.id),
         marketing_state: o.customerAcceptsMarketing ? 'subscribed' : null,
       }).contactId;

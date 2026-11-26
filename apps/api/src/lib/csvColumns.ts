@@ -4,7 +4,7 @@
  * Kept identical in apps/api/src/lib/csvColumns.ts and apps/web/src/lib/csvColumns.ts (the web uses it for the preview).
  */
 
-export type ContactField = 'email' | 'first_name' | 'last_name' | 'full_name' | 'phone' | 'tags' | 'status';
+export type ContactField = 'email' | 'first_name' | 'last_name' | 'full_name' | 'phone' | 'tags' | 'status' | 'language';
 
 /** Cells that mean "no value" in database and spreadsheet exports. */
 const EMPTY_VALUES = new Set(['null', 'nil', 'none', 'n/a', 'na', '#n/a', 'undefined', '-', '—', '–', '(vide)', '(empty)']);
@@ -38,6 +38,7 @@ const EXACT: Array<[ContactField, string[]]> = [
   ['phone', ['phone', 'telephone', 'tel', 'tele', 'mobile', 'portable', 'cell', 'cellphone', 'cell phone', 'gsm', 'mobile phone', 'phone mobile', 'telephone portable', 'telephone mobile', 'whatsapp', 'sms', 'msisdn', 'contact phone']],
   ['tags', ['tags', 'tag', 'labels', 'label', 'etiquettes', 'etiquette', 'groups', 'groupes', 'groupe', 'lists', 'listes']],
   ['status', ['status', 'statut', 'etat', 'state']],
+  ['language', ['language', 'languages', 'langue', 'langues', 'lang', 'locale', 'langage', 'idioma', 'sprache', 'lingua', 'language code', 'lang code', 'locale code', 'code langue', 'preferred language', 'langue preferee']],
 ];
 
 /** Tokens that, on their own inside a longer header, give the field away ("work email", "phone 1"). */
@@ -106,4 +107,25 @@ export function detectColumns(headers: string[], sample: string[][] = []): Array
 export function splitFullName(full: string): { first_name: string; last_name?: string } {
   const parts = full.trim().split(/\s+/);
   return parts.length > 1 ? { first_name: parts[0], last_name: parts.slice(1).join(' ') } : { first_name: parts[0] };
+}
+
+/** Language names a spreadsheet may hold instead of a code (« Français », « English », « Deutsch »…), accents ignored. */
+const LANGUAGE_NAMES: Record<string, string> = {
+  francais: 'fr', french: 'fr', anglais: 'en', english: 'en', allemand: 'de', german: 'de', deutsch: 'de',
+  espagnol: 'es', spanish: 'es', espanol: 'es', italien: 'it', italian: 'it', italiano: 'it', portugais: 'pt',
+  portuguese: 'pt', portugues: 'pt', neerlandais: 'nl', dutch: 'nl', nederlands: 'nl', polonais: 'pl', polish: 'pl',
+  polski: 'pl', suedois: 'sv', swedish: 'sv', svenska: 'sv', danois: 'da', danish: 'da', dansk: 'da',
+  norvegien: 'nb', norwegian: 'nb', norsk: 'nb', finnois: 'fi', finnish: 'fi', suomi: 'fi', grec: 'el', greek: 'el',
+  tcheque: 'cs', czech: 'cs', roumain: 'ro', romanian: 'ro', hongrois: 'hu', hungarian: 'hu', turc: 'tr', turkish: 'tr',
+  russe: 'ru', russian: 'ru', ukrainien: 'uk', ukrainian: 'uk', japonais: 'ja', japanese: 'ja', chinois: 'zh',
+  chinese: 'zh', coreen: 'ko', korean: 'ko', arabe: 'ar', arabic: 'ar',
+};
+
+/** A language cell → its code (« fr-CA » → « fr », « Deutsch » → « de »), null when it is not a language. */
+export function languageOfCell(value: string): string | null {
+  const v = value.trim();
+  const code = /^([a-z]{2,3})(?:[-_][a-z0-9]{1,8})*$/i.exec(v);
+  if (code) return code[1].toLowerCase();
+  const name = v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return LANGUAGE_NAMES[name] ?? null;
 }

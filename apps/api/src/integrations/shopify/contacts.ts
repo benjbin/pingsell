@@ -9,6 +9,8 @@ export interface ShopifyCustomerData {
   first_name?: string | null;
   last_name?: string | null;
   phone?: string | null;
+  /** Customer's locale (« fr », « en-CA »…): `locale` on a customer, `customer_locale` on an order / checkout. */
+  language?: string | null;
   tags?: string[];
   external_id?: string | null;
   total_spent?: number;
@@ -85,6 +87,7 @@ export function upsertShopifyContact(ctx: IntegrationContext, accountId: string,
   if (data.first_name) input.first_name = data.first_name;
   if (data.last_name) input.last_name = data.last_name;
   if (data.phone) input.phone = data.phone;
+  if (data.language) input.language = data.language;
   if (data.external_id) input.external_id = data.external_id;
   if (data.total_spent !== undefined) input.total_spent = data.total_spent;
   if (data.orders_count !== undefined) input.orders_count = data.orders_count;
@@ -107,6 +110,7 @@ export function customerFromRest(customer: Record<string, unknown>, fallbackEmai
     first_name: strOrNull(customer.first_name),
     last_name: strOrNull(customer.last_name),
     phone: strOrNull(customer.phone),
+    language: strOrNull(customer.locale),
     tags: parseTags(customer.tags),
     external_id: customer.id != null ? String(customer.id) : null,
     marketing_state: marketingStateFromRest(customer),

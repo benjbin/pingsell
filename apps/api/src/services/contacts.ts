@@ -15,6 +15,8 @@ export interface Contact {
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
+  /** Language code (« fr », « en », « de »…), null when unknown: campaigns are translated into it. */
+  language: string | null;
   tags: string[];
   attributes: Record<string, unknown>;
   status: ContactStatus;
@@ -34,6 +36,8 @@ export interface UpsertContactInput {
   first_name?: string | null;
   last_name?: string | null;
   phone?: string | null;
+  /** Any language tag (« fr-CA », « en_US », « Deutsch » is ignored): kept as its primary code. */
+  language?: string | null;
   tags?: string[];
   attributes?: Record<string, unknown>;
   source?: string;
@@ -50,6 +54,16 @@ const EMAIL_RE = /^[^\s@<>()[\],;:"]+@[^\s@<>()[\],;:"]+\.[^\s@<>()[\],;:"]{2,}$
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+/**
+ * A contact's language as stored: the primary code of a BCP 47 / POSIX tag, lower case
+ * (« fr-CA » → « fr », « pt_BR » → « pt », « EN » → « en »). null when it is not a language code.
+ */
+export function normalizeContactLanguage(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const m = /^\s*([a-z]{2,3})(?:[-_][a-z0-9]{1,8})*\s*$/i.exec(value);
+  return m ? m[1].toLowerCase() : null;
 }
 
 export function isValidEmail(email: string): boolean {
@@ -88,6 +102,7 @@ export function serializeContact(row: Row): Contact {
     first_name: (row.first_name as string | null) ?? null,
     last_name: (row.last_name as string | null) ?? null,
     phone: (row.phone as string | null) ?? null,
+    language: (row.language as string | null) ?? null,
     tags: parseJson<string[]>(row.tags, []),
     attributes: parseJson<Record<string, unknown>>(row.attributes, {}),
     status: row.status as ContactStatus,
@@ -137,6 +152,7 @@ export function upsertContact(
       first_name: clean(input.first_name),
       last_name: clean(input.last_name),
       phone: clean(input.phone),
+      language: normalizeContactLanguage(input.language),
       tags,
       attributes: input.attributes ?? {},
       status: status ?? 'subscribed',
@@ -151,15 +167,16 @@ export function upsertContact(
     };
     run(
       db,
-      `INSERT INTO contacts (id, account_id, email, first_name, last_name, phone, tags, attributes, status, source,
+      `INSERT INTO contacts (id, account_id, email, first_name, last_name, phone, language, tags, attributes, status, source,
         external_id, total_spent, orders_count, last_order_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       contact.id,
       contact.account_id,
       contact.email,
       contact.first_name,
       contact.last_name,
       contact.phone,
+      contact.language,
       JSON.stringify(contact.tags),
       JSON.stringify(contact.attributes),
       contact.status,
@@ -185,6 +202,9 @@ export function upsertContact(
   fill('first_name');
   fill('last_name');
   fill('phone');
+  // A known language replaces the old one (the customer changed it), except from an untrusted source.
+  const language = normalizeContactLanguage(input.language);
+  if (language && language !== existing.language && !(input.fill_only && existing.language)) updates.language = language;
   if (addedTags.length) updates.tags = JSON.stringify([...existing.tags, ...addedTags]);
   if (input.attributes) updates.attributes = JSON.stringify({ ...existing.attributes, ...input.attributes });
   if (status && status !== existing.status && !(status === 'subscribed' && !mayResubscribe(existing.status, input.source))) updates.status = status;

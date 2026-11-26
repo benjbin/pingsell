@@ -13,8 +13,27 @@ import {
   serializeCampaign,
   stopCampaign,
 } from '../services/campaigns.js';
-import { findContactByEmail, isValidEmail, normalizeEmail } from '../services/contacts.js';
-import { accountSender, createMessage, markFailed, markSent } from '../services/messages.js';
+import { findContactByEmail, isValidEmail, normalizeContactLanguage, normalizeEmail } from '../services/contacts.js';
+import {
+  accountSender,
+  campaignTranslationSource,
+  createMessage,
+  forgetTranslations,
+  loadCampaignTemplate,
+  markFailed,
+  markSent,
+} from '../services/messages.js';
+import {
+  accountLanguages,
+  campaignLanguage,
+  deeplTarget,
+  deeplTranslator,
+  sameLanguage,
+  saveTranslation,
+  translateSource,
+} from '../services/translate.js';
+import { personalizeEmail } from '../services/render.js';
+import { withAccountLang } from '../i18n.js';
 import { effectiveFrom, senderAllowed } from '../services/sendingDomains.js';
 import { t } from '../i18n.js';
 
@@ -31,12 +50,26 @@ const createSchema = z.object({
   segment_id: z.string().trim().min(1).nullable().optional(),
   /** Chosen contacts (takes precedence over the segment). Empty or null = everyone / the segment. */
   contact_ids: z.array(z.string().trim().min(1).max(64)).max(5000).nullable().optional(),
+  /** Langue dans laquelle la campagne est écrite (« fr », « en »…) ; null = celle du compte. */
+  language: z.string().trim().max(35).nullable().optional(),
+  /** Traduire automatiquement dans la langue de chaque contact. */
+  auto_translate: z.boolean().optional(),
 });
 const patchSchema = createSchema.partial();
-const testSchema = z.object({ to: z.string().trim().min(1, zmsg('Destinataire requis', 'Recipient is required')) });
+const langField = z.string().trim().max(35).nullable().optional();
+const testSchema = z.object({ to: z.string().trim().min(1, zmsg('Destinataire requis', 'Recipient is required')), language: langField });
+const previewLangSchema = z.object({ language: z.string().trim().min(2).max(35) });
 const scheduleSchema = z.object({ scheduled_at: z.iso.datetime({ offset: true, ...zmsg('Date ISO 8601 attendue', 'ISO 8601 date expected') }) });
 
 type Params = { Params: { id: string } };
+
+/** Code de langue saisi → code stocké (« fr-FR » → « fr ») ; invalide → 400. */
+function langOrNull(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const code = normalizeContactLanguage(v);
+  if (!code) throw badRequest(t('Langue invalide (ex : fr, en, de)', 'Invalid language (e.g. fr, en, de)'));
+  return code;
+}
 
 export async function campaignRoutes(app: FastifyInstance, { db, config, provider, kickWorker }: Deps) {
   const load = (accountId: string, id: string) => {
@@ -61,6 +94,14 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     if (!campaign.subject.trim()) throw badRequest(t("L'objet de la campagne est requis", 'Campaign subject is required'));
     if (!campaign.html?.trim()) throw badRequest(t('Le contenu HTML de la campagne est requis', 'Campaign HTML content is required'));
     if (campaign.segment_id) assertSegment(campaign.account_id, campaign.segment_id);
+    if (campaign.auto_translate && !config.translate.deeplKey) {
+      throw badRequest(
+        t(
+          'Traduction automatique indisponible : la clé DeepL n’est pas configurée sur le serveur. Désactivez la traduction ou ajoutez la clé.',
+          'Automatic translation unavailable: no DeepL key on the server. Turn translation off or add the key.',
+        ),
+      );
+    }
     // Synchronous on the event loop: an existence probe, not a COUNT of the whole audience (~0.6 s at 2 M contacts).
     if (!audienceExists(db, campaign.account_id, campaign.segment_id, campaign.contact_ids)) {
       throw badRequest(t('Aucun destinataire abonné ne correspond à cette audience', 'No subscribed recipients match this audience'));
@@ -134,8 +175,8 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     const timestamp = now();
     run(
       db,
-      `INSERT INTO campaigns (id, account_id, name, subject, preheader, from_name, from_email, html, design, segment_id, contact_ids, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
+      `INSERT INTO campaigns (id, account_id, name, subject, preheader, from_name, from_email, html, design, segment_id, contact_ids, language, auto_translate, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`,
       id,
       request.accountId,
       body.name,
@@ -148,6 +189,8 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
       body.design ?? null,
       body.segment_id ?? null,
       idsJson(request.accountId, body.contact_ids),
+      langOrNull(body.language),
+      body.auto_translate ? 1 : 0,
       timestamp,
       timestamp,
     );
@@ -167,6 +210,8 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
       if (body[key] !== undefined) updates[key] = key === 'subject' ? (body.subject ?? '') : (body[key] ?? null);
     }
     if (body.contact_ids !== undefined) updates.contact_ids = idsJson(request.accountId, body.contact_ids);
+    if (body.language !== undefined) updates.language = langOrNull(body.language);
+    if (body.auto_translate !== undefined) updates.auto_translate = body.auto_translate ? 1 : 0;
     const keys = Object.keys(updates);
     if (keys.length) {
       run(
@@ -193,8 +238,83 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     return reply.code(204).send();
   });
 
+  /**
+   * La traduction d'une campagne dans une langue, faite maintenant si elle manque ou date d'une autre version
+   * (gardée : l'envoi la réutilise). null quand c'est la langue de la campagne.
+   */
+  async function ensureTranslation(accountId: string, campaignId: string, rawLang: string) {
+    const lang = langOrNull(rawLang)!;
+    const tpl = loadCampaignTemplate(db, campaignId);
+    if (!tpl || tpl.account_id !== accountId) throw notFound(t('Campagne introuvable', 'Campaign not found'));
+    if (sameLanguage(lang, campaignLanguage(db, tpl))) return null;
+    if (!deeplTarget(lang)) throw badRequest(t(`Langue non prise en charge par la traduction : ${lang}`, `Language not supported by translation: ${lang}`));
+    if (!config.translate.deeplKey) {
+      throw badRequest(t('Traduction automatique indisponible : la clé DeepL n’est pas configurée sur le serveur', 'Automatic translation unavailable: no DeepL key on the server'));
+    }
+    // Les images converties comme à l'envoi : la traduction correspond au modèle réellement envoyé.
+    if (tpl.html) {
+      const conv = await convertEmailImages(db, config, accountId, tpl.html);
+      if (conv.converted) {
+        run(db, 'UPDATE campaigns SET html = ? WHERE id = ?', conv.html, campaignId);
+        tpl.html = conv.html;
+      }
+    }
+    const src = campaignTranslationSource(db, config, tpl);
+    const existing = get<{ source_hash: string; subject: string; preheader: string | null; html: string }>(
+      db,
+      'SELECT source_hash, subject, preheader, html FROM campaign_translations WHERE campaign_id = ? AND lang = ?',
+      campaignId,
+      lang,
+    );
+    if (existing && existing.source_hash === src.hash) return { lang, ...existing, kept: 0, total: 0 };
+    try {
+      const tr = await translateSource(src, lang, deeplTranslator(config));
+      saveTranslation(db, campaignId, lang, src.hash, tr);
+      forgetTranslations(campaignId);
+      return { lang, source_hash: src.hash, ...tr };
+    } catch (err) {
+      throw badRequest(t(`Traduction impossible : ${(err as Error).message}`, `Translation failed: ${(err as Error).message}`));
+    }
+  }
+
+  /** Les langues des contacts du compte, et celles qui seront traduites. */
+  app.get<Params>('/campaigns/:id/languages', async (request) => {
+    const campaign = load(request.accountId, request.params.id);
+    const source = campaignLanguage(db, campaign);
+    const done = new Map(
+      all<{ lang: string; created_at: string }>(db, 'SELECT lang, created_at FROM campaign_translations WHERE campaign_id = ?', campaign.id).map((r) => [r.lang, r.created_at]),
+    );
+    const langs = accountLanguages(db, request.accountId);
+    return {
+      source,
+      translation_available: Boolean(config.translate.deeplKey),
+      languages: langs.map((lang) => ({
+        lang,
+        same_as_source: sameLanguage(lang, source),
+        supported: Boolean(deeplTarget(lang)),
+        translated_at: done.get(lang) ?? null,
+      })),
+    };
+  });
+
+  /** Aperçu de la campagne traduite dans une langue (la traduction est gardée pour l'envoi). */
+  app.post<Params>('/campaigns/:id/translation-preview', async (request) => {
+    const { language } = parse(previewLangSchema, request.body);
+    const campaign = load(request.accountId, request.params.id);
+    if (!campaign.html?.trim()) throw badRequest(t('Le contenu HTML de la campagne est requis', 'Campaign HTML content is required'));
+    const tr = await ensureTranslation(request.accountId, campaign.id, language);
+    const sample = { email: 'client@exemple.com', ...t({ first_name: 'Camille', last_name: 'Martin' }, { first_name: 'Taylor', last_name: 'Smith' }) };
+    if (!tr) {
+      return { language, same_as_source: true, subject: campaign.subject, preheader: campaign.preheader, html: null, kept: 0, total: 0 };
+    }
+    const rendered = withAccountLang(db, request.accountId, () =>
+      personalizeEmail(tr.html, { messageId: 'preview', publicUrl: config.publicUrl, subject: tr.subject, preheader: tr.preheader, contact: sample, tracking: false }),
+    );
+    return { language: tr.lang, same_as_source: false, subject: rendered.subject, preheader: tr.preheader, html: rendered.html, kept: tr.kept, total: tr.total };
+  });
+
   app.post<Params>('/campaigns/:id/test', async (request) => {
-    const { to } = parse(testSchema, request.body);
+    const { to, language } = parse(testSchema, request.body);
     const email = normalizeEmail(to);
     if (!isValidEmail(email)) throw badRequest(t('Adresse de test invalide', 'Invalid test address'));
     const campaign = load(request.accountId, request.params.id);
@@ -203,14 +323,17 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     const known = findContactByEmail(db, request.accountId, email);
     const contact = known ?? { email, ...t({ first_name: 'Camille', last_name: 'Martin' }, { first_name: 'Taylor', last_name: 'Smith' }) };
     const sender = accountSender(db, config, request.accountId);
+    // Test dans une langue : la traduction que recevront les contacts de cette langue.
+    const tr = language ? await ensureTranslation(request.accountId, campaign.id, language) : null;
     const { id, rendered } = createMessage(db, config, {
       accountId: request.accountId,
       contactId: known?.id ?? null,
       contact,
-      subject: `[TEST] ${campaign.subject || campaign.name}`,
+      subject: `[TEST] ${tr ? tr.subject : campaign.subject || campaign.name}`,
       // The same conversion as the real send (SVG/WebP → PNG/JPG), so the test looks like what recipients get.
-      html: (await convertEmailImages(db, config, request.accountId, campaign.html)).html,
-      preheader: campaign.preheader,
+      html: tr ? tr.html : (await convertEmailImages(db, config, request.accountId, campaign.html)).html,
+      prepared: Boolean(tr),
+      preheader: tr ? tr.preheader : campaign.preheader,
       senderName: campaign.from_name || sender.name,
       // Not 'queued': the test is sent synchronously below and must never be picked up by the worker.
       status: 'sent',

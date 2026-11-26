@@ -43,6 +43,12 @@ export function serializeCampaign(row: Row) {
     paused: parsePauseReason(row.paused_reason),
     /** Inactive contacts left out of the send (mailed many times, never opened). */
     skipped_inactive: Number(row.skipped_inactive ?? 0),
+    /** Langue dans laquelle la campagne est écrite (null : celle du compte). */
+    language: (row.language as string | null) ?? null,
+    /** Traduite automatiquement dans la langue de chaque contact. */
+    auto_translate: Number(row.auto_translate ?? 0) === 1,
+    translated_at: (row.translated_at as string | null) ?? null,
+    translate_error: (row.translate_error as string | null) ?? null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
