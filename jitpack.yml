@@ -1,0 +1,7 @@
+# JitPack construit le SDK Android de Pingsell (sdk/android) :
+#   repositories { maven("https://jitpack.io") }
+#   implementation("com.github.benjbin:pingsell:<tag ou commit>")
+jdk:
+  - openjdk17
+install:
+  - cd sdk/android && ./gradlew :pingsell:publishReleasePublicationToMavenLocal
