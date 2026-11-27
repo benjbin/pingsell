@@ -57,6 +57,11 @@ services:
       - BACKUP_S3_ACCESS_KEY_ID=${BACKUP_S3_ACCESS_KEY_ID:-}
       - BACKUP_S3_SECRET_ACCESS_KEY=${BACKUP_S3_SECRET_ACCESS_KEY:-}
       - BACKUP_S3_PREFIX=${BACKUP_S3_PREFIX:-pingsell/}
+      # Traduction automatique des campagnes : le traducteur interne (service « translate » ci-dessous),
+      # ou DeepL si une clé est donnée (meilleure qualité, prioritaire).
+      - LIBRETRANSLATE_URL=${LIBRETRANSLATE_URL:-http://translate:5000}
+      - LIBRETRANSLATE_LANGS=${LIBRETRANSLATE_LANGS:-en,fr,de,es,it,nl,pt,pl}
+      - DEEPL_API_KEY=${DEEPL_API_KEY:-}
     volumes:
       - pingsell-data:/data
     expose:
@@ -82,6 +87,24 @@ services:
     volumes:
       - mta-data:/data
       - mta-queue:/var/spool/postfix
+
+  # Traducteur interne (LibreTranslate, logiciel libre) : traduit les campagnes dans la langue de chaque client,
+  # sans compte ni coût. Joignable seulement par l'api (réseau Docker interne). Mémoire bornée : s'il manque de
+  # place il redémarre, et les campagnes partent dans leur langue d'origine. Les langues téléchargées au premier
+  # démarrage (quelques minutes) restent dans le volume translate-models.
+  translate:
+    image: libretranslate/libretranslate:v1.9.6
+    restart: unless-stopped
+    mem_limit: 3g
+    environment:
+      - LT_LOAD_ONLY=${LIBRETRANSLATE_LANGS:-en,fr,de,es,it,nl,pt,pl}
+      - LT_DISABLE_WEB_UI=true
+      - LT_THREADS=2
+      - LT_UPDATE_MODELS=false
+    volumes:
+      - translate-models:/home/libretranslate/.local
+    expose:
+      - "5000"
 
   web:
     build:
@@ -114,3 +137,4 @@ volumes:
   pingsell-data:
   mta-data:
   mta-queue:
+  translate-models:

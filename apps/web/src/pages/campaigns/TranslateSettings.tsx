@@ -110,8 +110,8 @@ export function TranslateSettings({
           {info && !info.translation_available && (
             <p className="text-xs text-red-600 dark:text-red-400">
               {t(
-                "La traduction n'est pas encore activée sur le serveur (clé DeepL manquante) : l'envoi sera refusé tant qu'elle est cochée.",
-                "Translation isn't enabled on the server yet (missing DeepL key): sending is refused while this is ticked.",
+                "Le traducteur n'est pas encore disponible sur le serveur : l'envoi sera refusé tant que cette case est cochée.",
+                "The translator isn't available on the server yet: sending is refused while this is ticked.",
               )}
             </p>
           )}

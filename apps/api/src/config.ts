@@ -80,7 +80,7 @@ export interface AppConfig {
   /** Sauvegardes chiffrées de la base (off sans BACKUP_ENCRYPTION_KEY). */
   backup: BackupConfig;
   /** Automatic translation of campaigns (DeepL). Without a key, campaigns go out as written. */
-  translate: { deeplKey?: string; deeplUrl: string };
+  translate: { deeplKey?: string; deeplUrl: string; libreUrl?: string; libreKey?: string; libreLangs: string[] };
 }
 
 function loadConfig(): AppConfig {
@@ -160,6 +160,13 @@ function loadConfig(): AppConfig {
         'DEEPL_API_URL',
         optional('DEEPL_API_KEY')?.endsWith(':fx') ? 'https://api-free.deepl.com' : 'https://api.deepl.com',
       ).replace(/\/+$/, ''),
+      // Traducteur interne (service « translate » du déploiement) : utilisé quand aucune clé DeepL n'est donnée.
+      libreUrl: optional('LIBRETRANSLATE_URL')?.replace(/\/+$/, ''),
+      libreKey: optional('LIBRETRANSLATE_API_KEY'),
+      libreLangs: str('LIBRETRANSLATE_LANGS', 'en,fr,de,es,it,nl,pt,pl')
+        .split(',')
+        .map((l) => l.trim().toLowerCase())
+        .filter(Boolean),
     },
     worker: {
       intervalMs: int('WORKER_INTERVAL_MS', 2000),

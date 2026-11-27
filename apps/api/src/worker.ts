@@ -10,7 +10,7 @@ import { processTracking } from './services/webTracking.js';
 import { finalizePushCampaigns, queuePushCampaigns, sendPushBatch } from './services/push.js';
 import { processPushResends } from './services/pushGrowth.js';
 import { accountSender, campaignTranslationSource, forgetTranslations, loadCampaignTemplate, markFailed, markRetry, markSent, renderCampaignMessage } from './services/messages.js';
-import { deeplTranslator, translateCampaignLanguages } from './services/translate.js';
+import { makeTranslator, translateCampaignLanguages } from './services/translate.js';
 import { effectiveFrom } from './services/sendingDomains.js';
 import { platformAdminAccountIds } from './services/platformAdmin.js';
 import { htmlToText } from './services/render.js';
@@ -327,9 +327,10 @@ export class SendingWorker {
     try {
       const tpl = loadCampaignTemplate(this.db, c.id);
       if (!tpl) return;
-      if (!this.config.translate.deeplKey) error = 'Traduction automatique indisponible : DEEPL_API_KEY absente du serveur';
+      const translator = makeTranslator(this.config);
+      if (!translator) error = 'Traduction automatique indisponible : aucun traducteur configuré sur le serveur';
       else {
-        const report = await translateCampaignLanguages(this.db, tpl, campaignTranslationSource(this.db, this.config, tpl), deeplTranslator(this.config));
+        const report = await translateCampaignLanguages(this.db, tpl, campaignTranslationSource(this.db, this.config, tpl), translator);
         if (report.failed.length) error = report.failed.map((f) => `${f.lang} : ${f.error}`).join(' ; ').slice(0, 1000);
         this.log.info(
           `[worker] campagne « ${c.name} » : traduite en ${report.translated.length ? report.translated.join(', ') : 'aucune nouvelle langue'}` +

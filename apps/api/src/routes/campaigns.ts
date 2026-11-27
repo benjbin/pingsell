@@ -26,8 +26,7 @@ import {
 import {
   accountLanguages,
   campaignLanguage,
-  deeplTarget,
-  deeplTranslator,
+  makeTranslator,
   sameLanguage,
   saveTranslation,
   translateSource,
@@ -94,11 +93,11 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     if (!campaign.subject.trim()) throw badRequest(t("L'objet de la campagne est requis", 'Campaign subject is required'));
     if (!campaign.html?.trim()) throw badRequest(t('Le contenu HTML de la campagne est requis', 'Campaign HTML content is required'));
     if (campaign.segment_id) assertSegment(campaign.account_id, campaign.segment_id);
-    if (campaign.auto_translate && !config.translate.deeplKey) {
+    if (campaign.auto_translate && !makeTranslator(config)) {
       throw badRequest(
         t(
-          'Traduction automatique indisponible : la clé DeepL n’est pas configurée sur le serveur. Désactivez la traduction ou ajoutez la clé.',
-          'Automatic translation unavailable: no DeepL key on the server. Turn translation off or add the key.',
+          'Traduction automatique indisponible : aucun traducteur n’est configuré sur le serveur. Décochez la traduction pour envoyer.',
+          'Automatic translation unavailable: no translator is configured on the server. Untick translation to send.',
         ),
       );
     }
@@ -246,11 +245,11 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     const lang = langOrNull(rawLang)!;
     const tpl = loadCampaignTemplate(db, campaignId);
     if (!tpl || tpl.account_id !== accountId) throw notFound(t('Campagne introuvable', 'Campaign not found'));
-    if (sameLanguage(lang, campaignLanguage(db, tpl))) return null;
-    if (!deeplTarget(lang)) throw badRequest(t(`Langue non prise en charge par la traduction : ${lang}`, `Language not supported by translation: ${lang}`));
-    if (!config.translate.deeplKey) {
-      throw badRequest(t('Traduction automatique indisponible : la clé DeepL n’est pas configurée sur le serveur', 'Automatic translation unavailable: no DeepL key on the server'));
-    }
+    const source = campaignLanguage(db, tpl);
+    if (sameLanguage(lang, source)) return null;
+    const translator = makeTranslator(config);
+    if (!translator) throw badRequest(t('Traduction automatique indisponible : aucun traducteur configuré sur le serveur', 'Automatic translation unavailable: no translator configured on the server'));
+    if (!translator.target(lang)) throw badRequest(t(`Langue non prise en charge par la traduction : ${lang}`, `Language not supported by translation: ${lang}`));
     // Les images converties comme à l'envoi : la traduction correspond au modèle réellement envoyé.
     if (tpl.html) {
       const conv = await convertEmailImages(db, config, accountId, tpl.html);
@@ -268,7 +267,7 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
     );
     if (existing && existing.source_hash === src.hash) return { lang, ...existing, kept: 0, total: 0 };
     try {
-      const tr = await translateSource(src, lang, deeplTranslator(config));
+      const tr = await translateSource(src, lang, translator, source);
       saveTranslation(db, campaignId, lang, src.hash, tr);
       forgetTranslations(campaignId);
       return { lang, source_hash: src.hash, ...tr };
@@ -285,13 +284,14 @@ export async function campaignRoutes(app: FastifyInstance, { db, config, provide
       all<{ lang: string; created_at: string }>(db, 'SELECT lang, created_at FROM campaign_translations WHERE campaign_id = ?', campaign.id).map((r) => [r.lang, r.created_at]),
     );
     const langs = accountLanguages(db, request.accountId);
+    const translator = makeTranslator(config);
     return {
       source,
-      translation_available: Boolean(config.translate.deeplKey),
+      translation_available: Boolean(translator),
       languages: langs.map((lang) => ({
         lang,
         same_as_source: sameLanguage(lang, source),
-        supported: Boolean(deeplTarget(lang)),
+        supported: Boolean(translator?.target(lang)),
         translated_at: done.get(lang) ?? null,
       })),
     };

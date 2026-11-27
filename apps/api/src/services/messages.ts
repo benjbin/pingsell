@@ -402,7 +402,9 @@ export function renderCampaignMessage(
 export function campaignTranslationSource(db: DatabaseSync, config: AppConfig, c: CampaignTemplateRow): TranslationSource {
   return withAccountLang(db, c.account_id, () => {
     const t = preparedFor(db, config, c);
-    return { prepared: t.prepared, subject: c.subject, preheader: c.preheader, hash: t.hash };
+    const account = get<{ name: string }>(db, 'SELECT name FROM accounts WHERE id = ?', c.account_id)?.name;
+    const keep = [...new Set([t.senderName, account].filter((v): v is string => Boolean(v)))];
+    return { prepared: t.prepared, subject: c.subject, preheader: c.preheader, hash: t.hash, keep };
   });
 }
 
