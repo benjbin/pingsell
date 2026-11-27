@@ -146,7 +146,15 @@ export function ContactDrawer({ contactId, onClose, onChanged }: { contactId: st
               { label: t("Dernière commande", "Last order"), value: formatDate(c.last_order_at) },
               { label: t("Inscrit le", "Joined"), value: formatDate(c.created_at) },
               { label: t("Téléphone", "Phone"), value: c.phone || "—" },
-              { label: t("Langue", "Language"), value: c.language ? languageName(c.language) : t("Inconnue", "Unknown") },
+              { label: t("Langue", "Language"), value: c.language
+                  ? `${languageName(c.language)}${
+                      c.language_source === "guess"
+                        ? t(" (estimée d'après le pays, le téléphone ou l'email)", " (estimated from country, phone or email)")
+                        : c.language_source === "browser"
+                          ? t(" (langue de son navigateur)", " (their browser's language)")
+                          : ""
+                    }`
+                  : t("Inconnue", "Unknown") },
               { label: t("ID externe", "External ID"), value: c.external_id || "—" },
             ].map((s) => (
               <div key={s.label} className="rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-800/60">

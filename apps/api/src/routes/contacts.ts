@@ -216,6 +216,7 @@ export async function contactRoutes(app: FastifyInstance, { db }: Deps) {
       const language = normalizeContactLanguage(body.language);
       if (body.language && !language) throw badRequest(t('Langue invalide (ex : fr, en, de)', 'Invalid language (e.g. fr, en, de)'));
       updates.language = language;
+      updates.language_source = null;
     }
     let addedTags: string[] = [];
     if (body.tags !== undefined) {

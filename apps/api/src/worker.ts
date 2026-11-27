@@ -2,6 +2,7 @@ import type { AppConfig } from './config.js';
 import { all, checkpointWal, get, now, run, scalar, type DatabaseSync } from './db.js';
 import { markWorkerTick } from './lib/health.js';
 import { optimizeDatabase } from './services/maintenance.js';
+import { guessMissingLanguages } from './services/contactLanguage.js';
 import { anySent, backfillLegacy, finalizeCampaigns, purgeStoppedQueues, queueCampaign } from './services/campaigns.js';
 import { processDueRuns, processScheduledTriggers, takeWebhooks } from './services/automations.js';
 import { sendTeamNotifications, sendWebhooks } from './services/automationOutbox.js';
@@ -236,6 +237,7 @@ export class SendingWorker {
       await this.stage('paniers abandonnés', () => processAbandonedCarts(this.db));
       await this.stage('déclencheurs programmés', () => processScheduledTriggers(this.db));
       await this.stage('suivi web', () => processTracking(this.db));
+      await this.stage('langue des contacts', () => guessMissingLanguages(this.db));
       await this.stage('automatisations', () => processDueRuns(this.db, this.config));
       await this.stage('garde-fou', () => {
         for (const p of guardCampaigns(this.db)) {

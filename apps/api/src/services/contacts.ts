@@ -2,6 +2,7 @@ import { all, get, newId, now, parseJson, run, transaction, type DatabaseSync, t
 import { badRequest } from '../lib/http.js';
 import { offload } from '../lib/offload.js';
 import { t } from '../i18n.js';
+import { guessContactLanguage } from './contactLanguage.js';
 
 export const CONTACT_STATUSES = ['subscribed', 'unsubscribed', 'bounced', 'complained'] as const;
 export const CONTACT_SOURCES = ['manual', 'import', 'shopify', 'api'] as const;
@@ -17,6 +18,8 @@ export interface Contact {
   phone: string | null;
   /** Language code (« fr », « en », « de »…), null when unknown: campaigns are translated into it. */
   language: string | null;
+  /** null: given (import, Shopify, API, by hand) ; « browser »: the customer's browser ; « guess »: from country, phone or email. */
+  language_source: 'browser' | 'guess' | null;
   tags: string[];
   attributes: Record<string, unknown>;
   status: ContactStatus;
@@ -103,6 +106,7 @@ export function serializeContact(row: Row): Contact {
     last_name: (row.last_name as string | null) ?? null,
     phone: (row.phone as string | null) ?? null,
     language: (row.language as string | null) ?? null,
+    language_source: row.language ? ((row.language_source as 'browser' | 'guess' | null) ?? null) : null,
     tags: parseJson<string[]>(row.tags, []),
     attributes: parseJson<Record<string, unknown>>(row.attributes, {}),
     status: row.status as ContactStatus,
@@ -145,6 +149,9 @@ export function upsertContact(
   const existing = findContactByEmail(db, accountId, email);
 
   if (!existing) {
+    const given = normalizeContactLanguage(input.language);
+    const attributes = input.attributes ?? {};
+    const guessed = given ? null : guessContactLanguage({ email, phone: clean(input.phone), attributes });
     const contact: Contact = {
       id: newId(),
       account_id: accountId,
@@ -152,9 +159,11 @@ export function upsertContact(
       first_name: clean(input.first_name),
       last_name: clean(input.last_name),
       phone: clean(input.phone),
-      language: normalizeContactLanguage(input.language),
+      language: given ?? guessed,
+      // A language sent by a public form comes from the visitor's browser.
+      language_source: given ? (input.fill_only ? 'browser' : null) : guessed ? 'guess' : null,
       tags,
-      attributes: input.attributes ?? {},
+      attributes,
       status: status ?? 'subscribed',
       source: asSource(input.source),
       external_id: clean(input.external_id),
@@ -167,9 +176,9 @@ export function upsertContact(
     };
     run(
       db,
-      `INSERT INTO contacts (id, account_id, email, first_name, last_name, phone, language, tags, attributes, status, source,
+      `INSERT INTO contacts (id, account_id, email, first_name, last_name, phone, language, language_source, tags, attributes, status, source,
         external_id, total_spent, orders_count, last_order_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       contact.id,
       contact.account_id,
       contact.email,
@@ -177,6 +186,7 @@ export function upsertContact(
       contact.last_name,
       contact.phone,
       contact.language,
+      contact.language_source,
       JSON.stringify(contact.tags),
       JSON.stringify(contact.attributes),
       contact.status,
@@ -202,9 +212,29 @@ export function upsertContact(
   fill('first_name');
   fill('last_name');
   fill('phone');
-  // A known language replaces the old one (the customer changed it), except from an untrusted source.
+  // A given language replaces the old one (the customer changed it). From an untrusted source (public form) it is
+  // the visitor's browser language: it never replaces a given language.
   const language = normalizeContactLanguage(input.language);
-  if (language && language !== existing.language && !(input.fill_only && existing.language)) updates.language = language;
+  if (language && !input.fill_only) {
+    if (language !== existing.language || existing.language_source) {
+      updates.language = language;
+      updates.language_source = null;
+    }
+  } else if (language && (!existing.language || existing.language_source) && (language !== existing.language || existing.language_source !== 'browser')) {
+    updates.language = language;
+    updates.language_source = 'browser';
+  } else if (!existing.language && (input.attributes || input.phone)) {
+    // Still unknown: estimated again from the new data (a country column in a new import, a phone number).
+    const guessed = guessContactLanguage({
+      email,
+      phone: input.phone !== undefined && !(input.fill_only && existing.phone) ? clean(input.phone) : existing.phone,
+      attributes: input.attributes ? { ...existing.attributes, ...input.attributes } : existing.attributes,
+    });
+    if (guessed) {
+      updates.language = guessed;
+      updates.language_source = 'guess';
+    }
+  }
   if (addedTags.length) updates.tags = JSON.stringify([...existing.tags, ...addedTags]);
   if (input.attributes) updates.attributes = JSON.stringify({ ...existing.attributes, ...input.attributes });
   if (status && status !== existing.status && !(status === 'subscribed' && !mayResubscribe(existing.status, input.source))) updates.status = status;

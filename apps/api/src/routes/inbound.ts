@@ -1,3 +1,4 @@
+import { browserLanguage, learnContactLanguage } from '../services/contactLanguage.js';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { run } from '../db.js';
@@ -381,7 +382,11 @@ export async function inboundRoutes(app: FastifyInstance, { db, config, kickWork
         referrer: typeof raw.r === 'string' && /^https?:\/\//.test(raw.r) ? (() => { try { return cleanPageUrl(raw.r as string); } catch { return undefined; } })() : undefined,
         product: cleanProduct(raw.p, page),
       }, !!origin && siteHost(origin) === siteHost(url.href));
-      if (r.contactId) kickWorker();
+      if (r.contactId) {
+        // A known customer visiting the site: the language of their browser.
+        if (!r.duplicate) learnContactLanguage(db, r.contactId, browserLanguage(request.headers), 'browser');
+        kickWorker();
+      }
       return done({ known: !!r.contactId });
     }
     return done({ known: identified });

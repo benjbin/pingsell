@@ -852,6 +852,11 @@ const MIGRATIONS: Array<string | { sql: string; foreignKeysOff?: boolean }> = [
     PRIMARY KEY (campaign_id, lang)
   );
   `,
+  // [contacts] D'où vient la langue d'un contact : NULL = donnée (import, Shopify, API, à la main), « browser » =
+  // navigateur du client (clic d'email, visite), « guess » = estimée du pays, du téléphone ou de l'email.
+  `
+  ALTER TABLE contacts ADD COLUMN language_source TEXT;
+  `,
 ];
 
 const BUSY_TIMEOUT_MS = 1000;

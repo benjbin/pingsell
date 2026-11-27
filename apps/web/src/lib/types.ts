@@ -139,6 +139,8 @@ export interface Contact {
   phone: string | null;
   /** Language code (« fr », « en »…), null when unknown. */
   language?: string | null;
+  /** null: given; « browser »: from the customer's browser; « guess »: estimated from country, phone or email. */
+  language_source?: "browser" | "guess" | null;
   tags: string[];
   attributes: Record<string, unknown>;
   status: ContactStatus;
